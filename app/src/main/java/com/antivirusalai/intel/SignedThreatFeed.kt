@@ -36,7 +36,6 @@ enum class FeedValidationCode {
     INVALID_UTF8,
     INVALID_STRUCTURE,
     INVALID_SIGNATURE,
-    UNKNOWN_SIGNING_KEY,
     INVALID_FIELD,
     INVALID_INDICATOR,
     DUPLICATE_OR_UNSORTED_INDICATOR,
@@ -182,8 +181,7 @@ object SignedThreatFeedParser {
         }
         if (!verifier.verify(keyId, signedPayload, signatureBytes)) {
             fail(
-                if (keyId.isBlank()) FeedValidationCode.INVALID_SIGNATURE
-                else FeedValidationCode.INVALID_SIGNATURE,
+                FeedValidationCode.INVALID_SIGNATURE,
                 "The feed signature is invalid or the signing key is not trusted."
             )
         }
