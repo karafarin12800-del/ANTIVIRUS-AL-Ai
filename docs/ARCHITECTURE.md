@@ -18,7 +18,7 @@
 - Permission risk analyzer: conservative metadata heuristics; it never asserts malware from a permission alone.
 - Threat intelligence provider: future hash-only reputation boundary. The current implementation is offline and returns NotConfigured.
 - Quarantine manager: encrypted copy with Android Keystore AES-GCM; it does not silently delete the source.
-- Android uninstall handoff: opens the platform uninstall UI; Android and the user control the final action.
+- Remediation boundary: the current MVP does not uninstall apps or remove the original selected file; quarantine stores an encrypted copy only.
 
 ## Signed feed trust boundary
 
