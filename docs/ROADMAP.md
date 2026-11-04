@@ -8,10 +8,16 @@
 - CI build, unit tests, and lint.
 
 ## Phase 1 — Detection quality
-- Versioned signature and YARA-compatible rule format, including provenance and test cases.
-- Signed feed verification, expiry, rollback prevention, and offline update support.
-- Expanded APK static analysis and dependency/CVE inventory.
-- Larger benign-app corpus to tune false positives.
+- [x] Strict versioned threat-feed format and ECDSA P-256 public-key verification core.
+- [x] Key-ID keyring interface to support planned public-key rotation.
+- [x] Feed expiry, clock-skew, size, entry-count, duplicate-entry, and rollback validation.
+- [x] Atomic private-storage feed replacement and persistent version floor.
+- [x] Unit tests using generated test-only signing keys and synthetic indicators.
+- [ ] Provision a production signing key securely; embed only its public key in the app.
+- [ ] Add feed import/update UX and integrate verified indicators into scan verdicts.
+- [ ] Publish a signed, maintained indicator feed with provenance and test cases.
+- [ ] Expand APK static analysis and dependency/CVE inventory.
+- [ ] Build a larger benign-app corpus to tune false positives.
 
 ## Phase 2 — Online threat intelligence
 - Backend-only secrets and hash-reputation proxy.
