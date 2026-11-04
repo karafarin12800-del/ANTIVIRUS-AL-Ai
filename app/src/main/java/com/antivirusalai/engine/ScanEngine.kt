@@ -71,7 +71,8 @@ object ScanEngine {
             }
             val evidence = mutableListOf<ScanEvidence>()
             val localMatch = LocalIndicatorDatabase.lookup(hash)
-            val looksLikeApk = displayName.endsWith(".apk", ignoreCase = true) ||
+            val looksLikeApk = ApkFileDetector.isApkArchive(temp) ||
+                displayName.endsWith(".apk", ignoreCase = true) ||
                 mimeType == "application/vnd.android.package-archive"
             val apk = if (looksLikeApk) ApkMetadataInspector.inspect(context, temp) else null
 
