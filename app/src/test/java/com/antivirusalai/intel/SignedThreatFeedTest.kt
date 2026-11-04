@@ -185,7 +185,7 @@ class SignedThreatFeedTest {
     @Test
     fun unknownHashIsNotReportedByFeedStore() {
         val pair = keyPair()
-        val directory = kotlin.io.path.createTempDirectory("alai-threat-feed-").toFile()
+        val directory = Files.createTempDirectory("alai-threat-feed-").toFile()
         try {
             val store = SignedThreatFeedStore(directory, verifier(pair)) { now }
             store.install(signedFeed(pair, version = 1))
