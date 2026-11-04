@@ -11,25 +11,23 @@ Privacy-first Android security scanner. This repository starts with a buildable 
 - Permission and component heuristics reported as evidence, never as proof of malware.
 - Evidence-based verdicts: known test indicator, suspicious, no known threat, or unsupported/unknown.
 - Private app-storage quarantine copy with hash verification. The original file is not silently deleted.
-- User-confirmed Android uninstall handoff for an APK package, where applicable.
 - Offline-first operation. No file upload, telemetry, VPN, accessibility service, root, or broad package inventory in this MVP.
+- A strict signed-feed verification and storage core is implemented and unit-tested; it is not activated until a production public key and publisher feed are provisioned.
 
 ## Important security boundary
 
-A clean result means only that this local MVP found no known indicator in the selected file. It is **not** a guarantee that the file is safe. Permission patterns and APK metadata can create leads for investigation, not definitive malware verdicts. Real threat-feed coverage, cloud reputation, behavior monitoring, and production malware detection require independently maintained data, backend services, and validation against a lawful benchmark corpus.
+A clean result means only that this local MVP found no known indicator in the selected file. It is **not** a guarantee that the file is safe. Permission patterns and APK metadata can create leads for investigation, not definitive malware verdicts. The current local indicator database contains only a benign project test fixture; this is not a production malware-signature database.
+
+The signed-feed core verifies ECDSA P-256 signatures, enforces expiry and monotonic versions, and stores accepted feeds in private app storage. No production signing key, live threat-intelligence source, or malware indicator list is included yet. Feed-signing private keys must never be stored in this repository or the Android application.
 
 ## Build
 
-Open the repository in Android Studio or run the CI workflow. The project uses Kotlin, Jetpack Compose, and Android SDK 36. The CI workflow runs unit tests and Android lint.
+Open the repository in Android Studio or run the CI workflow. The project uses Kotlin, Jetpack Compose, and Android SDK 36. The CI workflow runs unit tests, Android lint, and a debug APK build.
 
 ## Roadmap
 
-1. Harden and validate the local scanner and quarantine flow.
-2. Add a signed, versioned threat-intelligence feed with rollback protection.
-3. Add an optional hash-reputation backend; never upload file contents without clear consent.
-4. Expand APK vulnerability intelligence and evidence-based reports.
-5. Conduct independent false-positive, detection, privacy, and performance testing before any public security claims.
+See [docs/ROADMAP.md](docs/ROADMAP.md) and the signed-feed design in [docs/THREAT_FEED_FORMAT.md](docs/THREAT_FEED_FORMAT.md).
 
 ## Responsible testing
 
-Use benign test files and the included unit tests. Do not download or execute live malware. The repository does not contain malware samples.
+Use benign test files, synthetic indicator data, and the included unit tests. Do not download or execute live malware. The repository does not contain malware samples.
