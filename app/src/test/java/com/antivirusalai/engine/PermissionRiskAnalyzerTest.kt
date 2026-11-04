@@ -5,14 +5,15 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PermissionRiskAnalyzerTest {
-    private fun apk(permissions: Set<String>) = ApkMetadata(
+    private fun apk(permissions: Set<String>, accessibilityServices: Int = 0) = ApkMetadata(
         packageName = "example.test",
         versionName = "1.0",
         targetSdk = 35,
         requestedPermissions = permissions,
         debuggable = false,
         signingCertificateSha256 = "a".repeat(64),
-        exportedComponentCount = 0
+        exportedComponentCount = 0,
+        declaredAccessibilityServiceCount = accessibilityServices
     )
 
     @Test
@@ -34,6 +35,15 @@ class PermissionRiskAnalyzerTest {
             )
         )
         assertTrue(assessment.suspicious)
+    }
+
+    @Test
+    fun accessibilityServiceDeclarationIsReportedFromServiceMetadata() {
+        val assessment = PermissionRiskAnalyzer.analyze(
+            apk(emptySet(), accessibilityServices = 1)
+        )
+        assertTrue(assessment.evidence.any { it.code == "ACCESSIBILITY_SERVICE_PERMISSION" })
+        assertFalse(assessment.suspicious)
     }
 
     @Test
