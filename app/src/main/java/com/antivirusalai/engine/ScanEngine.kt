@@ -104,11 +104,11 @@ object ScanEngine {
                 else -> {
                     evidence += ScanEvidence(
                         "NO_LOCAL_HASH_MATCH",
-                        "No local indicator matched",
-                        "The MVP contains only a harmless project test marker, not a production malware signature feed. No match is not proof of safety.",
+                        "File type not covered by the current scanner",
+                        "This MVP does not yet perform content or format-aware malware analysis for this file type. It must be treated as unknown, not clean.",
                         EvidenceSeverity.INFO
                     )
-                    ScanVerdict.NO_KNOWN_INDICATOR
+                    ScanVerdict.UNSUPPORTED_FILE
                 }
             }
 
