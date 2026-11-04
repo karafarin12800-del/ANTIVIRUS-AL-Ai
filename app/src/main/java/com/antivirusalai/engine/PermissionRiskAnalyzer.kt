@@ -10,7 +10,6 @@ object PermissionRiskAnalyzer {
     private const val SMS_RECEIVE = "android.permission.RECEIVE_SMS"
     private const val INSTALL_PACKAGES = "android.permission.REQUEST_INSTALL_PACKAGES"
     private const val OVERLAY = "android.permission.SYSTEM_ALERT_WINDOW"
-    private const val ACCESSIBILITY_BIND = "android.permission.BIND_ACCESSIBILITY_SERVICE"
 
     fun analyze(apk: ApkMetadata): PermissionAssessment {
         val p = apk.requestedPermissions
@@ -45,11 +44,11 @@ object PermissionRiskAnalyzer {
             )
         }
 
-        if (ACCESSIBILITY_BIND in p) {
+        if (apk.declaredAccessibilityServiceCount > 0) {
             evidence += ScanEvidence(
                 "ACCESSIBILITY_SERVICE_PERMISSION",
                 "Accessibility service declaration",
-                "The APK declares the accessibility-service binding permission. Accessibility services can be legitimate but are security-sensitive.",
+                "The APK declares ${apk.declaredAccessibilityServiceCount} accessibility service(s). Accessibility services can be legitimate but are security-sensitive.",
                 EvidenceSeverity.MEDIUM
             )
         }
