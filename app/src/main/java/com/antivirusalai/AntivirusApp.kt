@@ -1791,6 +1791,27 @@ private fun IconArt(
                 line(9f, 6f, 15f, 6f)
                 circle(12f, 18.5f, 0.7f)
             }
+            "database" -> {
+                path {
+                    moveTo(4f * sx, 6f * sy)
+                    quadraticTo(4f * sx, 2.5f * sy, 12f * sx, 2.5f * sy)
+                    quadraticTo(20f * sx, 2.5f * sy, 20f * sx, 6f * sy)
+                    lineTo(20f * sx, 18f * sy)
+                    quadraticTo(20f * sx, 21.5f * sy, 12f * sx, 21.5f * sy)
+                    quadraticTo(4f * sx, 21.5f * sy, 4f * sx, 18f * sy)
+                    close()
+                }
+                path {
+                    moveTo(4f * sx, 6f * sy)
+                    quadraticTo(4f * sx, 9.5f * sy, 12f * sx, 9.5f * sy)
+                    quadraticTo(20f * sx, 9.5f * sy, 20f * sx, 6f * sy)
+                }
+                path {
+                    moveTo(4f * sx, 12f * sy)
+                    quadraticTo(4f * sx, 15.5f * sy, 12f * sx, 15.5f * sy)
+                    quadraticTo(20f * sx, 15.5f * sy, 20f * sx, 12f * sy)
+                }
+            }
             "clock" -> {
                 circle(12f, 12f, 9f)
                 line(12f, 6.5f, 12f, 12f)
