@@ -48,6 +48,10 @@ object ApkMetadataInspector {
             }
         }
 
+        val accessibilityServiceCount = info.services.orEmpty().count {
+            it.permission == "android.permission.BIND_ACCESSIBILITY_SERVICE"
+        }
+
         val exportedCount =
             info.activities.orEmpty().count { it.exported } +
             info.services.orEmpty().count { it.exported } +
@@ -62,7 +66,8 @@ object ApkMetadataInspector {
             requestedPermissions = info.requestedPermissions?.toSet().orEmpty(),
             debuggable = (appFlags and ApplicationInfo.FLAG_DEBUGGABLE) != 0,
             signingCertificateSha256 = signerHash,
-            exportedComponentCount = exportedCount
+            exportedComponentCount = exportedCount,
+            declaredAccessibilityServiceCount = accessibilityServiceCount
         )
     }
 }
