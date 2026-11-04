@@ -1,6 +1,11 @@
 # Roadmap
 
 ## Phase 0 — Buildable foundation
+- [x] Modern bilingual dashboard with five-section navigation and RTL support.
+- [x] Explicit scan-mode catalogue, with full-device scan correctly marked unavailable.
+- [x] Security-tools catalogue with implementation-state labels.
+- [x] FREE / PLUS / FAMILY / LIFETIME plan catalogue without invented pricing or fake checkout.
+- [x] Privacy and capability-status screens; unavailable features are not presented as active.
 - Android app shell, file picker, bounded streaming hash.
 - APK metadata inspection without execution.
 - Explainable heuristic evidence and safe test fixture.
