@@ -1,6 +1,5 @@
 package com.antivirusalai
 
-import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -214,19 +213,6 @@ fun AntivirusApp() {
                                 }
                             }
                         },
-                        onUninstall = { packageName ->
-                            try {
-                                context.startActivity(
-                                    Intent(Intent.ACTION_DELETE, Uri.parse("package:$packageName"))
-                                )
-                            } catch (_: Exception) {
-                                notice = if (fa) {
-                                    "صفحه حذف برنامه در این دستگاه در دسترس نیست."
-                                } else {
-                                    "Android's uninstall screen could not be opened."
-                                }
-                            }
-                        },
                         onDeleteInfo = { showDeleteInfo = true }
                     )
                 }
@@ -271,7 +257,6 @@ private fun ScanResultCard(
     result: ScanResult,
     fa: Boolean,
     onQuarantine: () -> Unit,
-    onUninstall: (String) -> Unit,
     onDeleteInfo: () -> Unit
 ) {
     val title = when (result.verdict) {
@@ -339,11 +324,6 @@ private fun ScanResultCard(
                 colors = ButtonDefaults.buttonColors(containerColor = Accent)
             ) {
                 Text(if (fa) "ذخیره نسخه رمزنگاری‌شده در قرنطینه" else "Save encrypted copy to quarantine")
-            }
-            result.apkMetadata?.let { apk ->
-                OutlinedButton(onClick = { onUninstall(apk.packageName) }, modifier = Modifier.fillMaxWidth()) {
-                    Text(if (fa) "باز کردن صفحه حذف برنامه در Android" else "Open Android uninstall screen")
-                }
             }
             OutlinedButton(onClick = onDeleteInfo, modifier = Modifier.fillMaxWidth()) {
                 Text(if (fa) "درباره حذف فایل اصلی" else "About deleting the original")
