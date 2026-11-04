@@ -1,6 +1,6 @@
 package com.antivirusalai.engine
 
-enum class ScanVerdict { TEST_MARKER_MATCH, SUSPICIOUS, NO_KNOWN_INDICATOR, UNKNOWN_APK }
+enum class ScanVerdict { TEST_MARKER_MATCH, SUSPICIOUS, NO_KNOWN_INDICATOR, UNKNOWN_APK, UNSUPPORTED_FILE }
 enum class EvidenceSeverity { INFO, LOW, MEDIUM, HIGH }
 
 data class ScanEvidence(
@@ -17,7 +17,8 @@ data class ApkMetadata(
     val requestedPermissions: Set<String>,
     val debuggable: Boolean,
     val signingCertificateSha256: String?,
-    val exportedComponentCount: Int
+    val exportedComponentCount: Int,
+    val declaredAccessibilityServiceCount: Int
 )
 
 data class PermissionAssessment(
