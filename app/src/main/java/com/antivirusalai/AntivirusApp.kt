@@ -57,7 +57,7 @@ fun AntivirusApp() {
     val scope = rememberCoroutineScope()
     var language by rememberSaveable { mutableStateOf("fa") }
     var scanning by remember { mutableStateOf(false) }
-    var selectedUri by remember { mutableStateOf<Uri?>(null) }
+    var selectedUri by rememberSaveable { mutableStateOf<Uri?>(null) }
     var scanResult by remember { mutableStateOf<ScanResult?>(null) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var notice by remember { mutableStateOf<String?>(null) }
@@ -69,6 +69,14 @@ fun AntivirusApp() {
     ) { uri: Uri? ->
         if (uri != null) {
             selectedUri = uri
+            try {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            } catch (_: SecurityException) {
+                // Some document providers grant only a temporary read permission.
+            }
             scanning = true
             scanResult = null
             errorMessage = null
@@ -264,12 +272,14 @@ private fun ScanResultCard(
         ScanVerdict.SUSPICIOUS -> if (fa) "نیازمند بررسی بیشتر" else "Needs further review"
         ScanVerdict.NO_KNOWN_INDICATOR -> if (fa) "نشانگر شناخته‌شده‌ای پیدا نشد" else "No known indicator found"
         ScanVerdict.UNKNOWN_APK -> if (fa) "نتیجه نامشخص" else "Unknown result"
+        ScanVerdict.UNSUPPORTED_FILE -> if (fa) "این نوع فایل هنوز پشتیبانی نمی‌شود" else "File type not covered yet"
     }
     val description = when (result.verdict) {
         ScanVerdict.TEST_MARKER_MATCH -> if (fa) "این فقط فایل آزمایشی خود پروژه است؛ بدافزار نیست." else "This is the harmless project test fixture, not malware."
         ScanVerdict.SUSPICIOUS -> if (fa) "چند نشانه ایستا دیده شده است. این نتیجه اثبات بدافزار بودن نیست." else "Static indicators were found. This is not proof of malware."
         ScanVerdict.NO_KNOWN_INDICATOR -> if (fa) "هیچ نشانگر موجود در نسخه فعلی با فایل تطبیق نکرد. این نتیجه تضمین پاک بودن نیست." else "No indicator in this MVP matched. This does not guarantee the file is clean."
         ScanVerdict.UNKNOWN_APK -> if (fa) "اطلاعات APK قابل خواندن نبود؛ از اعلام پاک بودن خودداری می‌کنیم." else "APK metadata could not be read; the file is not being declared clean."
+        ScanVerdict.UNSUPPORTED_FILE -> if (fa) "موتور فعلی تحلیل محتوایی این قالب فایل را انجام نمی‌دهد؛ نتیجه را ناشناخته در نظر بگیر." else "The current engine does not perform content-aware analysis for this file format; treat the result as unknown."
     }
 
     Card(shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = Panel)) {
@@ -323,7 +333,7 @@ private fun ScanResultCard(
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(containerColor = Accent)
             ) {
-                Text(if (fa) "ذخیره نسخه رمزنگاری‌شده در قرنطینه" else "Save encrypted copy to quarantine")
+                Text(if (fa) "ذخیره نسخه رمزنگاری‌شده در فضای خصوصی" else "Save encrypted copy privately")
             }
             OutlinedButton(onClick = onDeleteInfo, modifier = Modifier.fillMaxWidth()) {
                 Text(if (fa) "درباره حذف فایل اصلی" else "About deleting the original")
