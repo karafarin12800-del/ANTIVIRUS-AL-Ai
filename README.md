@@ -11,6 +11,7 @@ Privacy-first Android security scanner. This repository starts with a buildable 
 - Permission and component heuristics reported as evidence, never as proof of malware.
 - Evidence-based verdicts: known test indicator, suspicious, no known threat, or unsupported/unknown.
 - Private app-storage quarantine copy with hash verification. The original file is not silently deleted.
+- The current MVP does not uninstall apps or remove original files; those remediation flows are not implemented yet.
 - Offline-first operation. No file upload, telemetry, VPN, accessibility service, root, or broad package inventory in this MVP.
 - A strict signed-feed verification and storage core is implemented and unit-tested; it is not activated until a production public key and publisher feed are provisioned.
 
