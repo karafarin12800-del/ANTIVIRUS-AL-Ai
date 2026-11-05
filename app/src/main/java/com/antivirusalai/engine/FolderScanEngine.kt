@@ -3,7 +3,6 @@ package com.antivirusalai.engine
 import android.content.Context
 import android.net.Uri
 import android.provider.DocumentsContract
-import android.provider.OpenableColumns
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -43,7 +42,6 @@ object FolderScanEngine {
     private data class Candidate(
         val uri: Uri,
         val name: String,
-        val mimeType: String?,
         val declaredSize: Long
     )
 
@@ -109,7 +107,6 @@ object FolderScanEngine {
                                 candidates += Candidate(
                                     uri = DocumentsContract.buildDocumentUriUsingTree(treeUri, documentId),
                                     name = name.ifBlank { "Unnamed file" },
-                                    mimeType = mime,
                                     declaredSize = size
                                 )
                             }
@@ -121,6 +118,7 @@ object FolderScanEngine {
             } catch (error: Exception) {
                 failures += FolderScanFailure(directoryId, error.message ?: "Folder could not be read.")
             }
+            if (truncated) break
         }
 
         val items = mutableListOf<FolderScanItem>()
