@@ -1,6 +1,9 @@
 # Roadmap
 
 ## Phase 0 — Buildable foundation
+- [x] Merge the professional bilingual Android interface into `main`.
+- [x] Set an identifiable app milestone version: 0.2.0 / versionCode 2.
+- [x] Prepare version-labelled CI APK artifacts with source commit metadata.
 - Android app shell, file picker, bounded streaming hash.
 - APK metadata inspection without execution.
 - Explainable heuristic evidence and safe test fixture.
