@@ -79,12 +79,12 @@ import com.antivirusalai.remediation.QuarantineManager
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
-private val AppBackground = Color(0xFF100B1B)
-private val SurfaceBase = Color(0xFF1B1428)
-private val SurfaceRaised = Color(0xFF251B36)
-private val SurfaceSoft = Color(0xFF302343)
-private val BrandTeal = Color(0xFFB99AFF)
-private val BrandBlue = Color(0xFF8066D8)
+private val AppBackground = Color(0xFF0B0618)
+private val SurfaceBase = Color(0xFF171027)
+private val SurfaceRaised = Color(0xFF211437)
+private val SurfaceSoft = Color(0xFF2B1948)
+private val BrandTeal = Color(0xFFC69BFF)
+private val BrandBlue = Color(0xFF873CFA)
 private val TextPrimary = Color(0xFFF3F7FC)
 private val TextSecondary = Color(0xFFB9ADC9)
 private val TextTertiary = Color(0xFF8A7BA0)
@@ -233,7 +233,7 @@ fun AntivirusApp() {
                         .fillMaxSize()
                         .background(
                             Brush.verticalGradient(
-                                colors = listOf(Color(0xFF241735), Color(0xFF171022), AppBackground)
+                                colors = listOf(Color(0xFF24103D), Color(0xFF130B25), AppBackground)
                             )
                         )
                         .padding(insets)
@@ -802,7 +802,7 @@ private fun HeroSecurityCard(
                 .fillMaxWidth()
                 .background(
                     Brush.linearGradient(
-                        colors = listOf(Color(0xFF173B4A), Color(0xFF172F4A), Color(0xFF1A2942))
+                        colors = listOf(Color(0xFF3B1768), Color(0xFF241044), Color(0xFF160D2B))
                     )
                 )
                 .padding(19.dp)
@@ -834,7 +834,7 @@ private fun HeroSecurityCard(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    ShieldEmblem(size = 83.dp)
+                    FantasyRobotMascot(modifier = Modifier.size(104.dp))
                     Column(
                         modifier = Modifier.weight(1f),
                         verticalArrangement = Arrangement.spacedBy(7.dp)
@@ -918,6 +918,76 @@ private fun ShieldEmblem(size: Dp) {
             ) {
                 IconArt("shield", tint = BrandTeal, size = size * 0.38f)
             }
+        }
+    }
+}
+
+@Composable
+private fun FantasyRobotMascot(modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .background(
+                Brush.radialGradient(
+                    listOf(Color(0xFFB66BFF).copy(alpha = 0.24f), Color.Transparent)
+                ),
+                CircleShape
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(3.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(3.dp)
+            ) {
+                Box(Modifier.size(8.dp, 19.dp).background(BrandTeal, RoundedCornerShape(5.dp)))
+                Box(
+                    modifier = Modifier
+                        .size(67.dp, 57.dp)
+                        .background(
+                            Brush.linearGradient(listOf(Color(0xFFE5D5FF), Color(0xFF9860E8))),
+                            RoundedCornerShape(23.dp)
+                        )
+                        .border(1.dp, Color.White.copy(alpha = 0.55f), RoundedCornerShape(23.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Box(
+                        Modifier
+                            .size(53.dp, 31.dp)
+                            .background(Color(0xFF160D29), RoundedCornerShape(16.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(13.dp)) {
+                            Box(Modifier.size(7.dp, 10.dp).background(Color(0xFFD9B8FF), RoundedCornerShape(50)))
+                            Box(Modifier.size(7.dp, 10.dp).background(Color(0xFFD9B8FF), RoundedCornerShape(50)))
+                        }
+                    }
+                }
+                Box(Modifier.size(8.dp, 19.dp).background(BrandTeal, RoundedCornerShape(5.dp)))
+            }
+            Box(
+                Modifier
+                    .size(48.dp, 25.dp)
+                    .background(
+                        Brush.horizontalGradient(listOf(Color(0xFF8C4BE8), Color(0xFFD0A8FF))),
+                        RoundedCornerShape(topStart = 13.dp, topEnd = 13.dp, bottomStart = 8.dp, bottomEnd = 8.dp)
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                IconArt("shield", tint = Color.White, size = 17.dp)
+            }
+        }
+        Box(
+            Modifier
+                .align(Alignment.BottomEnd)
+                .size(28.dp)
+                .background(Color(0xFF4D267C), CircleShape)
+                .border(1.dp, BrandTeal.copy(alpha = 0.8f), CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            IconArt("check", tint = Color.White, size = 17.dp)
         }
     }
 }
