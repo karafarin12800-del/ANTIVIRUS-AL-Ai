@@ -3,6 +3,7 @@ package com.antivirusalai
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -47,12 +48,20 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -65,16 +74,18 @@ import com.antivirusalai.remediation.QuarantineManager
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
-private val Background = Color(0xFF07111F)
-private val Panel = Color(0xFF111F31)
-private val PanelElevated = Color(0xFF172A40)
-private val Accent = Color(0xFF39D7CF)
-private val AccentBlue = Color(0xFF6F9CFF)
-private val Muted = Color(0xFF9CB0C5)
-private val SoftWhite = Color(0xFFEAF2FA)
-private val Warning = Color(0xFFFFC46B)
-private val Danger = Color(0xFFFF777F)
-private val Success = Color(0xFF73E0B0)
+private val AppBackground = Color(0xFF07111E)
+private val SurfaceBase = Color(0xFF101D2D)
+private val SurfaceRaised = Color(0xFF17283C)
+private val SurfaceSoft = Color(0xFF1B3046)
+private val BrandTeal = Color(0xFF42D9CF)
+private val BrandBlue = Color(0xFF71A3FF)
+private val TextPrimary = Color(0xFFF3F7FC)
+private val TextSecondary = Color(0xFF9FB1C5)
+private val TextTertiary = Color(0xFF73869D)
+private val ColorWarning = Color(0xFFFFC36E)
+private val ColorDanger = Color(0xFFFF7E86)
+private val ColorSuccess = Color(0xFF79DDB2)
 
 private enum class MainTab(val key: String) {
     HOME("home"),
@@ -127,7 +138,7 @@ fun AntivirusApp() {
                     throw cancelled
                 } catch (error: Exception) {
                     errorMessage = if (error is ScanTooLargeException) {
-                        if (fa) "حجم فایل از سقف ۲۰۰ مگابایت بیشتر است." else error.message
+                        tr(fa, "حجم فایل از سقف ۲۰۰ مگابایت بیشتر است.", error.message ?: "File is larger than the 200 MB limit.")
                     } else {
                         error.message ?: tr(fa, "اسکن انجام نشد.", "Scan failed.")
                     }
@@ -150,61 +161,61 @@ fun AntivirusApp() {
     ) {
         MaterialTheme(
             colorScheme = darkColorScheme(
-                primary = Accent,
-                onPrimary = Background,
-                background = Background,
-                surface = Panel,
-                onSurface = SoftWhite,
-                secondary = AccentBlue,
-                error = Danger
+                primary = BrandTeal,
+                onPrimary = AppBackground,
+                background = AppBackground,
+                surface = SurfaceBase,
+                onSurface = TextPrimary,
+                secondary = BrandBlue,
+                error = ColorDanger
             )
         ) {
             Scaffold(
-                containerColor = Background,
+                containerColor = AppBackground,
                 bottomBar = {
-                    AppBottomBar(
+                    MainNavigationBar(
                         activeTab = activeTab,
                         fa = fa,
                         onSelect = { activeTab = it.key }
                     )
                 }
-            ) { innerPadding ->
+            ) { insets ->
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .background(
                             Brush.verticalGradient(
-                                colors = listOf(Color(0xFF0B1C30), Background, Background)
+                                colors = listOf(Color(0xFF0C1C2C), AppBackground, AppBackground)
                             )
                         )
-                        .padding(innerPadding)
+                        .padding(insets)
                 ) {
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
                             .verticalScroll(rememberScrollState())
-                            .padding(horizontal = 18.dp, vertical = 18.dp),
-                        verticalArrangement = Arrangement.spacedBy(18.dp)
+                            .padding(horizontal = 18.dp, vertical = 15.dp),
+                        verticalArrangement = Arrangement.spacedBy(22.dp)
                     ) {
-                        AppHeader(
+                        BrandHeader(
                             fa = fa,
                             onLanguageChange = { language = if (fa) "en" else "fa" },
                             onSettings = { activeTab = MainTab.SETTINGS.key }
                         )
 
                         when (activeTab) {
-                            MainTab.HOME.key -> HomeScreen(
+                            MainTab.HOME.key -> DashboardScreen(
                                 fa = fa,
                                 scanning = scanning,
-                                lastResult = scanResult,
-                                onQuickScan = launchFileScan,
-                                onApkScan = launchApkScan,
+                                result = scanResult,
                                 onOpenScan = { activeTab = MainTab.SCAN.key },
+                                onFileScan = launchFileScan,
+                                onApkScan = launchApkScan,
                                 onOpenTools = { activeTab = MainTab.TOOLS.key },
                                 onOpenStore = { activeTab = MainTab.STORE.key }
                             )
 
-                            MainTab.SCAN.key -> ScanScreen(
+                            MainTab.SCAN.key -> ScanCenterScreen(
                                 fa = fa,
                                 scanning = scanning,
                                 result = scanResult,
@@ -227,13 +238,13 @@ fun AntivirusApp() {
                                                 )
                                                 notice = tr(
                                                     fa,
-                                                    "نسخه رمزنگاری‌شده در فضای خصوصی ذخیره شد. شناسه: ${receipt.id.take(8)}. فایل اصلی در محل قبلی باقی مانده است.",
+                                                    "نسخه رمزنگاری‌شده در فضای خصوصی ذخیره شد. شناسه: ${receipt.id.take(8)}. فایل اصلی بدون تغییر باقی مانده است.",
                                                     "An encrypted copy was saved in private storage. ID: ${receipt.id.take(8)}. The original file remains unchanged."
                                                 )
                                             } catch (cancelled: CancellationException) {
                                                 throw cancelled
                                             } catch (error: Exception) {
-                                                notice = error.message ?: tr(fa, "ذخیره قرنطینه انجام نشد.", "Quarantine copy failed.")
+                                                notice = error.message ?: tr(fa, "ذخیره نسخه قرنطینه انجام نشد.", "Quarantine copy failed.")
                                             } finally {
                                                 quarantining = false
                                             }
@@ -247,9 +258,9 @@ fun AntivirusApp() {
                                 }
                             )
 
-                            MainTab.TOOLS.key -> ToolsScreen(
+                            MainTab.TOOLS.key -> SecurityToolsScreen(
                                 fa = fa,
-                                lastResult = scanResult,
+                                result = scanResult,
                                 onFeature = { featureInfo = it },
                                 onOpenScan = { activeTab = MainTab.SCAN.key }
                             )
@@ -271,13 +282,13 @@ fun AntivirusApp() {
                         Text(
                             tr(
                                 fa,
-                                "نسخه اولیه ۰٫۱٫۰ • نتایج این نسخه فقط بر پایه قابلیت‌های پیاده‌سازی‌شده گزارش می‌شوند.",
-                                "Early build 0.1.0 • Reports are limited to capabilities implemented in this version."
+                                "ANTIVIRUS AL AI  •  نسخه آزمایشی ۰٫۱٫۰",
+                                "ANTIVIRUS AL AI  •  DEVELOPMENT BUILD 0.1.0"
                             ),
-                            color = Muted,
-                            style = MaterialTheme.typography.bodySmall,
+                            color = TextTertiary,
+                            fontSize = 10.sp,
                             textAlign = TextAlign.Center,
-                            modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 8.dp)
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 7.dp)
                         )
                     }
                 }
@@ -288,30 +299,30 @@ fun AntivirusApp() {
     selectedPlan?.let { plan ->
         AlertDialog(
             onDismissRequest = { selectedPlan = null },
-            containerColor = PanelElevated,
-            title = { Text(tr(fa, "فروشگاه ANTIVIRUS AL AI", "ANTIVIRUS AL AI Store"), color = SoftWhite) },
+            containerColor = SurfaceRaised,
+            title = { Text(tr(fa, "فروشگاه ANTIVIRUS AL AI", "ANTIVIRUS AL AI Store"), color = TextPrimary) },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
                     Text(
                         tr(fa, "طرح انتخاب‌شده: $plan", "Selected plan: $plan"),
-                        color = Accent,
-                        fontWeight = FontWeight.SemiBold
+                        color = BrandTeal,
+                        fontWeight = FontWeight.Bold
                     )
                     Text(
                         tr(
                             fa,
-                            "درگاه پرداخت Google Play و مدیریت اشتراک هنوز به پروژه متصل نشده است. هیچ خرید، برداشت وجه یا فعال‌سازی اشتراکی انجام نمی‌شود. این بخش فعلاً کاتالوگ و پیش‌نمایش طرح‌هاست.",
-                            "Google Play Billing and subscription management are not connected yet. No purchase, charge, or subscription activation will occur. This is currently a plan catalogue preview."
+                            "پرداخت Google Play و مدیریت اشتراک هنوز متصل نشده‌اند. هیچ مبلغی دریافت یا اشتراکی فعال نمی‌شود. این بخش فعلاً پیش‌نمایش طرح‌هاست.",
+                            "Google Play Billing and subscription management are not connected yet. No payment or subscription activation will occur. This is currently a plan preview."
                         ),
-                        color = Muted
+                        color = TextSecondary
                     )
                 }
             },
             confirmButton = {
                 Button(
                     onClick = { selectedPlan = null },
-                    colors = ButtonDefaults.buttonColors(containerColor = Accent)
-                ) { Text(tr(fa, "متوجه شدم", "Got it")) }
+                    colors = ButtonDefaults.buttonColors(containerColor = BrandTeal)
+                ) { Text(tr(fa, "متوجه شدم", "Got it"), color = AppBackground) }
             }
         )
     }
@@ -319,14 +330,14 @@ fun AntivirusApp() {
     featureInfo?.let { feature ->
         AlertDialog(
             onDismissRequest = { featureInfo = null },
-            containerColor = PanelElevated,
-            title = { Text(featureTitle(fa, feature), color = SoftWhite) },
-            text = { Text(featureDescription(fa, feature), color = Muted) },
+            containerColor = SurfaceRaised,
+            title = { Text(featureTitle(fa, feature), color = TextPrimary) },
+            text = { Text(featureDescription(fa, feature), color = TextSecondary) },
             confirmButton = {
                 Button(
                     onClick = { featureInfo = null },
-                    colors = ButtonDefaults.buttonColors(containerColor = Accent)
-                ) { Text(tr(fa, "بستن", "Close")) }
+                    colors = ButtonDefaults.buttonColors(containerColor = BrandTeal)
+                ) { Text(tr(fa, "بستن", "Close"), color = AppBackground) }
             }
         )
     }
@@ -334,20 +345,22 @@ fun AntivirusApp() {
     if (showPrivacy) {
         AlertDialog(
             onDismissRequest = { showPrivacy = false },
-            containerColor = PanelElevated,
-            title = { Text(tr(fa, "حریم خصوصی", "Privacy"), color = SoftWhite) },
+            containerColor = SurfaceRaised,
+            title = { Text(tr(fa, "حریم خصوصی و داده‌ها", "Privacy and data"), color = TextPrimary) },
             text = {
                 Text(
                     tr(
                         fa,
-                        "در نسخه فعلی فقط فایلی که خودت از انتخاب‌گر Android مشخص می‌کنی خوانده می‌شود. محتوای فایل به سرور ارسال نمی‌شود. برای قرنطینه، یک نسخه رمزنگاری‌شده در فضای خصوصی برنامه ذخیره می‌شود و فایل اصلی دست‌نخورده می‌ماند. دسترسی به اطلاعات خصوصی برنامه‌های دیگر یا اسکن کامل دستگاه در این نسخه وجود ندارد.",
-                        "In this version, only a file you explicitly select through Android's document picker is read. File contents are not uploaded. Quarantine stores an encrypted copy in private app storage and leaves the original unchanged. This version does not access other apps' private data or perform a full-device scan."
+                        "در این نسخه فقط فایلی که خودت از انتخاب‌گر Android مشخص می‌کنی خوانده می‌شود. محتوای فایل آپلود نمی‌شود. قرنطینه یک نسخه رمزنگاری‌شده در فضای خصوصی برنامه می‌سازد و فایل اصلی را حذف نمی‌کند. اسکن کامل دستگاه و دسترسی به داده خصوصی برنامه‌های دیگر در این نسخه وجود ندارد.",
+                        "This build reads only files you explicitly select through Android's document picker. File contents are not uploaded. Quarantine creates an encrypted copy in private app storage and does not delete the original. Full-device scanning and access to other apps' private data are not available."
                     ),
-                    color = Muted
+                    color = TextSecondary
                 )
             },
             confirmButton = {
-                Button(onClick = { showPrivacy = false }) { Text(tr(fa, "بستن", "Close")) }
+                Button(onClick = { showPrivacy = false }) {
+                    Text(tr(fa, "بستن", "Close"), color = AppBackground)
+                }
             }
         )
     }
@@ -355,27 +368,29 @@ fun AntivirusApp() {
     if (showAbout) {
         AlertDialog(
             onDismissRequest = { showAbout = false },
-            containerColor = PanelElevated,
-            title = { Text("ANTIVIRUS AL AI", color = SoftWhite) },
+            containerColor = SurfaceRaised,
+            title = { Text("ANTIVIRUS AL AI", color = TextPrimary) },
             text = {
                 Text(
                     tr(
                         fa,
-                        "نسخه ۰٫۱٫۰ • Android • موتور اسکن محلی و گزارش شفاف. قابلیت‌های آنلاین، پایش بلادرنگ، پرداخت و برخی ابزارهای امنیتی هنوز در دست توسعه‌اند.",
-                        "Version 0.1.0 • Android • Local scan engine with explainable reporting. Online intelligence, real-time monitoring, billing, and several security tools are still under development."
+                        "نسخه ۰٫۱٫۰ • Android • اسکن محلی و گزارش مبتنی بر شواهد. بانک تهدید تولیدی، محافظت بلادرنگ، پرداخت و چند ابزار امنیتی هنوز در دست توسعه هستند.",
+                        "Version 0.1.0 • Android • Local scanning and evidence-based reports. Production threat intelligence, real-time protection, billing and several security tools are still under development."
                     ),
-                    color = Muted
+                    color = TextSecondary
                 )
             },
             confirmButton = {
-                Button(onClick = { showAbout = false }) { Text(tr(fa, "بستن", "Close")) }
+                Button(onClick = { showAbout = false }) {
+                    Text(tr(fa, "بستن", "Close"), color = AppBackground)
+                }
             }
         )
     }
 }
 
 @Composable
-private fun AppHeader(
+private fun BrandHeader(
     fa: Boolean,
     onLanguageChange: () -> Unit,
     onSettings: () -> Unit
@@ -385,254 +400,267 @@ private fun AppHeader(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(11.dp)
+        ) {
             Box(
                 modifier = Modifier
-                    .size(46.dp)
+                    .size(45.dp)
                     .background(
-                        Brush.linearGradient(listOf(Accent, AccentBlue)),
+                        Brush.linearGradient(listOf(BrandTeal, BrandBlue)),
                         RoundedCornerShape(15.dp)
                     ),
                 contentAlignment = Alignment.Center
             ) {
-                Text("◈", color = Background, fontSize = 27.sp, fontWeight = FontWeight.Bold)
+                IconArt("shield", tint = AppBackground, size = 27.dp)
             }
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(
                     "ANTIVIRUS AL AI",
-                    color = Color.White,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.ExtraBold
+                    color = TextPrimary,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    letterSpacing = 0.25.sp
                 )
                 Text(
-                    tr(fa, "امنیت شفاف و هوشمند", "SMART • TRANSPARENT SECURITY"),
-                    color = Muted,
+                    tr(fa, "امنیت دیجیتال با شفافیت", "DIGITAL SECURITY, CLEARLY"),
+                    color = TextTertiary,
                     fontSize = 9.sp,
-                    letterSpacing = 1.sp
+                    letterSpacing = 0.65.sp
                 )
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-            SmallIconButton(label = if (fa) "EN" else "فا", onClick = onLanguageChange)
-            SmallIconButton(label = "⚙", onClick = onSettings)
+            HeaderAction(label = if (fa) "EN" else "فا", onClick = onLanguageChange)
+            HeaderAction(icon = "settings", onClick = onSettings)
         }
     }
 }
 
 @Composable
-private fun AppBottomBar(
+private fun HeaderAction(
+    label: String? = null,
+    icon: String? = null,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier.size(40.dp).clickable(onClick = onClick),
+        color = SurfaceBase,
+        shape = RoundedCornerShape(13.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.04f))
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            if (icon != null) {
+                IconArt(icon, tint = BrandTeal, size = 19.dp)
+            } else {
+                Text(label.orEmpty(), color = BrandTeal, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+            }
+        }
+    }
+}
+
+@Composable
+private fun MainNavigationBar(
     activeTab: String,
     fa: Boolean,
     onSelect: (MainTab) -> Unit
 ) {
     NavigationBar(
-        containerColor = Color(0xFF0C1929),
-        contentColor = SoftWhite,
+        containerColor = Color(0xFF0B1725),
+        contentColor = TextPrimary,
         tonalElevation = 0.dp
     ) {
-        val tabs = listOf(
-            Triple(MainTab.HOME, "⌂", tr(fa, "خانه", "Home")),
-            Triple(MainTab.SCAN, "◎", tr(fa, "اسکن", "Scan")),
-            Triple(MainTab.TOOLS, "✣", tr(fa, "ابزارها", "Tools")),
-            Triple(MainTab.STORE, "◇", tr(fa, "فروشگاه", "Store")),
-            Triple(MainTab.SETTINGS, "⚙", tr(fa, "تنظیمات", "Settings"))
+        val items = listOf(
+            NavItem(MainTab.HOME, "home", tr(fa, "خانه", "Home")),
+            NavItem(MainTab.SCAN, "scan", tr(fa, "اسکن", "Scan")),
+            NavItem(MainTab.TOOLS, "tools", tr(fa, "ابزارها", "Tools")),
+            NavItem(MainTab.STORE, "store", tr(fa, "فروشگاه", "Store")),
+            NavItem(MainTab.SETTINGS, "settings", tr(fa, "تنظیمات", "Settings"))
         )
-        tabs.forEach { (tab, icon, label) ->
+        items.forEach { item ->
             NavigationBarItem(
-                selected = activeTab == tab.key,
-                onClick = { onSelect(tab) },
-                icon = { Text(icon, fontSize = 19.sp, fontWeight = FontWeight.SemiBold) },
-                label = { Text(label, fontSize = 10.sp, maxLines = 1) },
+                selected = activeTab == item.tab.key,
+                onClick = { onSelect(item.tab) },
+                icon = {
+                    IconArt(
+                        item.icon,
+                        tint = if (activeTab == item.tab.key) BrandTeal else TextTertiary,
+                        size = 21.dp
+                    )
+                },
+                label = { Text(item.label, fontSize = 10.sp, maxLines = 1) },
+                alwaysShowLabel = true,
                 colors = NavigationBarItemDefaults.colors(
-                    selectedIconColor = Accent,
-                    selectedTextColor = Accent,
-                    indicatorColor = Accent.copy(alpha = 0.13f),
-                    unselectedIconColor = Muted,
-                    unselectedTextColor = Muted
+                    selectedIconColor = BrandTeal,
+                    selectedTextColor = BrandTeal,
+                    indicatorColor = BrandTeal.copy(alpha = 0.11f),
+                    unselectedIconColor = TextTertiary,
+                    unselectedTextColor = TextTertiary
                 )
             )
         }
     }
 }
 
+private data class NavItem(val tab: MainTab, val icon: String, val label: String)
+
 @Composable
-private fun HomeScreen(
+private fun DashboardScreen(
     fa: Boolean,
     scanning: Boolean,
-    lastResult: ScanResult?,
-    onQuickScan: () -> Unit,
-    onApkScan: () -> Unit,
+    result: ScanResult?,
     onOpenScan: () -> Unit,
+    onFileScan: () -> Unit,
+    onApkScan: () -> Unit,
     onOpenTools: () -> Unit,
     onOpenStore: () -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(21.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                EyebrowLabel(tr(fa, "نمای کلی دستگاه", "DEVICE OVERVIEW"))
+                StatusBadge(
+                    text = tr(fa, "نسخه ۰٫۱٫۰", "VERSION 0.1.0"),
+                    tint = TextTertiary
+                )
+            }
             Text(
-                tr(fa, "مرکز امنیت", "Security overview"),
-                color = Color.White,
-                style = MaterialTheme.typography.headlineSmall,
+                tr(fa, "مرکز امنیت", "Security center"),
+                color = TextPrimary,
+                fontSize = 26.sp,
                 fontWeight = FontWeight.Bold
             )
             Text(
-                tr(fa, "وضعیت قابلیت‌های فعال برنامه را از همین‌جا ببین.", "See the actual status of the protection features available in this build."),
-                color = Muted,
-                style = MaterialTheme.typography.bodyMedium
+                tr(fa, "وضعیت قابلیت‌های امنیتی در این نسخه", "Security capabilities in this build"),
+                color = TextSecondary,
+                fontSize = 13.sp
             )
         }
 
-        Card(
-            shape = RoundedCornerShape(26.dp),
-            colors = CardDefaults.cardColors(containerColor = PanelElevated)
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(
-                        Brush.linearGradient(
-                            listOf(Color(0xFF173B4A), Color(0xFF172C48), Color(0xFF18263D))
-                        )
-                    )
-                    .padding(20.dp)
-            ) {
-                Column(verticalArrangement = Arrangement.spacedBy(13.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        StatusPill(
-                            text = tr(fa, "موتور محلی آماده", "LOCAL ENGINE READY"),
-                            color = Accent
-                        )
-                        Text("✦", color = Accent, fontSize = 24.sp)
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                            Text(
-                                tr(fa, "اسکن با کنترل خودت", "Security on your terms"),
-                                color = Color.White,
-                                fontSize = 22.sp,
-                                fontWeight = FontWeight.ExtraBold
-                            )
-                            Text(
-                                tr(
-                                    fa,
-                                    "فایل را انتخاب کن تا موتور محلی آن را بررسی کند. محتوای فایل از دستگاه خارج نمی‌شود.",
-                                    "Choose a file for local inspection. File contents stay on your device."
-                                ),
-                                color = Color(0xFFC3D5E5),
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
-                        Spacer(Modifier.width(10.dp))
-                        Box(
-                            modifier = Modifier
-                                .size(76.dp)
-                                .border(1.dp, Accent.copy(alpha = 0.55f), CircleShape)
-                                .background(Accent.copy(alpha = 0.08f), CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text("⬡", color = Accent, fontSize = 49.sp)
-                        }
-                    }
-                    Button(
-                        onClick = onOpenScan,
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(containerColor = Accent),
-                        shape = RoundedCornerShape(15.dp)
-                    ) {
-                        Text(
-                            if (scanning) tr(fa, "در حال اسکن…", "Scanning…")
-                            else tr(fa, "ورود به مرکز اسکن", "Open scan center"),
-                            color = Background,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
+        HeroSecurityCard(
+            fa = fa,
+            scanning = scanning,
+            onScan = onOpenScan,
+            onApk = onApkScan
+        )
+
+        Column(verticalArrangement = Arrangement.spacedBy(11.dp)) {
+            SectionTitle(
+                title = tr(fa, "وضعیت محافظت", "Protection status"),
+                detail = tr(fa, "واقعیت قابلیت‌ها، نه امتیاز ساختگی", "Implemented capabilities, not a made-up score")
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                StatusCard(
+                    modifier = Modifier.weight(1f),
+                    icon = "scan",
+                    title = tr(fa, "اسکن محلی", "Local scan"),
+                    value = tr(fa, "آماده", "Ready"),
+                    detail = tr(fa, "فایل انتخابی و APK", "Selected files & APK"),
+                    tint = BrandTeal
+                )
+                StatusCard(
+                    modifier = Modifier.weight(1f),
+                    icon = "database",
+                    title = tr(fa, "بانک تهدید", "Threat feed"),
+                    value = tr(fa, "متصل نیست", "Not connected"),
+                    detail = tr(fa, "کلید انتشار تنظیم نشده", "Publisher key not set"),
+                    tint = ColorWarning
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                StatusCard(
+                    modifier = Modifier.weight(1f),
+                    icon = "activity",
+                    title = tr(fa, "محافظت بلادرنگ", "Real-time guard"),
+                    value = tr(fa, "غیرفعال", "Inactive"),
+                    detail = tr(fa, "هنوز پیاده‌سازی نشده", "Not implemented yet"),
+                    tint = ColorDanger
+                )
+                StatusCard(
+                    modifier = Modifier.weight(1f),
+                    icon = "lock",
+                    title = tr(fa, "حریم خصوصی", "Privacy"),
+                    value = tr(fa, "محلی", "On-device"),
+                    detail = tr(fa, "بدون آپلود محتوا", "No content upload"),
+                    tint = ColorSuccess
+                )
             }
         }
 
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            MetricCard(
-                modifier = Modifier.weight(1f),
-                title = tr(fa, "اسکن اخیر", "Last scan"),
-                value = lastResult?.let { tr(fa, "انجام شد", "Done") } ?: tr(fa, "هنوز", "None"),
-                detail = lastResult?.displayName ?: tr(fa, "گزارشی ثبت نشده", "No report yet"),
-                accent = AccentBlue
-            )
-            MetricCard(
-                modifier = Modifier.weight(1f),
-                title = tr(fa, "بانک تهدید", "Threat feed"),
-                value = tr(fa, "متصل نیست", "Not linked"),
-                detail = tr(fa, "کلید انتشار تنظیم نشده", "Publisher key not configured"),
-                accent = Warning
+        if (result != null) {
+            RecentScanCard(
+                fa = fa,
+                result = result,
+                onClick = onOpenScan
             )
         }
 
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            MetricCard(
-                modifier = Modifier.weight(1f),
-                title = tr(fa, "محافظت بلادرنگ", "Real-time guard"),
-                value = tr(fa, "غیرفعال", "Inactive"),
-                detail = tr(fa, "در حال توسعه", "In development"),
-                accent = Danger
+        Column(verticalArrangement = Arrangement.spacedBy(11.dp)) {
+            SectionTitle(
+                title = tr(fa, "شروع سریع", "Quick actions"),
+                detail = tr(fa, "میان‌برهای کاربردی", "Frequently used actions")
             )
-            MetricCard(
-                modifier = Modifier.weight(1f),
-                title = tr(fa, "حریم خصوصی", "Privacy"),
-                value = tr(fa, "محلی", "On-device"),
-                detail = tr(fa, "بدون آپلود فایل", "No file uploads"),
-                accent = Success
-            )
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                QuickActionCard(
+                    modifier = Modifier.weight(1f),
+                    icon = "file",
+                    title = tr(fa, "اسکن فایل", "File scan"),
+                    caption = tr(fa, "انتخاب فایل", "Choose a file"),
+                    onClick = onFileScan
+                )
+                QuickActionCard(
+                    modifier = Modifier.weight(1f),
+                    icon = "apk",
+                    title = tr(fa, "تحلیل APK", "APK analysis"),
+                    caption = tr(fa, "مجوزها و امضا", "Permissions & signer"),
+                    onClick = onApkScan
+                )
+            }
         }
 
-        SectionHeading(
-            title = tr(fa, "شروع سریع", "Quick actions"),
-            subtitle = tr(fa, "عملیات واقعی در نسخه فعلی", "Available in this version")
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            ActionTile(
-                modifier = Modifier.weight(1f),
-                icon = "⌕",
-                title = tr(fa, "اسکن فایل", "File scan"),
-                caption = tr(fa, "انتخاب یک فایل", "Choose one file"),
-                onClick = onQuickScan
+        Column(verticalArrangement = Arrangement.spacedBy(11.dp)) {
+            SectionTitle(
+                title = tr(fa, "جعبه‌ابزار امنیتی", "Security toolkit"),
+                detail = tr(fa, "ماژول‌های فعلی و آینده", "Current and planned modules"),
+                action = tr(fa, "مشاهده همه", "View all"),
+                onAction = onOpenTools
             )
-            ActionTile(
-                modifier = Modifier.weight(1f),
-                icon = "▣",
-                title = tr(fa, "تحلیل APK", "APK analysis"),
-                caption = tr(fa, "مجوز و امضا", "Permissions & signer"),
-                onClick = onApkScan
-            )
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                MiniFeatureCard(
+                    modifier = Modifier.weight(1f),
+                    icon = "lock",
+                    title = tr(fa, "قرنطینه", "Quarantine"),
+                    subtitle = tr(fa, "نسخه رمزنگاری‌شده", "Encrypted copy"),
+                    status = tr(fa, "پایه‌ای", "Basic"),
+                    tint = BrandTeal
+                )
+                MiniFeatureCard(
+                    modifier = Modifier.weight(1f),
+                    icon = "shield",
+                    title = tr(fa, "آسیب‌پذیری", "Vulnerability"),
+                    subtitle = tr(fa, "تحلیل APK", "APK intelligence"),
+                    status = tr(fa, "در توسعه", "In progress"),
+                    tint = ColorWarning
+                )
+            }
         }
 
-        SectionHeading(
-            title = tr(fa, "ابزارهای امنیتی", "Security toolkit"),
-            subtitle = tr(fa, "قابلیت‌های قابل استفاده و در دست توسعه", "Available and planned modules")
-        )
-        ActionTile(
-            modifier = Modifier.fillMaxWidth(),
-            icon = "✣",
-            title = tr(fa, "مرکز ابزارها", "Open security tools"),
-            caption = tr(fa, "قرنطینه، آسیب‌پذیری، لینک‌ها و شبکه", "Quarantine, vulnerabilities, links and network"),
-            onClick = onOpenTools
-        )
-        ActionTile(
-            modifier = Modifier.fillMaxWidth(),
-            icon = "◇",
-            title = tr(fa, "طرح‌های اشتراک و فروشگاه", "Plans and store"),
-            caption = tr(fa, "مشاهده امکانات FREE، PLUS و FAMILY", "Explore FREE, PLUS and FAMILY plans"),
+        StorePromoCard(
+            fa = fa,
             onClick = onOpenStore
         )
 
         InfoBanner(
-            title = tr(fa, "شفافیت وضعیت", "Protection status"),
+            title = tr(fa, "گزارش‌دهی شفاف", "Transparent reporting"),
             body = tr(
                 fa,
-                "این نسخه اسکن کامل دستگاه، حذف خودکار برنامه‌های دیگر یا محافظت بلادرنگ ارائه نمی‌کند. نتیجه «بدون نشانگر شناخته‌شده» تضمین ایمنی نیست.",
-                "This version does not offer a full-device scan, automatic removal of other apps, or real-time protection. “No known indicator” is not a safety guarantee."
+                "این نسخه اسکن کامل دستگاه یا محافظت بلادرنگ ندارد. نتیجه «بدون نشانگر شناخته‌شده» به معنی تضمین پاک بودن فایل نیست.",
+                "This version does not provide full-device or real-time protection. “No known indicator” does not guarantee that a file is safe."
             ),
             warning = true
         )
@@ -640,7 +668,357 @@ private fun HomeScreen(
 }
 
 @Composable
-private fun ScanScreen(
+private fun HeroSecurityCard(
+    fa: Boolean,
+    scanning: Boolean,
+    onScan: () -> Unit,
+    onApk: () -> Unit
+) {
+    Card(
+        shape = RoundedCornerShape(27.dp),
+        colors = CardDefaults.cardColors(containerColor = SurfaceRaised)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    Brush.linearGradient(
+                        colors = listOf(Color(0xFF173B4A), Color(0xFF172F4A), Color(0xFF1A2942))
+                    )
+                )
+                .padding(19.dp)
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(15.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(7.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(Modifier.size(7.dp).background(BrandTeal, CircleShape))
+                        Text(
+                            tr(fa, "موتور اسکن محلی آماده", "LOCAL SCAN ENGINE READY"),
+                            color = BrandTeal,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 0.35.sp
+                        )
+                    }
+                    IconArt("spark", tint = BrandTeal, size = 21.dp)
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    ShieldEmblem(size = 83.dp)
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(7.dp)
+                    ) {
+                        Text(
+                            tr(fa, "امنیت را آگاهانه بررسی کن", "Take control of your security"),
+                            color = TextPrimary,
+                            fontSize = 20.sp,
+                            lineHeight = 27.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            tr(
+                                fa,
+                                "فایل یا APK را انتخاب کن؛ تحلیل در همین دستگاه انجام می‌شود.",
+                                "Choose a file or APK. Analysis runs locally on this device."
+                            ),
+                            color = Color(0xFFC1D4E5),
+                            fontSize = 12.sp,
+                            lineHeight = 18.sp
+                        )
+                    }
+                }
+
+                Button(
+                    onClick = onScan,
+                    modifier = Modifier.fillMaxWidth().height(51.dp),
+                    shape = RoundedCornerShape(15.dp),
+                    contentPadding = PaddingValues(horizontal = 15.dp, vertical = 11.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = BrandTeal,
+                        contentColor = AppBackground
+                    )
+                ) {
+                    Text(
+                        if (scanning) tr(fa, "در حال اسکن…", "Scanning…")
+                        else tr(fa, "شروع اسکن فایل", "Start file scan"),
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    IconArt("arrow", tint = AppBackground, size = 17.dp)
+                }
+
+                OutlinedButton(
+                    onClick = onApk,
+                    modifier = Modifier.fillMaxWidth().height(46.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.17f)),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = TextPrimary)
+                ) {
+                    IconArt("apk", tint = BrandTeal, size = 17.dp)
+                    Spacer(Modifier.width(8.dp))
+                    Text(tr(fa, "تحلیل تخصصی APK", "APK security analysis"), fontSize = 12.sp)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ShieldEmblem(size: Dp) {
+    Box(
+        modifier = Modifier.size(size),
+        contentAlignment = Alignment.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .border(1.dp, BrandTeal.copy(alpha = 0.25f), CircleShape)
+                .padding(7.dp)
+                .border(1.dp, BrandTeal.copy(alpha = 0.42f), CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(size * 0.61f)
+                    .background(BrandTeal.copy(alpha = 0.10f), RoundedCornerShape(20.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                IconArt("shield", tint = BrandTeal, size = size * 0.38f)
+            }
+        }
+    }
+}
+
+@Composable
+private fun StatusCard(
+    modifier: Modifier,
+    icon: String,
+    title: String,
+    value: String,
+    detail: String,
+    tint: Color
+) {
+    Card(
+        modifier = modifier,
+        shape = RoundedCornerShape(19.dp),
+        colors = CardDefaults.cardColors(containerColor = SurfaceBase)
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 13.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(title, color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                Box(Modifier.size(7.dp).background(tint, CircleShape))
+            }
+            Text(
+                value,
+                color = TextPrimary,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                detail,
+                color = TextTertiary,
+                fontSize = 10.sp,
+                maxLines = 2,
+                lineHeight = 14.sp
+            )
+        }
+    }
+}
+
+@Composable
+private fun SectionTitle(
+    title: String,
+    detail: String,
+    action: String? = null,
+    onAction: (() -> Unit)? = null
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.Bottom
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(3.dp), modifier = Modifier.weight(1f)) {
+            Text(title, color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Text(detail, color = TextSecondary, fontSize = 11.sp)
+        }
+        if (action != null && onAction != null) {
+            Text(
+                action,
+                modifier = Modifier.clickable(onClick = onAction).padding(start = 8.dp, top = 6.dp, bottom = 4.dp),
+                color = BrandTeal,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+    }
+}
+
+@Composable
+private fun EyebrowLabel(text: String) {
+    Text(
+        text,
+        color = BrandTeal,
+        fontSize = 10.sp,
+        letterSpacing = 0.75.sp,
+        fontWeight = FontWeight.Bold
+    )
+}
+
+@Composable
+private fun StatusBadge(text: String, tint: Color) {
+    Surface(color = tint.copy(alpha = 0.11f), shape = RoundedCornerShape(50)) {
+        Text(
+            text,
+            color = tint,
+            fontSize = 9.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp)
+        )
+    }
+}
+
+@Composable
+private fun RecentScanCard(
+    fa: Boolean,
+    result: ScanResult,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
+        shape = RoundedCornerShape(19.dp),
+        colors = CardDefaults.cardColors(containerColor = SurfaceBase)
+    ) {
+        Row(
+            modifier = Modifier.padding(15.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Box(
+                Modifier.size(42.dp).background(BrandBlue.copy(alpha = 0.12f), RoundedCornerShape(13.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                IconArt("clock", tint = BrandBlue, size = 21.dp)
+            }
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(tr(fa, "آخرین گزارش اسکن", "Latest scan report"), color = TextSecondary, fontSize = 10.sp)
+                Text(result.displayName, color = TextPrimary, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(verdictTitle(result.verdict, fa), color = verdictColor(result.verdict), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+            }
+            IconArt("chevron", tint = TextTertiary, size = 17.dp)
+        }
+    }
+}
+
+@Composable
+private fun QuickActionCard(
+    modifier: Modifier,
+    icon: String,
+    title: String,
+    caption: String,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = modifier.clickable(onClick = onClick),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = SurfaceBase)
+    ) {
+        Row(
+            modifier = Modifier.padding(13.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Box(
+                Modifier.size(39.dp).background(BrandTeal.copy(alpha = 0.10f), RoundedCornerShape(12.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                IconArt(icon, tint = BrandTeal, size = 20.dp)
+            }
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(title, color = TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                Text(caption, color = TextSecondary, fontSize = 10.sp, maxLines = 1)
+            }
+        }
+    }
+}
+
+@Composable
+private fun MiniFeatureCard(
+    modifier: Modifier,
+    icon: String,
+    title: String,
+    subtitle: String,
+    status: String,
+    tint: Color
+) {
+    Card(
+        modifier = modifier,
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = SurfaceBase)
+    ) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            IconArt(icon, tint = tint, size = 22.dp)
+            Text(title, color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+            Text(subtitle, color = TextSecondary, fontSize = 10.sp, maxLines = 2)
+            StatusBadge(status, tint)
+        }
+    }
+}
+
+@Composable
+private fun StorePromoCard(fa: Boolean, onClick: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
+        shape = RoundedCornerShape(21.dp),
+        colors = CardDefaults.cardColors(containerColor = SurfaceSoft)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Brush.horizontalGradient(listOf(Color(0xFF163A46), Color(0xFF1C2D49))))
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(13.dp)
+        ) {
+            Box(
+                Modifier.size(45.dp).background(BrandTeal.copy(alpha = 0.12f), RoundedCornerShape(14.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                IconArt("store", tint = BrandTeal, size = 23.dp)
+            }
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(tr(fa, "طرح‌های اشتراک و فروشگاه", "Plans & membership"), color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                Text(tr(fa, "امکانات FREE، PLUS و FAMILY را ببین", "Explore FREE, PLUS and FAMILY"), color = TextSecondary, fontSize = 10.sp)
+            }
+            IconArt("chevron", tint = BrandTeal, size = 18.dp)
+        }
+    }
+}
+
+@Composable
+private fun ScanCenterScreen(
     fa: Boolean,
     scanning: Boolean,
     result: ScanResult?,
@@ -653,46 +1031,57 @@ private fun ScanScreen(
     onClearReport: () -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(15.dp)) {
-        SectionHeading(
-            title = tr(fa, "مرکز اسکن", "Scan center"),
-            subtitle = tr(fa, "یک فایل را آگاهانه انتخاب کن؛ برنامه همان فایل را در فضای محلی بررسی می‌کند.", "Select a file deliberately. The app inspects that file locally.")
-        )
+        Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            EyebrowLabel(tr(fa, "تحلیل محلی", "ON-DEVICE ANALYSIS"))
+            Text(tr(fa, "مرکز اسکن", "Scan center"), color = TextPrimary, fontSize = 25.sp, fontWeight = FontWeight.Bold)
+            Text(
+                tr(fa, "فایل را انتخاب کن تا موتور محلی آن را بررسی کند.", "Choose a file for local inspection."),
+                color = TextSecondary,
+                fontSize = 12.sp
+            )
+        }
 
         ScanModeCard(
-            icon = "⌕",
-            title = tr(fa, "اسکن سریع فایل", "Quick file scan"),
-            description = tr(fa, "محاسبه SHA-256 و بررسی نشانگرهای محلی برای فایل انتخابی. قالب‌های پشتیبانی‌نشده ناشناخته گزارش می‌شوند.", "SHA-256 hashing and local indicator checks for the selected file. Unsupported formats are reported as unknown."),
-            tag = tr(fa, "محلی • بدون آپلود", "LOCAL • NO UPLOAD"),
+            icon = "file",
+            title = tr(fa, "اسکن فایل", "File scan"),
+            description = tr(fa, "محاسبه SHA-256 و بررسی نشانگرهای محلی برای فایل انتخابی.", "SHA-256 calculation and local indicator checks for the selected file."),
+            tag = tr(fa, "قابل استفاده", "AVAILABLE"),
             enabled = !scanning,
             onClick = onFileScan
         )
         ScanModeCard(
-            icon = "▣",
-            title = tr(fa, "تحلیل APK", "APK analysis"),
-            description = tr(fa, "بررسی فراداده، مجوزها، اجزای export شده و اثرانگشت گواهی امضا؛ بدون نصب یا اجرای APK.", "Inspect metadata, permissions, exported components and signer fingerprint without installing or executing the APK."),
-            tag = tr(fa, "تحلیل ایستا", "STATIC ANALYSIS"),
+            icon = "apk",
+            title = tr(fa, "تحلیل ایستای APK", "Static APK analysis"),
+            description = tr(fa, "بررسی فراداده، مجوزها، اجزای export شده و اثرانگشت گواهی؛ بدون نصب یا اجرا.", "Inspect metadata, permissions, exported components and signer fingerprint without installing or executing the APK."),
+            tag = tr(fa, "قابل استفاده", "AVAILABLE"),
             enabled = !scanning,
             onClick = onApkScan
         )
         ScanModeCard(
-            icon = "▦",
+            icon = "device",
             title = tr(fa, "اسکن کامل دستگاه", "Full device scan"),
-            description = tr(fa, "در این نسخه در دسترس نیست. محدودیت‌های Android اجازه دسترسی آزاد به داده خصوصی برنامه‌های دیگر را نمی‌دهد.", "Not available in this build. Android does not allow unrestricted access to other apps' private data."),
-            tag = tr(fa, "در دست توسعه", "IN DEVELOPMENT"),
+            description = tr(fa, "در این نسخه موجود نیست؛ Android دسترسی آزاد به داده خصوصی برنامه‌های دیگر را نمی‌دهد.", "Not available in this build. Android does not allow free access to other apps' private data."),
+            tag = tr(fa, "در حال توسعه", "IN DEVELOPMENT"),
             enabled = false,
             onClick = {}
         )
 
         if (scanning) {
-            Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(18.dp)) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(tr(fa, "در حال بررسی فایل انتخابی…", "Inspecting selected file…"), color = SoftWhite, fontWeight = FontWeight.SemiBold)
+            Card(
+                colors = CardDefaults.cardColors(containerColor = SurfaceBase),
+                shape = RoundedCornerShape(18.dp)
+            ) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                        IconArt("scan", tint = BrandTeal, size = 19.dp)
+                        Text(tr(fa, "در حال تحلیل فایل…", "Analyzing file…"), color = TextPrimary, fontWeight = FontWeight.SemiBold)
+                    }
                     LinearProgressIndicator(
                         modifier = Modifier.fillMaxWidth(),
-                        color = Accent,
-                        trackColor = Accent.copy(alpha = 0.15f)
+                        color = BrandTeal,
+                        trackColor = BrandTeal.copy(alpha = 0.13f)
                     )
-                    Text(tr(fa, "فایل اجرا یا نصب نمی‌شود.", "The file is not executed or installed."), color = Muted, style = MaterialTheme.typography.bodySmall)
+                    Text(tr(fa, "فایل اجرا یا نصب نمی‌شود.", "The file is not executed or installed."), color = TextSecondary, fontSize = 11.sp)
                 }
             }
         }
@@ -716,387 +1105,14 @@ private fun ScanScreen(
 
         if (result == null && errorMessage == null) {
             InfoBanner(
-                title = tr(fa, "قبل از اسکن", "Before scanning"),
+                title = tr(fa, "پیش از شروع", "Before you start"),
                 body = tr(
                     fa,
-                    "فقط فایل‌های متعلق به خودت یا فایل‌هایی را که اجازه بررسی‌شان را داری انتخاب کن. این موتور هنوز بانک امضای بدافزار تولیدی ندارد.",
-                    "Select only files you own or are authorized to inspect. This engine does not yet contain a production malware-signature database."
+                    "فقط فایل‌های متعلق به خودت یا فایل‌هایی را که اجازه بررسی‌شان را داری انتخاب کن. موتور فعلی هنوز بانک امضای بدافزار تولیدی ندارد.",
+                    "Select only files you own or are authorized to inspect. The current engine does not yet contain a production malware-signature database."
                 ),
                 warning = false
             )
-        }
-    }
-}
-
-@Composable
-private fun ToolsScreen(
-    fa: Boolean,
-    lastResult: ScanResult?,
-    onFeature: (String) -> Unit,
-    onOpenScan: () -> Unit
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        SectionHeading(
-            title = tr(fa, "جعبه‌ابزار امنیتی", "Security toolkit"),
-            subtitle = tr(fa, "ماژول‌ها بر اساس وضعیت واقعی توسعه تفکیک شده‌اند.", "Modules are labelled according to their actual implementation status.")
-        )
-
-        ToolCard(
-            icon = "⬡",
-            title = tr(fa, "فضای قرنطینه رمزنگاری‌شده", "Encrypted quarantine"),
-            description = tr(fa, "در نسخه فعلی فقط نسخه رمزنگاری‌شده فایل انتخابی در حافظه خصوصی ذخیره می‌شود؛ فایل اصلی حذف نمی‌شود.", "This build stores only an encrypted copy of a selected file in private storage; the original is not deleted."),
-            status = tr(fa, "نسخه اولیه فعال", "MVP available"),
-            statusColor = Accent,
-            onClick = { onFeature("quarantine") }
-        )
-        ToolCard(
-            icon = "⌁",
-            title = tr(fa, "تحلیل آسیب‌پذیری APK", "APK vulnerability intelligence"),
-            description = tr(fa, "برنامه‌ریزی‌شده برای شناسایی SDK قدیمی، کتابخانه‌های شناخته‌شده و پیکربندی‌های ناامن.", "Planned checks for outdated SDKs, known libraries and insecure configurations."),
-            status = tr(fa, "در حال توسعه", "In development"),
-            statusColor = Warning,
-            onClick = { onFeature("vulnerability") }
-        )
-        ToolCard(
-            icon = "◎",
-            title = tr(fa, "محافظ لینک و فیشینگ", "Scam & phishing shield"),
-            description = tr(fa, "تحلیل URL و پیوندهایی که کاربر آگاهانه برای بررسی انتخاب می‌کند.", "Analysis of URLs and links that the user deliberately submits for review."),
-            status = tr(fa, "در برنامه توسعه", "Planned"),
-            statusColor = Muted,
-            onClick = { onFeature("phishing") }
-        )
-        ToolCard(
-            icon = "⌘",
-            title = tr(fa, "محافظ شبکه", "Network guard"),
-            description = tr(fa, "بررسی گزینه‌های محافظت DNS و VPN محلی با رعایت محدودیت‌های Android و سیاست فروشگاه.", "DNS and local VPN protection options, subject to Android and store policies."),
-            status = tr(fa, "در برنامه توسعه", "Planned"),
-            statusColor = Muted,
-            onClick = { onFeature("network") }
-        )
-        ToolCard(
-            icon = "◈",
-            title = tr(fa, "مغز امنیتی AL AI", "AL AI security brain"),
-            description = tr(fa, "تجمیع شواهد موتورهای مختلف، امتیاز ریسک و توضیح دلیل نتیجه؛ فعلاً تحلیل‌گر چندموتوره فعال نیست.", "Combines evidence from multiple engines into explainable risk assessments; multi-engine reasoning is not active yet."),
-            status = tr(fa, "هسته اولیه", "Foundation only"),
-            statusColor = AccentBlue,
-            onClick = { onFeature("brain") }
-        )
-        ToolCard(
-            icon = "⛨",
-            title = tr(fa, "دفاع از خود برنامه", "Self-defense engine"),
-            description = tr(fa, "کنترل‌های پایه پیکربندی و انتشار امن؛ پایش بلادرنگ دست‌کاری برنامه هنوز پیاده‌سازی نشده است.", "Baseline configuration and release-security controls; runtime tamper monitoring is not implemented yet."),
-            status = tr(fa, "پایه‌ای", "Baseline"),
-            statusColor = AccentBlue,
-            onClick = { onFeature("selfdefense") }
-        )
-
-        if (lastResult != null) {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = Panel),
-                shape = RoundedCornerShape(20.dp)
-            ) {
-                Column(Modifier.padding(17.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(tr(fa, "آخرین گزارش", "Latest report"), color = SoftWhite, fontWeight = FontWeight.Bold)
-                    Text(lastResult.displayName, color = Muted, style = MaterialTheme.typography.bodySmall)
-                    Text(verdictTitle(lastResult.verdict, fa), color = verdictColor(lastResult.verdict), fontWeight = FontWeight.SemiBold)
-                    OutlinedButton(onClick = onOpenScan) {
-                        Text(tr(fa, "مشاهده جزئیات گزارش", "View report details"))
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun StoreScreen(
-    fa: Boolean,
-    onSelectPlan: (String) -> Unit
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        Card(
-            shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(containerColor = PanelElevated)
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Brush.linearGradient(listOf(Color(0xFF204B56), Color(0xFF1B3150), Color(0xFF202845))))
-                    .padding(20.dp)
-            ) {
-                Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                    StatusPill(tr(fa, "فروشگاه رسمی داخل برنامه", "IN-APP PLAN CATALOGUE"), Accent)
-                    Text(
-                        tr(fa, "امنیت پایه همیشه در دسترس", "Essential security stays accessible"),
-                        color = Color.White,
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.ExtraBold
-                    )
-                    Text(
-                        tr(
-                            fa,
-                            "طرح‌ها قابلیت‌های تکمیلی آینده را معرفی می‌کنند. امکانات ضروری اسکن و گزارش پایه قرار نیست پشت اشتراک قفل شوند.",
-                            "Plans describe future premium capabilities. Essential scanning and basic reports are not intended to be paywalled."
-                        ),
-                        color = Color(0xFFC7D9E7),
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-            }
-        }
-
-        InfoBanner(
-            title = tr(fa, "پرداخت هنوز فعال نیست", "Checkout is not active"),
-            body = tr(
-                fa,
-                "این صفحه کاتالوگ طرح‌هاست. پرداخت Google Play، قیمت‌گذاری منطقه‌ای، بازیابی خرید و مدیریت اشتراک هنوز پیاده‌سازی نشده‌اند؛ هیچ مبلغی دریافت نمی‌شود.",
-                "This is a plan catalogue. Google Play Billing, regional pricing, purchase restoration and subscription management are not implemented. No money will be charged."
-            ),
-            warning = true
-        )
-
-        PlanCard(
-            fa = fa,
-            name = "FREE",
-            subtitle = tr(fa, "شروع امن و کاربردی", "A useful starting point"),
-            price = tr(fa, "رایگان", "Free"),
-            badge = tr(fa, "طرح فعلی", "CURRENT PLAN"),
-            highlighted = true,
-            features = listOf(
-                tr(fa, "اسکن فایل انتخابی و تحلیل پایه APK", "Selected-file scan and basic APK analysis"),
-                tr(fa, "گزارش شفاف و نمایش شواهد", "Explainable reports and evidence"),
-                tr(fa, "ذخیره نسخه رمزنگاری‌شده فایل", "Encrypted private copy"),
-                tr(fa, "عملکرد محلی بدون ارسال فایل", "Local processing without file uploads")
-            ),
-            onSelect = { onSelectPlan("FREE") }
-        )
-        PlanCard(
-            fa = fa,
-            name = "PLUS MONTHLY",
-            subtitle = tr(fa, "اشتراک ماهانه", "Monthly subscription"),
-            price = tr(fa, "قیمت هنگام عرضه", "Price at launch"),
-            badge = tr(fa, "در برنامه توسعه", "PLANNED"),
-            highlighted = false,
-            features = listOf(
-                tr(fa, "اعتبارسنجی بانک تهدید امضاشده پس از راه‌اندازی", "Verified signed threat-feed updates once launched"),
-                tr(fa, "بررسی اعتبار هش به‌صورت اختیاری", "Optional hash-reputation checks"),
-                tr(fa, "گزارش‌های تکمیلی امنیتی", "Expanded security reports")
-            ),
-            onSelect = { onSelectPlan("PLUS MONTHLY") }
-        )
-        PlanCard(
-            fa = fa,
-            name = "PLUS ANNUAL",
-            subtitle = tr(fa, "اشتراک سالانه", "Annual subscription"),
-            price = tr(fa, "قیمت هنگام عرضه", "Price at launch"),
-            badge = tr(fa, "در برنامه توسعه", "PLANNED"),
-            highlighted = false,
-            features = listOf(
-                tr(fa, "تمام قابلیت‌های طرح PLUS", "All PLUS features"),
-                tr(fa, "مدیریت تمدید و بازیابی خرید", "Subscription renewal and purchase restoration"),
-                tr(fa, "قیمت‌گذاری منطقه‌ای شفاف", "Transparent regional pricing")
-            ),
-            onSelect = { onSelectPlan("PLUS ANNUAL") }
-        )
-        PlanCard(
-            fa = fa,
-            name = "PRO FAMILY",
-            subtitle = tr(fa, "برای چند دستگاه", "For multiple devices"),
-            price = tr(fa, "قیمت هنگام عرضه", "Price at launch"),
-            badge = tr(fa, "در برنامه توسعه", "PLANNED"),
-            highlighted = false,
-            features = listOf(
-                tr(fa, "مدیریت چند دستگاه با رضایت صاحبان آن‌ها", "Multi-device management with each owner's consent"),
-                tr(fa, "نمای کلی وضعیت امنیتی خانواده", "Family security overview"),
-                tr(fa, "مدیریت اعضا و اشتراک", "Member and subscription management")
-            ),
-            onSelect = { onSelectPlan("PRO FAMILY") }
-        )
-        PlanCard(
-            fa = fa,
-            name = "LIFETIME OFFLINE",
-            subtitle = tr(fa, "مجوز یک‌باره برای امکانات محلی", "One-time licence for local features"),
-            price = tr(fa, "قیمت هنگام عرضه", "Price at launch"),
-            badge = tr(fa, "در برنامه توسعه", "PLANNED"),
-            highlighted = false,
-            features = listOf(
-                tr(fa, "قابلیت‌های محلی بدون وابستگی به سرویس ابری", "Local capabilities without cloud dependency"),
-                tr(fa, "بدون تمدید اشتراک", "No subscription renewal"),
-                tr(fa, "به‌روزرسانی‌های امنیتی طبق شرایط انتشار", "Security updates subject to release terms")
-            ),
-            onSelect = { onSelectPlan("LIFETIME OFFLINE") }
-        )
-    }
-}
-
-@Composable
-private fun SettingsScreen(
-    fa: Boolean,
-    onLanguageChange: () -> Unit,
-    onPrivacy: () -> Unit,
-    onAbout: () -> Unit,
-    onFeature: (String) -> Unit
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(13.dp)) {
-        SectionHeading(
-            title = tr(fa, "تنظیمات", "Settings"),
-            subtitle = tr(fa, "زبان، حریم خصوصی و اطلاعات برنامه", "Language, privacy and app information")
-        )
-        SettingsRow(
-            icon = "文",
-            title = tr(fa, "زبان برنامه", "App language"),
-            description = tr(fa, "فارسی / English", "Persian / English"),
-            action = if (fa) "EN" else "فا",
-            onClick = onLanguageChange
-        )
-        SettingsRow(
-            icon = "⌑",
-            title = tr(fa, "حریم خصوصی و داده‌ها", "Privacy and data"),
-            description = tr(fa, "چه داده‌ای خوانده می‌شود و چه چیزی ارسال نمی‌شود", "What is read and what is not uploaded"),
-            action = "›",
-            onClick = onPrivacy
-        )
-        SettingsRow(
-            icon = "◈",
-            title = tr(fa, "اطلاعات برنامه", "About"),
-            description = tr(fa, "نسخه ۰٫۱٫۰ و وضعیت قابلیت‌ها", "Version 0.1.0 and feature status"),
-            action = "›",
-            onClick = onAbout
-        )
-        SettingsRow(
-            icon = "♧",
-            title = tr(fa, "امنیت و مجوزها", "Security and permissions"),
-            description = tr(fa, "توضیح مرزهای امنیتی نسخه فعلی", "Security boundaries in the current build"),
-            action = "›",
-            onClick = { onFeature("permissions") }
-        )
-        SettingsRow(
-            icon = "✉",
-            title = tr(fa, "پشتیبانی و گزارش مشکل", "Support and issue reporting"),
-            description = tr(fa, "مسیر ارتباطی پس از آماده شدن کانال رسمی", "Official support channel will be published before launch"),
-            action = "›",
-            onClick = { onFeature("support") }
-        )
-        InfoBanner(
-            title = tr(fa, "نسخه آزمایشی", "Development build"),
-            body = tr(fa, "این نسخه برای تکمیل و آزمون ساخته شده است؛ هنوز آماده عرضه عمومی یا ادعای محافظت کامل نیست.", "This build is still being developed and tested. It is not ready for public release or claims of complete protection."),
-            warning = true
-        )
-    }
-}
-
-@Composable
-private fun ScanResultCard(
-    result: ScanResult,
-    fa: Boolean,
-    quarantining: Boolean,
-    onQuarantine: () -> Unit,
-    onClear: () -> Unit
-) {
-    Card(
-        shape = RoundedCornerShape(22.dp),
-        colors = CardDefaults.cardColors(containerColor = Panel)
-    ) {
-        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(tr(fa, "گزارش اسکن", "Scan report"), color = SoftWhite, fontWeight = FontWeight.Bold)
-                StatusPill(verdictBadge(result.verdict, fa), verdictColor(result.verdict))
-            }
-            Text(result.displayName, color = Color.White, fontWeight = FontWeight.SemiBold)
-            Text(verdictTitle(result.verdict, fa), color = verdictColor(result.verdict), fontWeight = FontWeight.Bold, fontSize = 18.sp)
-            Text(verdictDescription(result.verdict, fa), color = Muted, style = MaterialTheme.typography.bodySmall)
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                MetricCard(
-                    modifier = Modifier.weight(1f),
-                    title = tr(fa, "حجم", "Size"),
-                    value = formatBytes(result.sizeBytes),
-                    detail = tr(fa, "اندازه فایل", "File size"),
-                    accent = AccentBlue
-                )
-                MetricCard(
-                    modifier = Modifier.weight(1f),
-                    title = tr(fa, "زمان", "Duration"),
-                    value = "${result.durationMillis} ms",
-                    detail = tr(fa, "زمان تحلیل", "Analysis time"),
-                    accent = Accent
-                )
-            }
-            Text("SHA-256", color = SoftWhite, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
-            Text(result.sha256, color = Muted, fontSize = 10.sp, lineHeight = 15.sp)
-            result.apkMetadata?.let { apk ->
-                Surface(
-                    color = PanelElevated,
-                    shape = RoundedCornerShape(14.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(Modifier.padding(13.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                        Text(tr(fa, "فراداده APK", "APK metadata"), color = SoftWhite, fontWeight = FontWeight.SemiBold)
-                        DetailLine(tr(fa, "شناسه بسته", "Package"), apk.packageName)
-                        DetailLine("Target SDK", apk.targetSdk.toString())
-                        DetailLine(tr(fa, "مجوزهای درخواستی", "Requested permissions"), apk.requestedPermissions.size.toString())
-                        DetailLine(tr(fa, "اجزای قابل دسترس", "Exported components"), apk.exportedComponentCount.toString())
-                        apk.signingCertificateSha256?.let { DetailLine("Signer SHA-256", it) }
-                    }
-                }
-            }
-            Text(tr(fa, "شواهد و نشانه‌ها", "Evidence and indicators"), color = SoftWhite, fontWeight = FontWeight.Bold)
-            result.evidence.forEach { item ->
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(9.dp),
-                    verticalAlignment = Alignment.Top
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .padding(top = 4.dp)
-                            .size(8.dp)
-                            .background(
-                                when (item.severity) {
-                                    EvidenceSeverity.HIGH -> Warning
-                                    EvidenceSeverity.MEDIUM -> AccentBlue
-                                    EvidenceSeverity.LOW -> Accent
-                                    EvidenceSeverity.INFO -> Muted
-                                },
-                                CircleShape
-                            )
-                    )
-                    Column(verticalArrangement = Arrangement.spacedBy(3.dp), modifier = Modifier.weight(1f)) {
-                        Text(item.title, color = SoftWhite, fontWeight = FontWeight.Medium, fontSize = 13.sp)
-                        Text(item.detail, color = Muted, style = MaterialTheme.typography.bodySmall)
-                    }
-                }
-            }
-            Button(
-                onClick = onQuarantine,
-                enabled = !quarantining,
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = Accent),
-                shape = RoundedCornerShape(14.dp)
-            ) {
-                Text(
-                    if (quarantining) tr(fa, "در حال ذخیره…", "Saving…")
-                    else tr(fa, "ذخیره نسخه رمزنگاری‌شده", "Save encrypted copy"),
-                    color = Background,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-            Text(
-                tr(
-                    fa,
-                    "این کار فایل اصلی را حذف یا غیرفعال نمی‌کند؛ فقط یک نسخه رمزنگاری‌شده در فضای خصوصی برنامه می‌سازد.",
-                    "This does not delete or disable the original. It creates an encrypted copy in private app storage."
-                ),
-                color = Muted,
-                style = MaterialTheme.typography.bodySmall
-            )
-            OutlinedButton(onClick = onClear, modifier = Modifier.fillMaxWidth()) {
-                Text(tr(fa, "پاک کردن گزارش از صفحه", "Clear report from screen"))
-            }
         }
     }
 }
@@ -1115,7 +1131,9 @@ private fun ScanModeCard(
             .fillMaxWidth()
             .then(if (enabled) Modifier.clickable(onClick = onClick) else Modifier),
         shape = RoundedCornerShape(19.dp),
-        colors = CardDefaults.cardColors(containerColor = if (enabled) Panel else Panel.copy(alpha = 0.65f))
+        colors = CardDefaults.cardColors(
+            containerColor = if (enabled) SurfaceBase else SurfaceBase.copy(alpha = 0.65f)
+        )
     ) {
         Row(
             modifier = Modifier.padding(16.dp),
@@ -1125,20 +1143,365 @@ private fun ScanModeCard(
             Box(
                 modifier = Modifier
                     .size(45.dp)
-                    .background(if (enabled) Accent.copy(alpha = 0.12f) else Muted.copy(alpha = 0.10f), RoundedCornerShape(14.dp)),
+                    .background(
+                        if (enabled) BrandTeal.copy(alpha = 0.11f) else TextTertiary.copy(alpha = 0.10f),
+                        RoundedCornerShape(14.dp)
+                    ),
                 contentAlignment = Alignment.Center
             ) {
-                Text(icon, color = if (enabled) Accent else Muted, fontSize = 25.sp, fontWeight = FontWeight.Bold)
+                IconArt(icon, tint = if (enabled) BrandTeal else TextTertiary, size = 22.dp)
+            }
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                Text(title, color = if (enabled) TextPrimary else TextSecondary, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                Text(description, color = TextSecondary, fontSize = 11.sp, lineHeight = 17.sp)
+                StatusBadge(tag, if (enabled) BrandTeal else ColorWarning)
+            }
+            if (enabled) IconArt("chevron", tint = TextTertiary, size = 17.dp)
+        }
+    }
+}
+
+@Composable
+private fun ScanResultCard(
+    result: ScanResult,
+    fa: Boolean,
+    quarantining: Boolean,
+    onQuarantine: () -> Unit,
+    onClear: () -> Unit
+) {
+    Card(
+        shape = RoundedCornerShape(22.dp),
+        colors = CardDefaults.cardColors(containerColor = SurfaceBase)
+    ) {
+        Column(Modifier.padding(17.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(tr(fa, "گزارش تحلیل", "Analysis report"), color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                StatusBadge(verdictBadge(result.verdict, fa), verdictColor(result.verdict))
+            }
+            Text(
+                result.displayName,
+                color = TextPrimary,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                Text(verdictTitle(result.verdict, fa), color = verdictColor(result.verdict), fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Text(verdictDescription(result.verdict, fa), color = TextSecondary, fontSize = 11.sp, lineHeight = 17.sp)
+            }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                MetricMini(
+                    modifier = Modifier.weight(1f),
+                    label = tr(fa, "حجم فایل", "File size"),
+                    value = formatBytes(result.sizeBytes)
+                )
+                MetricMini(
+                    modifier = Modifier.weight(1f),
+                    label = tr(fa, "زمان تحلیل", "Analysis time"),
+                    value = "${result.durationMillis} ms"
+                )
+            }
+
+            DetailPanel(title = "SHA-256", value = result.sha256)
+            result.apkMetadata?.let { apk ->
+                Card(colors = CardDefaults.cardColors(containerColor = SurfaceRaised), shape = RoundedCornerShape(15.dp)) {
+                    Column(Modifier.padding(13.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                        Text(tr(fa, "اطلاعات APK", "APK details"), color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        DetailLine(tr(fa, "شناسه بسته", "Package name"), apk.packageName)
+                        DetailLine("Target SDK", apk.targetSdk.toString())
+                        DetailLine(tr(fa, "مجوزهای درخواستی", "Requested permissions"), apk.requestedPermissions.size.toString())
+                        DetailLine(tr(fa, "اجزای export شده", "Exported components"), apk.exportedComponentCount.toString())
+                        apk.signingCertificateSha256?.let { DetailLine("Signer SHA-256", it) }
+                    }
+                }
+            }
+
+            Text(tr(fa, "شواهد بررسی", "Review evidence"), color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            result.evidence.forEach { item ->
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Top) {
+                    Box(
+                        Modifier.padding(top = 5.dp).size(7.dp).background(
+                            when (item.severity) {
+                                EvidenceSeverity.HIGH -> ColorWarning
+                                EvidenceSeverity.MEDIUM -> BrandBlue
+                                EvidenceSeverity.LOW -> BrandTeal
+                                EvidenceSeverity.INFO -> TextTertiary
+                            },
+                            CircleShape
+                        )
+                    )
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Text(item.title, color = TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        Text(item.detail, color = TextSecondary, fontSize = 10.sp, lineHeight = 15.sp)
+                    }
+                }
+            }
+
+            Button(
+                onClick = onQuarantine,
+                enabled = !quarantining,
+                modifier = Modifier.fillMaxWidth().height(49.dp),
+                shape = RoundedCornerShape(14.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = BrandTeal, contentColor = AppBackground)
+            ) {
+                Text(
+                    if (quarantining) tr(fa, "در حال ذخیره…", "Saving…")
+                    else tr(fa, "ذخیره نسخه رمزنگاری‌شده", "Save encrypted copy"),
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Text(
+                tr(
+                    fa,
+                    "این عملیات فایل اصلی را حذف یا غیرفعال نمی‌کند؛ فقط یک نسخه رمزنگاری‌شده در فضای خصوصی برنامه می‌سازد.",
+                    "This does not delete or disable the original. It creates an encrypted copy in private app storage."
+                ),
+                color = TextTertiary,
+                fontSize = 10.sp,
+                lineHeight = 15.sp
+            )
+            OutlinedButton(onClick = onClear, modifier = Modifier.fillMaxWidth()) {
+                Text(tr(fa, "پاک کردن گزارش از صفحه", "Clear report from screen"))
+            }
+        }
+    }
+}
+
+@Composable
+private fun MetricMini(modifier: Modifier, label: String, value: String) {
+    Surface(modifier = modifier, color = SurfaceRaised, shape = RoundedCornerShape(13.dp)) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(label, color = TextTertiary, fontSize = 10.sp)
+            Text(value, color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+        }
+    }
+}
+
+@Composable
+private fun DetailPanel(title: String, value: String) {
+    Surface(color = SurfaceRaised, shape = RoundedCornerShape(13.dp)) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            Text(title, color = TextTertiary, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+            Text(value, color = TextSecondary, fontSize = 10.sp, lineHeight = 15.sp)
+        }
+    }
+}
+
+@Composable
+private fun DetailLine(label: String, value: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(label, color = TextTertiary, fontSize = 10.sp)
+        Text(value, color = TextPrimary, fontSize = 11.sp)
+    }
+}
+
+@Composable
+private fun SecurityToolsScreen(
+    fa: Boolean,
+    result: ScanResult?,
+    onFeature: (String) -> Unit,
+    onOpenScan: () -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(15.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            EyebrowLabel(tr(fa, "ماژول‌های امنیتی", "SECURITY MODULES"))
+            Text(tr(fa, "جعبه‌ابزار امنیتی", "Security toolkit"), color = TextPrimary, fontSize = 25.sp, fontWeight = FontWeight.Bold)
+            Text(tr(fa, "وضعیت هر قابلیت به‌صورت شفاف مشخص شده است.", "Every module is labelled by its actual implementation status."), color = TextSecondary, fontSize = 12.sp)
+        }
+
+        ToolModuleCard(
+            icon = "lock",
+            title = tr(fa, "قرنطینه رمزنگاری‌شده", "Encrypted quarantine"),
+            description = tr(fa, "ذخیره نسخه AES-GCM در فضای خصوصی برنامه و بررسی هش؛ فایل اصلی باقی می‌ماند.", "AES-GCM encrypted copy in private storage with hash verification; the original remains in place."),
+            status = tr(fa, "پایه‌ای فعال", "BASIC"),
+            tint = BrandTeal,
+            onClick = { onFeature("quarantine") }
+        )
+        ToolModuleCard(
+            icon = "shield",
+            title = tr(fa, "تحلیل آسیب‌پذیری APK", "APK vulnerability intelligence"),
+            description = tr(fa, "نقشه‌برداری SDK و کتابخانه‌ها و تطبیق با پایگاه‌های CVE معتبر؛ هنوز پیاده‌سازی نشده است.", "SDK and library inventory with trusted CVE mapping; not implemented yet."),
+            status = tr(fa, "در حال توسعه", "IN DEVELOPMENT"),
+            tint = ColorWarning,
+            onClick = { onFeature("vulnerability") }
+        )
+        ToolModuleCard(
+            icon = "link",
+            title = tr(fa, "محافظ فیشینگ و لینک", "Phishing & link shield"),
+            description = tr(fa, "بررسی URL انتخاب‌شده توسط کاربر؛ پایگاه اعتبار و تحلیل دامنه هنوز متصل نشده است.", "User-submitted URL checks; reputation and domain analysis are not connected yet."),
+            status = tr(fa, "برنامه‌ریزی‌شده", "PLANNED"),
+            tint = TextTertiary,
+            onClick = { onFeature("phishing") }
+        )
+        ToolModuleCard(
+            icon = "activity",
+            title = tr(fa, "محافظ شبکه", "Network guard"),
+            description = tr(fa, "محافظت DNS/VPN محلی پس از بررسی حریم خصوصی و سیاست‌های Android و فروشگاه.", "Local DNS/VPN protection after privacy and Android/store policy review."),
+            status = tr(fa, "برنامه‌ریزی‌شده", "PLANNED"),
+            tint = TextTertiary,
+            onClick = { onFeature("network") }
+        )
+        ToolModuleCard(
+            icon = "brain",
+            title = tr(fa, "مغز امنیتی AL AI", "AL AI security brain"),
+            description = tr(fa, "تجمیع شواهد و امتیازدهی قابل توضیح؛ فعلاً قواعد محدود اسکنر استفاده می‌شوند.", "Explainable evidence aggregation; current scans still use a limited rule set."),
+            status = tr(fa, "هسته اولیه", "FOUNDATION"),
+            tint = BrandBlue,
+            onClick = { onFeature("brain") }
+        )
+        ToolModuleCard(
+            icon = "shield",
+            title = tr(fa, "دفاع از خود برنامه", "Self-defense engine"),
+            description = tr(fa, "تنظیمات پایه امن اعمال شده‌اند؛ پایش یکپارچگی زمان اجرا هنوز در دست توسعه است.", "Baseline hardening is present; runtime integrity monitoring is still in development."),
+            status = tr(fa, "پایه‌ای", "BASELINE"),
+            tint = BrandBlue,
+            onClick = { onFeature("selfdefense") }
+        )
+
+        if (result != null) {
+            RecentScanCard(fa = fa, result = result, onClick = onOpenScan)
+        }
+    }
+}
+
+@Composable
+private fun ToolModuleCard(
+    icon: String,
+    title: String,
+    description: String,
+    status: String,
+    tint: Color,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = SurfaceBase)
+    ) {
+        Row(
+            modifier = Modifier.padding(15.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.Top
+        ) {
+            Box(
+                Modifier.size(43.dp).background(tint.copy(alpha = 0.11f), RoundedCornerShape(13.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                IconArt(icon, tint = tint, size = 21.dp)
             }
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(title, color = if (enabled) SoftWhite else Muted, fontWeight = FontWeight.Bold)
-                }
-                Text(description, color = Muted, style = MaterialTheme.typography.bodySmall)
-                StatusPill(tag, if (enabled) Accent else Warning)
+                Text(title, color = TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                Text(description, color = TextSecondary, fontSize = 10.sp, lineHeight = 15.sp)
+                StatusBadge(status, tint)
             }
-            Text(if (enabled) "←" else "–", color = if (enabled) Accent else Muted, fontSize = 20.sp)
+            IconArt("chevron", tint = TextTertiary, size = 16.dp)
         }
+    }
+}
+
+@Composable
+private fun StoreScreen(
+    fa: Boolean,
+    onSelectPlan: (String) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(15.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            EyebrowLabel(tr(fa, "طرح‌های عضویت", "MEMBERSHIP"))
+            Text(tr(fa, "فروشگاه", "Store"), color = TextPrimary, fontSize = 25.sp, fontWeight = FontWeight.Bold)
+            Text(
+                tr(fa, "امکانات تکمیلی برای نیازهای مختلف", "Plans for different security needs"),
+                color = TextSecondary,
+                fontSize = 12.sp
+            )
+        }
+
+        InfoBanner(
+            title = tr(fa, "پرداخت هنوز فعال نیست", "Checkout is not active"),
+            body = tr(
+                fa,
+                "این نسخه کاتالوگ طرح‌ها را نشان می‌دهد. پرداخت Google Play، قیمت‌گذاری منطقه‌ای و مدیریت اشتراک هنوز متصل نشده‌اند؛ هیچ مبلغی دریافت نمی‌شود.",
+                "This version displays the plan catalogue only. Google Play Billing, regional pricing and subscription management are not connected. No payment will be taken."
+            ),
+            warning = true
+        )
+
+        PlanCard(
+            fa = fa,
+            name = "FREE",
+            subtitle = tr(fa, "امنیت پایه، بدون هزینه", "Essential protection, no cost"),
+            price = tr(fa, "رایگان", "Free"),
+            badge = tr(fa, "طرح فعلی", "CURRENT"),
+            highlighted = true,
+            features = listOf(
+                tr(fa, "اسکن فایل انتخابی و تحلیل پایه APK", "Selected-file scan and basic APK analysis"),
+                tr(fa, "گزارش شفاف و نمایش شواهد", "Transparent reports and evidence"),
+                tr(fa, "ذخیره نسخه رمزنگاری‌شده فایل", "Encrypted private copy"),
+                tr(fa, "پردازش محلی بدون آپلود محتوا", "Local processing without content uploads")
+            ),
+            onSelect = { onSelectPlan("FREE") }
+        )
+        PlanCard(
+            fa = fa,
+            name = "PLUS",
+            subtitle = tr(fa, "اشتراک ماهانه", "Monthly membership"),
+            price = tr(fa, "قیمت هنگام عرضه", "Price at launch"),
+            badge = tr(fa, "به‌زودی", "COMING"),
+            highlighted = false,
+            features = listOf(
+                tr(fa, "به‌روزرسانی بانک تهدید پس از انتشار", "Threat-feed updates after launch"),
+                tr(fa, "اعتبارسنجی اختیاری هش فایل", "Optional hash reputation"),
+                tr(fa, "گزارش‌های امنیتی تکمیلی", "Expanded security reports")
+            ),
+            onSelect = { onSelectPlan("PLUS MONTHLY") }
+        )
+        PlanCard(
+            fa = fa,
+            name = "PLUS ANNUAL",
+            subtitle = tr(fa, "اشتراک سالانه", "Annual membership"),
+            price = tr(fa, "قیمت هنگام عرضه", "Price at launch"),
+            badge = tr(fa, "به‌زودی", "COMING"),
+            highlighted = false,
+            features = listOf(
+                tr(fa, "تمام قابلیت‌های طرح PLUS", "All PLUS features"),
+                tr(fa, "مدیریت و بازیابی اشتراک", "Subscription management and restoration"),
+                tr(fa, "قیمت‌گذاری منطقه‌ای شفاف", "Transparent regional pricing")
+            ),
+            onSelect = { onSelectPlan("PLUS ANNUAL") }
+        )
+        PlanCard(
+            fa = fa,
+            name = "PRO FAMILY",
+            subtitle = tr(fa, "برای چند دستگاه", "For multiple devices"),
+            price = tr(fa, "قیمت هنگام عرضه", "Price at launch"),
+            badge = tr(fa, "به‌زودی", "COMING"),
+            highlighted = false,
+            features = listOf(
+                tr(fa, "مدیریت چند دستگاه با رضایت کاربران", "Multi-device management with user consent"),
+                tr(fa, "نمای کلی امنیت خانواده", "Family security overview"),
+                tr(fa, "مدیریت اعضا و اشتراک", "Member and plan management")
+            ),
+            onSelect = { onSelectPlan("PRO FAMILY") }
+        )
+        PlanCard(
+            fa = fa,
+            name = "LIFETIME OFFLINE",
+            subtitle = tr(fa, "مجوز یک‌باره برای ابزارهای محلی", "One-time licence for local tools"),
+            price = tr(fa, "قیمت هنگام عرضه", "Price at launch"),
+            badge = tr(fa, "به‌زودی", "COMING"),
+            highlighted = false,
+            features = listOf(
+                tr(fa, "قابلیت‌های محلی بدون سرویس ابری", "Local features without cloud dependency"),
+                tr(fa, "بدون تمدید اشتراک", "No subscription renewal"),
+                tr(fa, "به‌روزرسانی امنیتی طبق شرایط عرضه", "Security updates under release terms")
+            ),
+            onSelect = { onSelectPlan("LIFETIME OFFLINE") }
+        )
     }
 }
 
@@ -1156,74 +1519,99 @@ private fun PlanCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .then(if (highlighted) Modifier.border(1.dp, Accent.copy(alpha = 0.7f), RoundedCornerShape(21.dp)) else Modifier),
-        colors = CardDefaults.cardColors(containerColor = if (highlighted) Color(0xFF132D3A) else Panel),
+            .then(
+                if (highlighted) Modifier.border(1.dp, BrandTeal.copy(alpha = 0.58f), RoundedCornerShape(21.dp))
+                else Modifier
+            ),
+        colors = CardDefaults.cardColors(
+            containerColor = if (highlighted) Color(0xFF122D39) else SurfaceBase
+        ),
         shape = RoundedCornerShape(21.dp)
     ) {
-        Column(Modifier.padding(17.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
+        Column(Modifier.padding(17.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Text(name, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.ExtraBold)
-                    Text(subtitle, color = Muted, style = MaterialTheme.typography.bodySmall)
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(name, color = TextPrimary, fontSize = 17.sp, fontWeight = FontWeight.ExtraBold)
+                    Text(subtitle, color = TextSecondary, fontSize = 11.sp)
                 }
-                StatusPill(badge, if (highlighted) Accent else Muted)
+                StatusBadge(badge, if (highlighted) BrandTeal else TextTertiary)
             }
-            Text(price, color = Accent, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text(price, color = if (highlighted) BrandTeal else TextPrimary, fontSize = 19.sp, fontWeight = FontWeight.Bold)
             features.forEach { feature ->
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
-                    Text("✓", color = Accent, fontWeight = FontWeight.Bold)
-                    Text(feature, color = SoftWhite, style = MaterialTheme.typography.bodySmall)
+                Row(horizontalArrangement = Arrangement.spacedBy(9.dp), verticalAlignment = Alignment.Top) {
+                    IconArt("check", tint = if (highlighted) BrandTeal else BrandBlue, size = 15.dp)
+                    Text(feature, color = TextSecondary, fontSize = 11.sp, lineHeight = 16.sp)
                 }
             }
             OutlinedButton(
                 onClick = onSelect,
                 modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = Accent)
+                shape = RoundedCornerShape(13.dp),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = if (highlighted) BrandTeal else TextSecondary)
             ) {
-                Text(if (highlighted) tr(fa, "طرح فعال", "Current plan") else tr(fa, "مشاهده جزئیات طرح", "View plan details"))
+                Text(
+                    if (highlighted) tr(fa, "طرح فعلی", "Current plan")
+                    else tr(fa, "مشاهده جزئیات", "View plan")
+                )
             }
         }
     }
 }
 
 @Composable
-private fun ToolCard(
-    icon: String,
-    title: String,
-    description: String,
-    status: String,
-    statusColor: Color,
-    onClick: () -> Unit
+private fun SettingsScreen(
+    fa: Boolean,
+    onLanguageChange: () -> Unit,
+    onPrivacy: () -> Unit,
+    onAbout: () -> Unit,
+    onFeature: (String) -> Unit
 ) {
-    Card(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
-        shape = RoundedCornerShape(19.dp),
-        colors = CardDefaults.cardColors(containerColor = Panel)
-    ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.Top
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(44.dp)
-                    .background(statusColor.copy(alpha = 0.12f), RoundedCornerShape(13.dp)),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(icon, color = statusColor, fontSize = 23.sp)
-            }
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(title, color = SoftWhite, fontWeight = FontWeight.Bold)
-                Text(description, color = Muted, style = MaterialTheme.typography.bodySmall)
-                StatusPill(status, statusColor)
-            }
-            Text("›", color = Muted, fontSize = 22.sp)
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            EyebrowLabel(tr(fa, "شخصی‌سازی", "PREFERENCES"))
+            Text(tr(fa, "تنظیمات", "Settings"), color = TextPrimary, fontSize = 25.sp, fontWeight = FontWeight.Bold)
+            Text(tr(fa, "کنترل تجربه و اطلاعات برنامه", "Control your app experience and information"), color = TextSecondary, fontSize = 12.sp)
         }
+        SettingsRow(
+            icon = "globe",
+            title = tr(fa, "زبان برنامه", "App language"),
+            description = tr(fa, "فارسی / English", "Persian / English"),
+            action = if (fa) "EN" else "فا",
+            onClick = onLanguageChange
+        )
+        SettingsRow(
+            icon = "lock",
+            title = tr(fa, "حریم خصوصی و داده‌ها", "Privacy and data"),
+            description = tr(fa, "نحوه استفاده از فایل‌ها و داده‌ها", "How files and data are handled"),
+            onClick = onPrivacy
+        )
+        SettingsRow(
+            icon = "info",
+            title = tr(fa, "درباره برنامه", "About"),
+            description = tr(fa, "نسخه و وضعیت قابلیت‌ها", "Version and feature status"),
+            onClick = onAbout
+        )
+        SettingsRow(
+            icon = "shield",
+            title = tr(fa, "امنیت و مجوزها", "Security and permissions"),
+            description = tr(fa, "محدودیت‌ها و دسترسی‌های نسخه فعلی", "Current app permissions and boundaries"),
+            onClick = { onFeature("permissions") }
+        )
+        SettingsRow(
+            icon = "support",
+            title = tr(fa, "پشتیبانی", "Support"),
+            description = tr(fa, "کانال رسمی پیش از عرضه اضافه می‌شود", "Official channel will be added before launch"),
+            onClick = { onFeature("support") }
+        )
+        InfoBanner(
+            title = tr(fa, "نسخه در حال توسعه", "Development build"),
+            body = tr(fa, "این نسخه هنوز برای عرضه عمومی یا ادعای محافظت کامل آماده نیست.", "This build is not yet ready for public release or claims of complete protection."),
+            warning = true
+        )
     }
 }
 
@@ -1232,13 +1620,13 @@ private fun SettingsRow(
     icon: String,
     title: String,
     description: String,
-    action: String,
+    action: String? = null,
     onClick: () -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         shape = RoundedCornerShape(17.dp),
-        colors = CardDefaults.cardColors(containerColor = Panel)
+        colors = CardDefaults.cardColors(containerColor = SurfaceBase)
     ) {
         Row(
             modifier = Modifier.padding(15.dp),
@@ -1246,150 +1634,311 @@ private fun SettingsRow(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
-                modifier = Modifier
-                    .size(41.dp)
-                    .background(Accent.copy(alpha = 0.11f), RoundedCornerShape(12.dp)),
+                Modifier.size(41.dp).background(BrandTeal.copy(alpha = 0.10f), RoundedCornerShape(12.dp)),
                 contentAlignment = Alignment.Center
             ) {
-                Text(icon, color = Accent, fontSize = 22.sp)
+                IconArt(icon, tint = BrandTeal, size = 20.dp)
             }
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text(title, color = SoftWhite, fontWeight = FontWeight.SemiBold)
-                Text(description, color = Muted, style = MaterialTheme.typography.bodySmall)
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(title, color = TextPrimary, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                Text(description, color = TextSecondary, fontSize = 10.sp)
             }
-            Text(action, color = Accent, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-        }
-    }
-}
-
-@Composable
-private fun MetricCard(
-    modifier: Modifier,
-    title: String,
-    value: String,
-    detail: String,
-    accent: Color
-) {
-    Card(
-        modifier = modifier,
-        shape = RoundedCornerShape(17.dp),
-        colors = CardDefaults.cardColors(containerColor = Panel)
-    ) {
-        Column(Modifier.padding(13.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Box(Modifier.size(6.dp).background(accent, CircleShape))
-                Text(title, color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Medium)
+            if (action != null) {
+                Text(action, color = BrandTeal, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+            } else {
+                IconArt("chevron", tint = TextTertiary, size = 16.dp)
             }
-            Text(value, color = SoftWhite, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1)
-            Text(detail, color = Muted, fontSize = 9.sp, maxLines = 2, lineHeight = 12.sp)
-        }
-    }
-}
-
-@Composable
-private fun ActionTile(
-    modifier: Modifier,
-    icon: String,
-    title: String,
-    caption: String,
-    onClick: () -> Unit
-) {
-    Card(
-        modifier = modifier.clickable(onClick = onClick),
-        shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(containerColor = Panel)
-    ) {
-        Row(
-            modifier = Modifier.padding(14.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(39.dp)
-                    .background(Accent.copy(alpha = 0.10f), RoundedCornerShape(12.dp)),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(icon, color = Accent, fontSize = 22.sp)
-            }
-            Column(verticalArrangement = Arrangement.spacedBy(3.dp), modifier = Modifier.weight(1f)) {
-                Text(title, color = SoftWhite, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
-                Text(caption, color = Muted, fontSize = 9.sp, lineHeight = 12.sp)
-            }
-        }
-    }
-}
-
-@Composable
-private fun SectionHeading(title: String, subtitle: String) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(title, color = Color.White, fontSize = 21.sp, fontWeight = FontWeight.Bold)
-        Text(subtitle, color = Muted, style = MaterialTheme.typography.bodySmall)
-    }
-}
-
-@Composable
-private fun StatusPill(text: String, color: Color) {
-    Surface(
-        color = color.copy(alpha = 0.12f),
-        shape = RoundedCornerShape(50)
-    ) {
-        Text(
-            text,
-            color = color,
-            fontSize = 9.sp,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 0.25.sp,
-            modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp)
-        )
-    }
-}
-
-@Composable
-private fun SmallIconButton(label: String, onClick: () -> Unit) {
-    Surface(
-        modifier = Modifier.size(40.dp).clickable(onClick = onClick),
-        color = Panel,
-        shape = RoundedCornerShape(13.dp)
-    ) {
-        Box(contentAlignment = Alignment.Center) {
-            Text(label, color = Accent, fontWeight = FontWeight.Bold, fontSize = 14.sp)
         }
     }
 }
 
 @Composable
 private fun InfoBanner(title: String, body: String, warning: Boolean) {
-    val color = if (warning) Warning else AccentBlue
+    val tint = if (warning) ColorWarning else BrandBlue
     Card(
         shape = RoundedCornerShape(17.dp),
-        colors = CardDefaults.cardColors(containerColor = color.copy(alpha = 0.08f))
+        colors = CardDefaults.cardColors(containerColor = tint.copy(alpha = 0.075f))
     ) {
         Row(
             modifier = Modifier.padding(15.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            horizontalArrangement = Arrangement.spacedBy(11.dp),
             verticalAlignment = Alignment.Top
         ) {
-            Text(if (warning) "!" else "i", color = color, fontSize = 19.sp, fontWeight = FontWeight.Bold)
+            IconArt(if (warning) "alert" else "info", tint = tint, size = 19.dp)
             Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                Text(title, color = SoftWhite, fontWeight = FontWeight.SemiBold)
-                Text(body, color = Muted, style = MaterialTheme.typography.bodySmall)
+                Text(title, color = TextPrimary, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                Text(body, color = TextSecondary, fontSize = 10.sp, lineHeight = 15.sp)
             }
         }
     }
 }
 
 @Composable
-private fun DetailLine(label: String, value: String) {
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text(label, color = Muted, fontSize = 10.sp)
-        Text(value, color = SoftWhite, fontSize = 11.sp)
+private fun IconArt(
+    name: String,
+    tint: Color,
+    size: Dp
+) {
+    Canvas(Modifier.size(size)) {
+        val sx = this.size.width / 24f
+        val sy = this.size.height / 24f
+        val sw = maxOf(1.45f, this.size.minDimension * 0.075f)
+        fun point(x: Float, y: Float) = Offset(x * sx, y * sy)
+        fun line(x1: Float, y1: Float, x2: Float, y2: Float) {
+            drawLine(tint, point(x1, y1), point(x2, y2), strokeWidth = sw, cap = StrokeCap.Round)
+        }
+        fun path(block: Path.() -> Unit) {
+            val p = Path().apply(block)
+            drawPath(p, tint, style = Stroke(width = sw, cap = StrokeCap.Round, join = StrokeJoin.Round))
+        }
+        fun circle(x: Float, y: Float, r: Float) {
+            drawCircle(tint, radius = r * sx, center = point(x, y), style = Stroke(width = sw))
+        }
+        when (name) {
+            "shield" -> {
+                path {
+                    moveTo(12f * sx, 2.2f * sy)
+                    lineTo(20.2f * sx, 5.4f * sy)
+                    lineTo(19.4f * sx, 13.5f * sy)
+                    quadraticTo(18.7f * sx, 19f * sy, 12f * sx, 22f * sy)
+                    quadraticTo(5.3f * sx, 19f * sy, 4.6f * sx, 13.5f * sy)
+                    lineTo(3.8f * sx, 5.4f * sy)
+                    close()
+                }
+                line(8.2f, 12.3f, 10.8f, 14.8f)
+                line(10.8f, 14.8f, 16.2f, 9.2f)
+            }
+            "home" -> {
+                path {
+                    moveTo(3f * sx, 10.5f * sy)
+                    lineTo(12f * sx, 3f * sy)
+                    lineTo(21f * sx, 10.5f * sy)
+                    lineTo(19f * sx, 10.5f * sy)
+                    lineTo(19f * sx, 21f * sy)
+                    lineTo(5f * sx, 21f * sy)
+                    lineTo(5f * sx, 10.5f * sy)
+                    close()
+                }
+                line(9.5f, 21f, 9.5f, 14f)
+                line(9.5f, 14f, 14.5f, 14f)
+                line(14.5f, 14f, 14.5f, 21f)
+            }
+            "scan" -> {
+                line(4f, 9f, 4f, 4f); line(4f, 4f, 9f, 4f)
+                line(15f, 4f, 20f, 4f); line(20f, 4f, 20f, 9f)
+                line(20f, 15f, 20f, 20f); line(20f, 20f, 15f, 20f)
+                line(9f, 20f, 4f, 20f); line(4f, 20f, 4f, 15f)
+                line(7f, 12f, 17f, 12f)
+            }
+            "tools" -> {
+                circle(12f, 12f, 2.3f)
+                circle(12f, 4.5f, 2f); circle(12f, 19.5f, 2f)
+                circle(4.5f, 12f, 2f); circle(19.5f, 12f, 2f)
+                line(12f, 7f, 12f, 9f); line(12f, 15f, 12f, 17f)
+                line(7f, 12f, 9f, 12f); line(15f, 12f, 17f, 12f)
+            }
+            "store" -> {
+                path {
+                    moveTo(4f * sx, 8f * sy)
+                    lineTo(6f * sx, 4f * sy)
+                    lineTo(18f * sx, 4f * sy)
+                    lineTo(20f * sx, 8f * sy)
+                    lineTo(19f * sx, 21f * sy)
+                    lineTo(5f * sx, 21f * sy)
+                    close()
+                }
+                path {
+                    moveTo(9f * sx, 9f * sy)
+                    quadraticTo(9f * sx, 14f * sy, 12f * sx, 14f * sy)
+                    quadraticTo(15f * sx, 14f * sy, 15f * sx, 9f * sy)
+                }
+            }
+            "settings" -> {
+                circle(12f, 12f, 7.5f)
+                circle(12f, 12f, 2.7f)
+                line(12f, 1.8f, 12f, 4.2f); line(12f, 19.8f, 12f, 22.2f)
+                line(1.8f, 12f, 4.2f, 12f); line(19.8f, 12f, 22.2f, 12f)
+                line(4.8f, 4.8f, 6.5f, 6.5f); line(17.5f, 17.5f, 19.2f, 19.2f)
+                line(17.5f, 6.5f, 19.2f, 4.8f); line(4.8f, 19.2f, 6.5f, 17.5f)
+            }
+            "file" -> {
+                path {
+                    moveTo(6f * sx, 2.8f * sy)
+                    lineTo(14.5f * sx, 2.8f * sy)
+                    lineTo(19f * sx, 7.3f * sy)
+                    lineTo(19f * sx, 21f * sy)
+                    lineTo(6f * sx, 21f * sy)
+                    close()
+                    moveTo(14.5f * sx, 3f * sy)
+                    lineTo(14.5f * sx, 7.5f * sy)
+                    lineTo(19f * sx, 7.5f * sy)
+                }
+                line(9f, 12f, 16f, 12f); line(9f, 16f, 16f, 16f)
+            }
+            "apk", "device" -> {
+                path {
+                    moveTo(7f * sx, 2.5f * sy)
+                    lineTo(17f * sx, 2.5f * sy)
+                    quadraticTo(19f * sx, 2.5f * sy, 19f * sx, 4.5f * sy)
+                    lineTo(19f * sx, 19.5f * sy)
+                    quadraticTo(19f * sx, 21.5f * sy, 17f * sx, 21.5f * sy)
+                    lineTo(7f * sx, 21.5f * sy)
+                    quadraticTo(5f * sx, 21.5f * sy, 5f * sx, 19.5f * sy)
+                    lineTo(5f * sx, 4.5f * sy)
+                    quadraticTo(5f * sx, 2.5f * sy, 7f * sx, 2.5f * sy)
+                    close()
+                }
+                line(9f, 6f, 15f, 6f)
+                circle(12f, 18.5f, 0.7f)
+            }
+            "database" -> {
+                path {
+                    moveTo(4f * sx, 6f * sy)
+                    quadraticTo(4f * sx, 2.5f * sy, 12f * sx, 2.5f * sy)
+                    quadraticTo(20f * sx, 2.5f * sy, 20f * sx, 6f * sy)
+                    lineTo(20f * sx, 18f * sy)
+                    quadraticTo(20f * sx, 21.5f * sy, 12f * sx, 21.5f * sy)
+                    quadraticTo(4f * sx, 21.5f * sy, 4f * sx, 18f * sy)
+                    close()
+                }
+                path {
+                    moveTo(4f * sx, 6f * sy)
+                    quadraticTo(4f * sx, 9.5f * sy, 12f * sx, 9.5f * sy)
+                    quadraticTo(20f * sx, 9.5f * sy, 20f * sx, 6f * sy)
+                }
+                path {
+                    moveTo(4f * sx, 12f * sy)
+                    quadraticTo(4f * sx, 15.5f * sy, 12f * sx, 15.5f * sy)
+                    quadraticTo(20f * sx, 15.5f * sy, 20f * sx, 12f * sy)
+                }
+            }
+            "clock" -> {
+                circle(12f, 12f, 9f)
+                line(12f, 6.5f, 12f, 12f)
+                line(12f, 12f, 16f, 14f)
+            }
+            "lock" -> {
+                path {
+                    moveTo(5f * sx, 10f * sy)
+                    lineTo(19f * sx, 10f * sy)
+                    lineTo(19f * sx, 21f * sy)
+                    lineTo(5f * sx, 21f * sy)
+                    close()
+                }
+                path {
+                    moveTo(8f * sx, 10f * sy)
+                    lineTo(8f * sx, 7f * sy)
+                    quadraticTo(8f * sx, 3f * sy, 12f * sx, 3f * sy)
+                    quadraticTo(16f * sx, 3f * sy, 16f * sx, 7f * sy)
+                    lineTo(16f * sx, 10f * sy)
+                }
+                line(12f, 14f, 12f, 17f)
+            }
+            "activity" -> {
+                path {
+                    moveTo(2f * sx, 12f * sy)
+                    lineTo(6.5f * sx, 12f * sy)
+                    lineTo(9f * sx, 5f * sy)
+                    lineTo(13.5f * sx, 19f * sy)
+                    lineTo(16.5f * sx, 12f * sy)
+                    lineTo(22f * sx, 12f * sy)
+                }
+            }
+            "brain" -> {
+                circle(12f, 12f, 2.2f)
+                circle(6f, 7f, 2.1f); circle(18f, 7f, 2.1f)
+                circle(6f, 17f, 2.1f); circle(18f, 17f, 2.1f)
+                line(7.7f, 8.4f, 10.3f, 10.3f); line(16.3f, 8.4f, 13.7f, 10.3f)
+                line(7.7f, 15.6f, 10.3f, 13.7f); line(16.3f, 15.6f, 13.7f, 13.7f)
+            }
+            "link" -> {
+                path {
+                    moveTo(10f * sx, 14f * sy)
+                    lineTo(8f * sx, 16f * sy)
+                    quadraticTo(5f * sx, 19f * sy, 2.8f * sx, 16.8f * sy)
+                    quadraticTo(0.6f * sx, 14.6f * sy, 3.5f * sx, 11.7f * sy)
+                    lineTo(7f * sx, 8.2f * sy)
+                    quadraticTo(10f * sx, 5.2f * sy, 13f * sx, 8.2f * sy)
+                }
+                path {
+                    moveTo(14f * sx, 10f * sy)
+                    lineTo(16f * sx, 8f * sy)
+                    quadraticTo(19f * sx, 5f * sy, 21.2f * sx, 7.2f * sy)
+                    quadraticTo(23.4f * sx, 9.4f * sy, 20.5f * sx, 12.3f * sy)
+                    lineTo(17f * sx, 15.8f * sy)
+                    quadraticTo(14f * sx, 18.8f * sy, 11f * sx, 15.8f * sy)
+                }
+                line(8.5f, 15.5f, 15.5f, 8.5f)
+            }
+            "globe" -> {
+                circle(12f, 12f, 9f)
+                path {
+                    moveTo(12f * sx, 3f * sy)
+                    quadraticTo(5f * sx, 12f * sy, 12f * sx, 21f * sy)
+                    quadraticTo(19f * sx, 12f * sy, 12f * sx, 3f * sy)
+                }
+                line(3.5f, 9f, 20.5f, 9f); line(3.5f, 15f, 20.5f, 15f)
+            }
+            "info" -> {
+                circle(12f, 12f, 9f)
+                line(12f, 10.8f, 12f, 16.5f)
+                drawCircle(tint, radius = sw * 0.75f, center = point(12f, 7.3f))
+            }
+            "alert" -> {
+                path {
+                    moveTo(12f * sx, 3f * sy)
+                    lineTo(22f * sx, 20f * sy)
+                    lineTo(2f * sx, 20f * sy)
+                    close()
+                }
+                line(12f, 9f, 12f, 14f)
+                drawCircle(tint, radius = sw * 0.7f, center = point(12f, 17f))
+            }
+            "spark" -> {
+                path {
+                    moveTo(12f * sx, 2f * sy)
+                    quadraticTo(14f * sx, 9f * sy, 22f * sx, 12f * sy)
+                    quadraticTo(14f * sx, 14f * sy, 12f * sx, 22f * sy)
+                    quadraticTo(10f * sx, 14f * sy, 2f * sx, 12f * sy)
+                    quadraticTo(10f * sx, 9f * sy, 12f * sx, 2f * sy)
+                    close()
+                }
+            }
+            "check" -> {
+                path {
+                    moveTo(4f * sx, 12.5f * sy)
+                    lineTo(9.5f * sx, 18f * sy)
+                    lineTo(20f * sx, 6f * sy)
+                }
+            }
+            "arrow", "chevron" -> {
+                if (name == "arrow") {
+                    line(3f, 12f, 20f, 12f)
+                    line(14f, 6f, 20f, 12f)
+                    line(14f, 18f, 20f, 12f)
+                } else {
+                    line(8f, 4f, 16f, 12f)
+                    line(16f, 12f, 8f, 20f)
+                }
+            }
+            "support" -> {
+                circle(12f, 12f, 8.5f)
+                path {
+                    moveTo(7.5f * sx, 12f * sy)
+                    quadraticTo(7.5f * sx, 7f * sy, 12f * sx, 7f * sy)
+                    quadraticTo(16.5f * sx, 7f * sy, 16.5f * sx, 12f * sy)
+                    lineTo(16.5f * sx, 15f * sy)
+                    lineTo(14f * sx, 15f * sy)
+                    lineTo(14f * sx, 12f * sy)
+                }
+            }
+        }
     }
 }
 
 private fun verdictBadge(verdict: ScanVerdict, fa: Boolean): String = when (verdict) {
     ScanVerdict.TEST_MARKER_MATCH -> tr(fa, "آزمایشی", "TEST")
-    ScanVerdict.SUSPICIOUS -> tr(fa, "مشکوک", "REVIEW")
+    ScanVerdict.SUSPICIOUS -> tr(fa, "نیازمند بررسی", "REVIEW")
     ScanVerdict.NO_KNOWN_INDICATOR -> tr(fa, "بدون تطبیق", "NO MATCH")
     ScanVerdict.UNKNOWN_APK -> tr(fa, "نامشخص", "UNKNOWN")
     ScanVerdict.UNSUPPORTED_FILE -> tr(fa, "پشتیبانی‌نشده", "UNSUPPORTED")
@@ -1400,29 +1949,29 @@ private fun verdictTitle(verdict: ScanVerdict, fa: Boolean): String = when (verd
     ScanVerdict.SUSPICIOUS -> tr(fa, "نیازمند بررسی بیشتر", "Needs further review")
     ScanVerdict.NO_KNOWN_INDICATOR -> tr(fa, "نشانگر شناخته‌شده‌ای پیدا نشد", "No known indicator found")
     ScanVerdict.UNKNOWN_APK -> tr(fa, "نتیجه نامشخص", "Unknown result")
-    ScanVerdict.UNSUPPORTED_FILE -> tr(fa, "این نوع فایل هنوز پشتیبانی نمی‌شود", "File type not covered yet")
+    ScanVerdict.UNSUPPORTED_FILE -> tr(fa, "این نوع فایل پشتیبانی نمی‌شود", "File type not covered")
 }
 
 private fun verdictDescription(verdict: ScanVerdict, fa: Boolean): String = when (verdict) {
     ScanVerdict.TEST_MARKER_MATCH -> tr(fa, "این فقط فایل آزمایشی بی‌خطر پروژه است؛ بدافزار نیست.", "This is the harmless project test fixture, not malware.")
     ScanVerdict.SUSPICIOUS -> tr(fa, "چند نشانه ایستا دیده شده است. این نتیجه اثبات بدافزار بودن نیست.", "Static indicators were found. This is not proof of malware.")
-    ScanVerdict.NO_KNOWN_INDICATOR -> tr(fa, "هیچ نشانگر موجود در نسخه فعلی با فایل تطبیق نکرد. این نتیجه تضمین پاک بودن نیست.", "No indicator in this MVP matched. This does not guarantee the file is clean.")
-    ScanVerdict.UNKNOWN_APK -> tr(fa, "اطلاعات APK قابل خواندن نبود؛ از اعلام پاک بودن خودداری می‌کنیم.", "APK metadata could not be read; the file is not being declared clean.")
-    ScanVerdict.UNSUPPORTED_FILE -> tr(fa, "موتور فعلی تحلیل محتوایی این قالب فایل را انجام نمی‌دهد؛ نتیجه ناشناخته است.", "The current engine does not perform content-aware analysis for this file format; treat it as unknown.")
+    ScanVerdict.NO_KNOWN_INDICATOR -> tr(fa, "هیچ نشانگر موجود در نسخه فعلی با فایل تطبیق نکرد. این نتیجه تضمین پاک بودن نیست.", "No indicator in this MVP matched. This does not guarantee that the file is safe.")
+    ScanVerdict.UNKNOWN_APK -> tr(fa, "اطلاعات APK قابل خواندن نبود؛ از اعلام پاک بودن خودداری می‌کنیم.", "APK metadata could not be read; the file is not declared clean.")
+    ScanVerdict.UNSUPPORTED_FILE -> tr(fa, "موتور فعلی تحلیل محتوایی این قالب را انجام نمی‌دهد؛ نتیجه ناشناخته است.", "The current engine does not perform content-aware analysis for this format; treat it as unknown.")
 }
 
 private fun verdictColor(verdict: ScanVerdict): Color = when (verdict) {
-    ScanVerdict.TEST_MARKER_MATCH -> AccentBlue
-    ScanVerdict.SUSPICIOUS -> Warning
-    ScanVerdict.NO_KNOWN_INDICATOR -> Accent
-    ScanVerdict.UNKNOWN_APK -> Warning
-    ScanVerdict.UNSUPPORTED_FILE -> Muted
+    ScanVerdict.TEST_MARKER_MATCH -> BrandBlue
+    ScanVerdict.SUSPICIOUS -> ColorWarning
+    ScanVerdict.NO_KNOWN_INDICATOR -> BrandTeal
+    ScanVerdict.UNKNOWN_APK -> ColorWarning
+    ScanVerdict.UNSUPPORTED_FILE -> TextTertiary
 }
 
 private fun featureTitle(fa: Boolean, feature: String): String = when (feature) {
     "quarantine" -> tr(fa, "قرنطینه رمزنگاری‌شده", "Encrypted quarantine")
     "vulnerability" -> tr(fa, "تحلیل آسیب‌پذیری APK", "APK vulnerability intelligence")
-    "phishing" -> tr(fa, "محافظ فیشینگ", "Phishing shield")
+    "phishing" -> tr(fa, "محافظ فیشینگ و لینک", "Phishing & link shield")
     "network" -> tr(fa, "محافظ شبکه", "Network guard")
     "brain" -> tr(fa, "مغز امنیتی AL AI", "AL AI security brain")
     "selfdefense" -> tr(fa, "دفاع از خود برنامه", "Self-defense engine")
@@ -1431,14 +1980,14 @@ private fun featureTitle(fa: Boolean, feature: String): String = when (feature) 
 }
 
 private fun featureDescription(fa: Boolean, feature: String): String = when (feature) {
-    "quarantine" -> tr(fa, "در حال حاضر با درخواست کاربر یک نسخه AES-GCM رمزنگاری‌شده در فضای خصوصی برنامه ذخیره می‌شود و هش آن بررسی می‌شود. فایل اصلی حذف نمی‌شود. فهرست‌کردن، بازیابی و حذف امن نسخه‌های قرنطینه در مرحله بعد ساخته می‌شود.", "At the user's request, an AES-GCM encrypted copy is stored in private app storage and its hash is verified. The original is not removed. Listing, restoring and securely deleting quarantine entries are planned next.")
-    "vulnerability" -> tr(fa, "این ماژول هنوز نتیجه آسیب‌پذیری واقعی تولید نمی‌کند. مرحله بعدی شامل شناسایی SDKها و کتابخانه‌ها و تطبیق آن‌ها با منابع CVE معتبر است.", "This module does not yet produce real vulnerability findings. Next steps include SDK and library inventory with mapping to trusted CVE sources.")
-    "phishing" -> tr(fa, "بررسی امن URL با فهرست اعتبار و تحلیل دامنه هنوز به این نسخه متصل نشده است. هیچ لینک یا پیام در پس‌زمینه خوانده نمی‌شود.", "URL reputation and domain analysis are not connected yet. No links or messages are read in the background.")
-    "network" -> tr(fa, "محافظ شبکه هنوز فعال نیست. پیاده‌سازی آن به طراحی شفاف VPN محلی/DNS و بررسی سیاست‌های Android و Google Play نیاز دارد.", "Network protection is not active. Implementation requires a transparent local VPN/DNS design and Android/Google Play policy review.")
-    "brain" -> tr(fa, "فعلاً گزارش بر اساس قواعد محدود و شواهد قابل مشاهده ساخته می‌شود. امتیاز ریسک چندموتوره و مدل هوش مصنوعی هنوز به موتور اسکن وصل نشده است.", "Reports currently use limited, visible rules and evidence. Multi-engine risk scoring and AI reasoning are not yet connected to the scanner.")
-    "selfdefense" -> tr(fa, "برنامه از پیکربندی‌های پایه مانند عدم اجازه اتصال cleartext و غیرفعال‌بودن backup استفاده می‌کند. بررسی یکپارچگی زمان اجرا و دفاع در برابر دست‌کاری هنوز نیازمند توسعه و آزمون است.", "The app has baseline controls such as cleartext traffic being disabled and backup disabled. Runtime integrity monitoring and anti-tamper defenses still require implementation and testing.")
+    "quarantine" -> tr(fa, "با درخواست کاربر یک نسخه AES-GCM رمزنگاری‌شده در فضای خصوصی ذخیره و هش آن بررسی می‌شود. فایل اصلی حذف نمی‌شود. مدیریت، بازیابی و حذف امن نسخه‌های قرنطینه در مرحله بعد تکمیل می‌شود.", "At the user's request, an AES-GCM encrypted copy is stored in private app storage and its hash is verified. The original is not removed. Quarantine listing, restore and secure deletion are planned next.")
+    "vulnerability" -> tr(fa, "این ماژول هنوز نتیجه آسیب‌پذیری واقعی تولید نمی‌کند. مرحله بعدی شامل شناسایی SDKها و کتابخانه‌ها و تطبیق آن‌ها با منابع CVE معتبر است.", "This module does not yet produce vulnerability findings. Next steps include SDK and library inventory mapped to trusted CVE sources.")
+    "phishing" -> tr(fa, "بررسی URL با فهرست اعتبار و تحلیل دامنه هنوز متصل نشده است. هیچ لینک یا پیامی در پس‌زمینه خوانده نمی‌شود.", "URL reputation and domain analysis are not connected yet. No links or messages are read in the background.")
+    "network" -> tr(fa, "محافظ شبکه هنوز فعال نیست. پیاده‌سازی آن به طراحی شفاف DNS/VPN محلی و بررسی سیاست‌های Android و Google Play نیاز دارد.", "Network protection is not active. Implementation requires transparent local DNS/VPN design and Android/Google Play policy review.")
+    "brain" -> tr(fa, "فعلاً گزارش بر اساس قواعد محدود و شواهد قابل مشاهده ساخته می‌شود. امتیازدهی چندموتوره و تحلیل AI هنوز به موتور اسکن وصل نشده است.", "Reports currently use limited, visible rules and evidence. Multi-engine scoring and AI reasoning are not yet connected to the scanner.")
+    "selfdefense" -> tr(fa, "برنامه از تنظیمات پایه مانند غیرفعال‌بودن cleartext و backup استفاده می‌کند. پایش یکپارچگی زمان اجرا و دفاع در برابر دست‌کاری هنوز نیازمند توسعه و آزمون است.", "The app uses baseline controls such as disabled cleartext traffic and backup. Runtime integrity and anti-tamper monitoring still require implementation and testing.")
     "permissions" -> tr(fa, "اسکن فایل از انتخاب‌گر رسمی Android استفاده می‌کند. در این نسخه مجوز اسکن کامل برنامه‌های نصب‌شده، Accessibility، روت یا دسترسی به داده خصوصی برنامه‌های دیگر درخواست نمی‌شود.", "File scanning uses Android's document picker. This build does not request broad installed-app inventory, Accessibility, root or access to other apps' private data.")
-    else -> tr(fa, "کانال پشتیبانی رسمی پیش از عرضه عمومی به برنامه اضافه می‌شود. در این نسخه نشانی پشتیبانی تأییدشده‌ای تعریف نشده است.", "An official support channel will be added before public release. No verified support address is configured in this build.")
+    else -> tr(fa, "کانال پشتیبانی رسمی پیش از عرضه عمومی اضافه می‌شود. در این نسخه نشانی پشتیبانی تأییدشده‌ای تعریف نشده است.", "An official support channel will be added before public release. No verified support address is configured in this build.")
 }
 
 private fun tr(fa: Boolean, persian: String, english: String): String =
