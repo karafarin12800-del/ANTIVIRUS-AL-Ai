@@ -23,15 +23,20 @@ data class FolderScanReport(
     val scannedCountOverride: Int? = null,
     val suspiciousCountOverride: Int? = null,
     val unknownCountOverride: Int? = null,
-    val matchedCountOverride: Int? = null
+    val matchedCountOverride: Int? = null,
+    val codeAnalyzedCountOverride: Int? = null,
+    val codeIssueCountOverride: Int? = null
 ) {
     val scannedCount: Int get() = scannedCountOverride ?: items.size
     val suspiciousCount: Int get() = suspiciousCountOverride ?: items.count { it.result.verdict == ScanVerdict.SUSPICIOUS }
     val unknownCount: Int get() = unknownCountOverride ?: items.count {
         it.result.verdict == ScanVerdict.UNKNOWN_APK ||
-            it.result.verdict == ScanVerdict.UNSUPPORTED_FILE
+            it.result.verdict == ScanVerdict.UNSUPPORTED_FILE ||
+            it.result.verdict == ScanVerdict.CODE_ANALYSIS_LIMITED
     }
     val matchedCount: Int get() = matchedCountOverride ?: items.count { it.result.verdict == ScanVerdict.TEST_MARKER_MATCH }
+    val codeAnalyzedCount: Int get() = codeAnalyzedCountOverride ?: items.count { it.result.codeAnalysis != null }
+    val codeIssueCount: Int get() = codeIssueCountOverride ?: items.sumOf { it.result.codeAnalysis?.diagnostics?.size ?: 0 }
 }
 
 /**
