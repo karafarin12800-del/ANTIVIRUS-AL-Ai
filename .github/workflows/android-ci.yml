@@ -38,11 +38,24 @@ jobs:
         run: sdkmanager "platforms;android-36" "build-tools;36.0.0" "platform-tools"
       - name: Run unit tests, lint, and debug build
         run: gradle --no-daemon clean testDebugUnitTest lintDebug assembleDebug
+      - name: Label APK and write build identity
+        if: success()
+        run: |
+          cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/ANTIVIRUS-AL-AI-v0.2.0-debug.apk
+          {
+            echo "app=ANTIVIRUS AL AI"
+            echo "version=0.2.0"
+            echo "version_code=2"
+            echo "commit=${GITHUB_SHA}"
+            echo "workflow_run=${GITHUB_RUN_ID}"
+          } > app/build/outputs/apk/debug/build-info.txt
       - name: Upload debug APK
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: antivirus-al-ai-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: antivirus-al-ai-v0.2.0-debug
+          path: |
+            app/build/outputs/apk/debug/ANTIVIRUS-AL-AI-v0.2.0-debug.apk
+            app/build/outputs/apk/debug/build-info.txt
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 14
