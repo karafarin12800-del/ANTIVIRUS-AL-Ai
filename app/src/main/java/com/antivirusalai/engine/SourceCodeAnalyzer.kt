@@ -87,6 +87,18 @@ object SourceCodeAnalyzer {
         if (extension == "py" || extension == "pyw") {
             inspectPythonColons(source, codeOnly, findings)
         }
+        if (extension == "json") {
+            JsonSyntaxValidator(source).validate()?.let { failure ->
+                findings += diagnostic(
+                    source, failure.offset, "JSON_SYNTAX",
+                    "خطای ساختار JSON", "JSON syntax error",
+                    failure.messageFa, failure.messageEn, CodeIssueSeverity.ERROR
+                )
+            }
+        }
+        if (extension == "xml") {
+            inspectXmlTags(source, codeOnly, findings)
+        }
         applySecurityRules(source, codeOnly, extension, findings)
 
         val finalFindings = findings
@@ -458,19 +470,222 @@ object SourceCodeAnalyzer {
             )
         )
 
-        rules.forEach { rule ->
-            if (rule.extensions != null && extension !in rule.extensions) return@forEach
-            rule.expression.findAll(codeOnly).take(5).forEach { match ->
+        for (rule in rules) {
+            if (rule.extensions != null && extension !in rule.extensions) continue
+            for (match in rule.expression.findAll(codeOnly).take(5)) {
                 if (rule.id == "HARDCODED_SECRET") {
                     val value = match.groupValues.getOrNull(2).orEmpty().lowercase()
                     val placeholders = listOf("placeholder", "your_", "change_me", "changeme", "example", "dummy", "test", "xxxxxxxx")
-                    if (placeholders.any { value.contains(it) }) return@forEach
+                    if (placeholders.any { value.contains(it) }) continue
                 }
                 findings += diagnostic(
                     source, match.range.first, rule.id,
                     rule.titleFa, rule.titleEn, rule.detailFa, rule.detailEn, rule.severity
                 )
             }
+        }
+    }
+
+
+    private fun inspectXmlTags(
+        source: String,
+        codeOnly: String,
+        findings: MutableList<CodeDiagnostic>
+    ) {
+        val stack = ArrayDeque<Pair<String, Int>>()
+        val pattern = Regex("""</?\s*([A-Za-z_][A-Za-z0-9_.:-]*)\b[^<>]*?>""")
+        for (match in pattern.findAll(codeOnly)) {
+            val token = match.value
+            val name = match.groupValues[1]
+            when {
+                token.startsWith("</") -> {
+                    if (stack.lastOrNull()?.first == name) {
+                        stack.removeLast()
+                    } else {
+                        findings += diagnostic(
+                            source, match.range.first, "XML_MISMATCHED_TAG",
+                            "تگ‌های XML هماهنگ نیستند", "Mismatched XML tag",
+                            "تگ بسته‌شونده با نام " + name + " با آخرین تگ بازشده مطابقت ندارد.",
+                            "The closing tag '" + name + "' does not match the most recently opened tag.",
+                            CodeIssueSeverity.ERROR
+                        )
+                    }
+                }
+                !token.trimEnd().endsWith("/>") -> stack.addLast(name to match.range.first)
+            }
+        }
+        while (stack.isNotEmpty()) {
+            val opened = stack.removeLast()
+            findings += diagnostic(
+                source, opened.second, "XML_UNCLOSED_TAG",
+                "تگ XML بسته نشده", "Unclosed XML tag",
+                "برای تگ " + opened.first + " تگ بسته‌شونده پیدا نشد.",
+                "No closing tag was found for '" + opened.first + "'.",
+                CodeIssueSeverity.ERROR
+            )
+        }
+    }
+
+    private data class JsonFailure(
+        val offset: Int,
+        val messageFa: String,
+        val messageEn: String
+    )
+
+    private class JsonSyntaxValidator(private val text: String) {
+        private var index = 0
+
+        fun validate(): JsonFailure? = try {
+            skipWhitespace()
+            parseValue()
+            skipWhitespace()
+            if (index != text.length) fail(
+                "پس از مقدار اصلی، نویسه اضافی وجود دارد.",
+                "Unexpected content after the JSON value."
+            )
+            null
+        } catch (failure: ParseFailure) {
+            JsonFailure(failure.offset, failure.messageFa, failure.messageEn)
+        }
+
+        private class ParseFailure(
+            val offset: Int,
+            val messageFa: String,
+            val messageEn: String
+        ) : RuntimeException()
+
+        private fun fail(fa: String, en: String): Nothing =
+            throw ParseFailure(index, fa, en)
+
+        private fun skipWhitespace() {
+            while (index < text.length && text[index] in charArrayOf(' ', '\n', '\r', '\t')) index++
+        }
+
+        private fun parseValue() {
+            skipWhitespace()
+            if (index >= text.length) fail("مقدار JSON ناقص است.", "Expected a JSON value.")
+            when (text[index]) {
+                '{' -> parseObject()
+                '[' -> parseArray()
+                '"' -> parseString()
+                't' -> parseLiteral("true")
+                'f' -> parseLiteral("false")
+                'n' -> parseLiteral("null")
+                '-', in '0'..'9' -> parseNumber()
+                else -> fail("مقدار JSON معتبر نیست.", "Invalid JSON value.")
+            }
+        }
+
+        private fun parseObject() {
+            index++
+            skipWhitespace()
+            if (consume('}')) return
+            while (true) {
+                skipWhitespace()
+                if (index >= text.length || text[index] != '"') {
+                    fail("کلید شیء JSON باید رشته باشد.", "A JSON object key must be a string.")
+                }
+                parseString()
+                skipWhitespace()
+                expect(':', "پس از کلید، «:» لازم است.", "Expected ':' after the object key.")
+                parseValue()
+                skipWhitespace()
+                if (consume('}')) return
+                expect(',', "بین اعضای شیء، «,» لازم است.", "Expected ',' between object members.")
+                skipWhitespace()
+                if (index < text.length && text[index] == '}') {
+                    fail("ویرگول پایانی در JSON مجاز نیست.", "Trailing commas are not allowed in JSON.")
+                }
+            }
+        }
+
+        private fun parseArray() {
+            index++
+            skipWhitespace()
+            if (consume(']')) return
+            while (true) {
+                parseValue()
+                skipWhitespace()
+                if (consume(']')) return
+                expect(',', "بین اعضای آرایه، «,» لازم است.", "Expected ',' between array elements.")
+                skipWhitespace()
+                if (index < text.length && text[index] == ']') {
+                    fail("ویرگول پایانی در JSON مجاز نیست.", "Trailing commas are not allowed in JSON.")
+                }
+            }
+        }
+
+        private fun parseString() {
+            expect('"', "رشته JSON باید با نقل‌قول شروع شود.", "A JSON string must start with a quote.")
+            while (index < text.length) {
+                val ch = text[index++]
+                when {
+                    ch == '"' -> return
+                    ch.code < 0x20 -> fail("نویسه کنترلی خام در رشته JSON مجاز نیست.", "Unescaped control character in JSON string.")
+                    ch == '\\' -> {
+                        if (index >= text.length) fail("دنباله escape ناقص است.", "Incomplete escape sequence.")
+                        val escaped = text[index++]
+                        if (escaped == 'u') {
+                            repeat(4) {
+                                if (index >= text.length || text[index].digitToIntOrNull(16) == null) {
+                                    fail("کد یونیکد در escape معتبر نیست.", "Invalid Unicode escape sequence.")
+                                }
+                                index++
+                            }
+                        } else if (escaped !in charArrayOf('"', '\\', '/', 'b', 'f', 'n', 'r', 't')) {
+                            fail("نوع escape در JSON معتبر نیست.", "Invalid JSON escape sequence.")
+                        }
+                    }
+                }
+            }
+            fail("رشته JSON بسته نشده است.", "Unterminated JSON string.")
+        }
+
+        private fun parseNumber() {
+            val start = index
+            consume('-')
+            if (consume('0')) {
+                if (index < text.length && text[index].isDigit()) {
+                    fail("صفر ابتدایی در عدد JSON مجاز نیست.", "Leading zeroes are not allowed in JSON numbers.")
+                }
+            } else {
+                if (index >= text.length || text[index] !in '1'..'9') {
+                    fail("عدد JSON معتبر نیست.", "Invalid JSON number.")
+                }
+                while (index < text.length && text[index].isDigit()) index++
+            }
+            if (consume('.')) {
+                if (index >= text.length || !text[index].isDigit()) {
+                    fail("بخش اعشاری عدد ناقص است.", "Invalid fraction in JSON number.")
+                }
+                while (index < text.length && text[index].isDigit()) index++
+            }
+            if (index < text.length && (text[index] == 'e' || text[index] == 'E')) {
+                index++
+                if (index < text.length && (text[index] == '+' || text[index] == '-')) index++
+                if (index >= text.length || !text[index].isDigit()) {
+                    fail("توان عدد JSON ناقص است.", "Invalid exponent in JSON number.")
+                }
+                while (index < text.length && text[index].isDigit()) index++
+            }
+            if (index == start) fail("عدد JSON معتبر نیست.", "Invalid JSON number.")
+        }
+
+        private fun parseLiteral(value: String) {
+            if (!text.startsWith(value, index)) fail("مقدار JSON معتبر نیست.", "Invalid JSON literal.")
+            index += value.length
+        }
+
+        private fun consume(expected: Char): Boolean {
+            if (index < text.length && text[index] == expected) {
+                index++
+                return true
+            }
+            return false
+        }
+
+        private fun expect(expected: Char, fa: String, en: String) {
+            if (!consume(expected)) fail(fa, en)
         }
     }
 
