@@ -282,8 +282,8 @@ fun AntivirusApp() {
                         Text(
                             tr(
                                 fa,
-                                "ANTIVIRUS AL AI  •  نسخه آزمایشی ۰٫۱٫۰",
-                                "ANTIVIRUS AL AI  •  DEVELOPMENT BUILD 0.1.0"
+                                "ANTIVIRUS AL AI  •  نسخه آزمایشی \${BuildConfig.VERSION_NAME}",
+                                "ANTIVIRUS AL AI  •  DEVELOPMENT BUILD \${BuildConfig.VERSION_NAME}"
                             ),
                             color = TextTertiary,
                             fontSize = 10.sp,
@@ -374,8 +374,8 @@ fun AntivirusApp() {
                 Text(
                     tr(
                         fa,
-                        "نسخه ۰٫۱٫۰ • Android • اسکن محلی و گزارش مبتنی بر شواهد. بانک تهدید تولیدی، محافظت بلادرنگ، پرداخت و چند ابزار امنیتی هنوز در دست توسعه هستند.",
-                        "Version 0.1.0 • Android • Local scanning and evidence-based reports. Production threat intelligence, real-time protection, billing and several security tools are still under development."
+                        "نسخه \${BuildConfig.VERSION_NAME} • Android • اسکن محلی و گزارش مبتنی بر شواهد. بانک تهدید تولیدی، محافظت بلادرنگ، پرداخت و چند ابزار امنیتی هنوز در دست توسعه هستند.",
+                        "Version \${BuildConfig.VERSION_NAME} • Android • Local scanning and evidence-based reports. Production threat intelligence, real-time protection, billing and several security tools are still under development."
                     ),
                     color = TextSecondary
                 )
@@ -525,7 +525,7 @@ private fun DashboardScreen(
             ) {
                 EyebrowLabel(tr(fa, "نمای کلی دستگاه", "DEVICE OVERVIEW"))
                 StatusBadge(
-                    text = tr(fa, "نسخه ۰٫۱٫۰", "VERSION 0.1.0"),
+                    text = tr(fa, "نسخه \${BuildConfig.VERSION_NAME}", "VERSION \${BuildConfig.VERSION_NAME}"),
                     tint = TextTertiary
                 )
             }
