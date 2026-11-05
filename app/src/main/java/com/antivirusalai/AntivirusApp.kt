@@ -74,6 +74,7 @@ import com.antivirusalai.engine.FolderScanItem
 import com.antivirusalai.engine.DeviceScanEngine
 import com.antivirusalai.engine.FolderScanReport
 import com.antivirusalai.engine.EvidenceSeverity
+import com.antivirusalai.engine.CodeIssueSeverity
 import com.antivirusalai.engine.ScanResult
 import com.antivirusalai.engine.ScanVerdict
 import com.antivirusalai.remediation.QuarantineManager
@@ -1735,6 +1736,18 @@ private fun BatchScanSummaryCard(
                 MetricMini(Modifier.weight(1f), tr(fa, "مشکوک", "Suspicious"), report.suspiciousCount.toString())
                 MetricMini(Modifier.weight(1f), tr(fa, "نامشخص", "Unknown"), report.unknownCount.toString())
             }
+            if (report.codeAnalyzedCount > 0) {
+                Text(
+                    tr(
+                        fa,
+                        "تحلیل ایستای کد: ${report.codeAnalyzedCount} فایل • ${report.codeIssueCount} یافته",
+                        "Static code analysis: ${report.codeAnalyzedCount} files • ${report.codeIssueCount} findings"
+                    ),
+                    color = if (report.codeIssueCount > 0) ColorWarning else BrandBlue,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
             Text(
                 tr(
                     fa,
@@ -1906,6 +1919,8 @@ private fun ScanResultCard(
                 }
             }
 
+            result.codeAnalysis?.let { CodeAnalysisPanel(it, fa) }
+
             Text(tr(fa, "شواهد بررسی", "Review evidence"), color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 14.sp)
             result.evidence.forEach { item ->
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Top) {
@@ -1927,32 +1942,135 @@ private fun ScanResultCard(
                 }
             }
 
-            Button(
-                onClick = onQuarantine,
-                enabled = !quarantining,
-                modifier = Modifier.fillMaxWidth().height(49.dp),
-                shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = BrandTeal, contentColor = AppBackground)
-            ) {
+            if (result.codeAnalysis == null) {
+                Button(
+                    onClick = onQuarantine,
+                    enabled = !quarantining,
+                    modifier = Modifier.fillMaxWidth().height(49.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = BrandTeal, contentColor = AppBackground)
+                ) {
+                    Text(
+                        if (quarantining) tr(fa, "در حال ذخیره…", "Saving…")
+                        else tr(fa, "ذخیره نسخه رمزنگاری‌شده", "Save encrypted copy"),
+                        fontWeight = FontWeight.Bold
+                    )
+                }
                 Text(
-                    if (quarantining) tr(fa, "در حال ذخیره…", "Saving…")
-                    else tr(fa, "ذخیره نسخه رمزنگاری‌شده", "Save encrypted copy"),
-                    fontWeight = FontWeight.Bold
+                    tr(
+                        fa,
+                        "این عملیات فایل اصلی را حذف یا غیرفعال نمی‌کند؛ فقط یک نسخه رمزنگاری‌شده در فضای خصوصی برنامه می‌سازد.",
+                        "This does not delete or disable the original. It creates an encrypted copy in private app storage."
+                    ),
+                    color = TextTertiary,
+                    fontSize = 10.sp,
+                    lineHeight = 15.sp
+                )
+            }
+            OutlinedButton(onClick = onClear, modifier = Modifier.fillMaxWidth()) {
+                Text(tr(fa, "پاک کردن گزارش از صفحه", "Clear report from screen"))
+            }
+        }
+    }
+}
+
+@Composable
+private fun CodeAnalysisPanel(
+    report: com.antivirusalai.engine.CodeAnalysisReport,
+    fa: Boolean
+) {
+    Card(
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = SurfaceRaised)
+    ) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+            Text(
+                tr(fa, "گزارش تحلیل کد", "Source-code analysis"),
+                color = TextPrimary,
+                fontWeight = FontWeight.Bold,
+                fontSize = 14.sp
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                MetricMini(
+                    Modifier.weight(1f),
+                    tr(fa, "زبان", "Language"),
+                    report.language
+                )
+                MetricMini(
+                    Modifier.weight(1f),
+                    tr(fa, "خطوط", "Lines"),
+                    report.lineCount.toString()
+                )
+                MetricMini(
+                    Modifier.weight(1f),
+                    tr(fa, "یافته‌ها", "Findings"),
+                    report.diagnostics.size.toString()
+                )
+            }
+            if (!report.completed) {
+                InfoBanner(
+                    tr(fa, "تحلیل ناقص", "Analysis incomplete"),
+                    if (fa) report.limitationFa.orEmpty() else report.limitationEn.orEmpty(),
+                    warning = true
+                )
+            }
+            report.diagnostics.take(40).forEach { finding ->
+                val tint = when (finding.severity) {
+                    CodeIssueSeverity.ERROR, CodeIssueSeverity.HIGH -> ColorWarning
+                    CodeIssueSeverity.MEDIUM -> BrandBlue
+                    CodeIssueSeverity.LOW, CodeIssueSeverity.INFO -> TextTertiary
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            if (fa) finding.titleFa else finding.titleEn,
+                            color = TextPrimary,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.weight(1f)
+                        )
+                        StatusBadge(
+                            "${finding.line}:${finding.column}",
+                            tint
+                        )
+                    }
+                    Text(
+                        if (fa) finding.detailFa else finding.detailEn,
+                        color = TextSecondary,
+                        fontSize = 10.sp,
+                        lineHeight = 15.sp
+                    )
+                    Text(
+                        finding.ruleId + " • " + finding.severity.name,
+                        color = tint,
+                        fontSize = 9.sp
+                    )
+                }
+                if (finding != report.diagnostics.take(40).lastOrNull()) {
+                    androidx.compose.material3.HorizontalDivider(color = TextTertiary.copy(alpha = 0.2f))
+                }
+            }
+            if (report.diagnostics.size > 40) {
+                Text(
+                    tr(fa, "۴۰ یافته اول نمایش داده شده‌اند.", "Showing the first 40 findings."),
+                    color = TextTertiary,
+                    fontSize = 10.sp
                 )
             }
             Text(
                 tr(
                     fa,
-                    "این عملیات فایل اصلی را حذف یا غیرفعال نمی‌کند؛ فقط یک نسخه رمزنگاری‌شده در فضای خصوصی برنامه می‌سازد.",
-                    "This does not delete or disable the original. It creates an encrypted copy in private app storage."
+                    "این تحلیل ایستا و مبتنی بر قواعد است؛ کد اجرا یا خودکار اصلاح نمی‌شود. نبود یافته به معنی نبود همه خطاها یا آسیب‌پذیری‌ها نیست.",
+                    "This is rule-based static analysis. Code is not executed or automatically modified. No findings does not mean all bugs or vulnerabilities are absent."
                 ),
                 color = TextTertiary,
                 fontSize = 10.sp,
                 lineHeight = 15.sp
             )
-            OutlinedButton(onClick = onClear, modifier = Modifier.fillMaxWidth()) {
-                Text(tr(fa, "پاک کردن گزارش از صفحه", "Clear report from screen"))
-            }
         }
     }
 }
@@ -2006,6 +2124,18 @@ private fun SecurityToolsScreen(
             status = tr(fa, "پایه‌ای فعال", "BASIC"),
             tint = BrandTeal,
             onClick = { onFeature("quarantine") }
+        )
+        ToolModuleCard(
+            icon = "file",
+            title = tr(fa, "تحلیل و عیب‌یابی کد", "Code inspection"),
+            description = tr(
+                fa,
+                "فایل‌های کد قابل‌دسترسی را در اسکن سریع و عمیق از نظر ساختار، اسرار ثابت و چند الگوی ناامن بررسی کن.",
+                "Static checks for accessible source files, including structure, embedded secrets and selected risky patterns."
+            ),
+            status = tr(fa, "فعال • تحلیل ایستا", "ACTIVE • STATIC"),
+            tint = BrandBlue,
+            onClick = onOpenScan
         )
         ToolModuleCard(
             icon = "shield",
@@ -2626,6 +2756,9 @@ private fun verdictBadge(verdict: ScanVerdict, fa: Boolean): String = when (verd
     ScanVerdict.NO_KNOWN_INDICATOR -> tr(fa, "بدون تطبیق", "NO MATCH")
     ScanVerdict.UNKNOWN_APK -> tr(fa, "نامشخص", "UNKNOWN")
     ScanVerdict.UNSUPPORTED_FILE -> tr(fa, "تحلیل محدود", "LIMITED ANALYSIS")
+    ScanVerdict.CODE_ANALYZED -> tr(fa, "کد بررسی شد", "CODE CHECKED")
+    ScanVerdict.CODE_ISSUES_FOUND -> tr(fa, "یافته کد", "CODE FINDINGS")
+    ScanVerdict.CODE_ANALYSIS_LIMITED -> tr(fa, "تحلیل ناقص", "LIMITED CODE")
 }
 
 private fun verdictTitle(verdict: ScanVerdict, fa: Boolean): String = when (verdict) {
@@ -2634,6 +2767,9 @@ private fun verdictTitle(verdict: ScanVerdict, fa: Boolean): String = when (verd
     ScanVerdict.NO_KNOWN_INDICATOR -> tr(fa, "نشانگر شناخته‌شده‌ای پیدا نشد", "No known indicator found")
     ScanVerdict.UNKNOWN_APK -> tr(fa, "نتیجه نامشخص", "Unknown result")
     ScanVerdict.UNSUPPORTED_FILE -> tr(fa, "بررسی هش انجام شد؛ تحلیل محتوایی این قالب هنوز فعال نیست", "Hash checked; format analysis is not available yet")
+    ScanVerdict.CODE_ANALYZED -> tr(fa, "تحلیل ایستای کد انجام شد", "Static code analysis completed")
+    ScanVerdict.CODE_ISSUES_FOUND -> tr(fa, "یافته‌هایی در کد پیدا شد", "Code findings detected")
+    ScanVerdict.CODE_ANALYSIS_LIMITED -> tr(fa, "تحلیل کد کامل نشد", "Code analysis was limited")
 }
 
 private fun verdictDescription(verdict: ScanVerdict, fa: Boolean): String = when (verdict) {
@@ -2642,6 +2778,9 @@ private fun verdictDescription(verdict: ScanVerdict, fa: Boolean): String = when
     ScanVerdict.NO_KNOWN_INDICATOR -> tr(fa, "هیچ نشانگر موجود در نسخه فعلی با فایل تطبیق نکرد. این نتیجه تضمین پاک بودن نیست.", "No indicator in this MVP matched. This does not guarantee that the file is safe.")
     ScanVerdict.UNKNOWN_APK -> tr(fa, "اطلاعات APK قابل خواندن نبود؛ از اعلام پاک بودن خودداری می‌کنیم.", "APK metadata could not be read; the file is not declared clean.")
     ScanVerdict.UNSUPPORTED_FILE -> tr(fa, "هش SHA-256 فایل محاسبه و با نشانگرهای محلی فعلی مقایسه شد، اما موتور هنوز ساختار و محتوای این قالب را تحلیل نمی‌کند. بنابراین نتیجه ناشناخته است و به معنی پاک بودن فایل نیست.", "The SHA-256 hash was calculated and checked against the current local indicators, but this engine does not yet inspect this format’s structure or contents. The result is unknown, not a clean verdict.")
+    ScanVerdict.CODE_ANALYZED -> tr(fa, "قواعد ایستای فعلی یافته مهمی پیدا نکردند؛ این نتیجه صحت کامل، نبود خطای منطقی یا امن‌بودن کد را ثابت نمی‌کند.", "The current static rules found no actionable issue; this does not prove correctness, absence of logic bugs, or security.")
+    ScanVerdict.CODE_ISSUES_FOUND -> tr(fa, "گزارش شامل خطاهای ساختاری یا الگوهای نیازمند بازبینی است. یافته‌های ایستا به‌تنهایی اثبات آسیب‌پذیری یا بدافزار نیستند.", "The report contains structural errors or patterns that need review. Static findings alone do not prove exploitability or malware.")
+    ScanVerdict.CODE_ANALYSIS_LIMITED -> tr(fa, "محدودیت اندازه یا خوانایی اجازه تحلیل کامل نداد؛ فقط هش فایل بررسی شد.", "A size or decoding limit prevented full code analysis; only the file hash was checked.")
 }
 
 private fun verdictColor(verdict: ScanVerdict): Color = when (verdict) {
@@ -2649,7 +2788,9 @@ private fun verdictColor(verdict: ScanVerdict): Color = when (verdict) {
     ScanVerdict.SUSPICIOUS -> ColorWarning
     ScanVerdict.NO_KNOWN_INDICATOR -> ColorSuccess
     ScanVerdict.UNKNOWN_APK -> ColorWarning
-    ScanVerdict.UNSUPPORTED_FILE -> TextTertiary
+    ScanVerdict.UNSUPPORTED_FILE, ScanVerdict.CODE_ANALYSIS_LIMITED -> TextTertiary
+    ScanVerdict.CODE_ANALYZED -> BrandBlue
+    ScanVerdict.CODE_ISSUES_FOUND -> ColorWarning
 }
 
 private fun featureTitle(fa: Boolean, feature: String): String = when (feature) {
