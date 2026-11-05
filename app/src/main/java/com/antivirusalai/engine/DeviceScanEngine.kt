@@ -20,9 +20,8 @@ import java.io.File
  */
 object DeviceScanEngine {
     private const val QUICK_FILE_LIMIT = 350
-    private const val DEEP_FILE_LIMIT = 2500
-    private const val MAX_TOTAL_BYTES = 2L * 1024L * 1024L * 1024L
-    private const val MAX_DEPTH = 32
+    private const val QUICK_TOTAL_BYTES = 1024L * 1024L * 1024L
+    private const val MAX_DEPTH = 64
     private val QUICK_DIRECTORIES = listOf(
         "Download", "Documents", "Bluetooth", "DCIM",
         "Pictures", "Movies", "Music", "Android/media"
@@ -43,7 +42,7 @@ object DeviceScanEngine {
         val roots = findStorageRoots(context)
         val failures = mutableListOf<FolderScanFailure>()
         val candidates = linkedMapOf<String, File>()
-        val maxFiles = if (deep) DEEP_FILE_LIMIT else QUICK_FILE_LIMIT
+        val maxFiles = if (deep) Int.MAX_VALUE else QUICK_FILE_LIMIT
 
         fun addCandidate(file: File) {
             if (candidates.size >= maxFiles || !file.isFile || !file.canRead()) return
@@ -105,6 +104,10 @@ object DeviceScanEngine {
         val items = mutableListOf<FolderScanItem>()
         var skipped = 0
         var totalBytes = 0L
+        var scannedCount = 0
+        var suspiciousCount = 0
+        var unknownCount = 0
+        var matchedCount = 0
         val list = candidates.values.toList()
         for ((index, file) in list.withIndex()) {
             currentCoroutineContext().ensureActive()
@@ -114,7 +117,7 @@ object DeviceScanEngine {
                 failures += FolderScanFailure(file.name, "File exceeds the 200 MB per-file limit.")
                 continue
             }
-            if (declaredSize > 0 && totalBytes + declaredSize > MAX_TOTAL_BYTES) {
+            if (!deep && declaredSize > 0 && totalBytes + declaredSize > QUICK_TOTAL_BYTES) {
                 skipped++
                 failures += FolderScanFailure(file.name, "The 2 GB scan data limit was reached.")
                 continue
@@ -123,10 +126,17 @@ object DeviceScanEngine {
             try {
                 val result = ScanEngine.scan(context.applicationContext, Uri.fromFile(file))
                 totalBytes += result.sizeBytes
-                items += FolderScanItem(Uri.fromFile(file), result)
-                if (totalBytes >= MAX_TOTAL_BYTES) {
+                scannedCount++
+                when (result.verdict) {
+                    ScanVerdict.SUSPICIOUS -> suspiciousCount++
+                    ScanVerdict.UNKNOWN_APK, ScanVerdict.UNSUPPORTED_FILE -> unknownCount++
+                    ScanVerdict.TEST_MARKER_MATCH -> matchedCount++
+                    ScanVerdict.NO_KNOWN_INDICATOR -> Unit
+                }
+                if (items.size < 60) items += FolderScanItem(Uri.fromFile(file), result)
+                if (!deep && totalBytes >= QUICK_TOTAL_BYTES) {
                     skipped += list.size - index - 1
-                    failures += FolderScanFailure("Remaining files", "Stopped at the 2 GB data limit.")
+                    failures += FolderScanFailure("Remaining files", "Stopped at the 1 GB quick-scan data limit.")
                     break
                 }
             } catch (cancelled: kotlinx.coroutines.CancellationException) {
@@ -136,12 +146,11 @@ object DeviceScanEngine {
             }
         }
 
-        val truncated = candidates.size >= maxFiles
+        val truncated = !deep && candidates.size >= maxFiles
         if (truncated) {
             failures += FolderScanFailure(
                 "Scan limit",
-                if (deep) "The 2,500-file deep-scan limit was reached."
-                else "The 350-file quick-scan limit was reached."
+                "The 350-file quick-scan limit was reached."
             )
         }
         FolderScanReport(
@@ -149,7 +158,11 @@ object DeviceScanEngine {
             failures = failures,
             discoveredFiles = list.size,
             skippedFiles = skipped,
-            truncated = truncated
+            truncated = truncated,
+            scannedCountOverride = scannedCount,
+            suspiciousCountOverride = suspiciousCount,
+            unknownCountOverride = unknownCount,
+            matchedCountOverride = matchedCount
         )
     }
 
