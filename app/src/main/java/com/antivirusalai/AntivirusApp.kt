@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.matchParentSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -973,7 +972,7 @@ private fun FantasyGuardianIllustration(modifier: Modifier = Modifier) {
         val sx = size.width / 142f
         val sy = size.height / 154f
         fun p(x: Float, y: Float) = Offset(x * sx, y * sy)
-        fun rect(x: Float, y: Float, width: Float, height: Float) = Size(width * sx, height * sy)
+        fun rect(width: Float, height: Float) = Size(width * sx, height * sy)
         val glowCenter = p(72f, 76f)
         drawCircle(
             brush = Brush.radialGradient(
