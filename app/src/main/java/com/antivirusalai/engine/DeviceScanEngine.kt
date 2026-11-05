@@ -122,7 +122,11 @@ object DeviceScanEngine {
                 failures += FolderScanFailure(file.name, "The 2 GB scan data limit was reached.")
                 continue
             }
-            onProgress(index + 1, list.size, file.name)
+            if (index == 0 || index % 5 == 0 || index == list.lastIndex) {
+                withContext(Dispatchers.Main.immediate) {
+                    onProgress(index + 1, list.size, file.name)
+                }
+            }
             try {
                 val result = ScanEngine.scan(context.applicationContext, Uri.fromFile(file))
                 totalBytes += result.sizeBytes
