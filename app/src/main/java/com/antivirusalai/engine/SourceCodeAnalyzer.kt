@@ -367,7 +367,7 @@ object SourceCodeAnalyzer {
                 "نشانی HTTP پیدا شد. برای داده حساس از HTTPS استفاده کن؛ استثناهای localhost باید جداگانه بررسی شوند.",
                 "An HTTP URL was found. Use HTTPS for sensitive traffic; localhost exceptions should be reviewed separately.",
                 CodeIssueSeverity.MEDIUM,
-                Regex("""http://(?!localhost(?::\d+)?(?:/|$)|127\.0\.0\.1(?::\d+)?(?:/|$)|10\.0\.2\.2(?::\d+)?(?:/|$))""", RegexOption.IGNORE_CASE)
+                Regex("""http://(?!(?:localhost(?::\d+)?(?:/|$)|127\.0\.0\.1(?::\d+)?(?:/|$)|10\.0\.2\.2(?::\d+)?(?:/|$)|schemas\.android\.com/|www\.w3\.org/|xml\.org/))""", RegexOption.IGNORE_CASE)
             ),
             Rule(
                 "DYNAMIC_CODE_EXECUTION",
