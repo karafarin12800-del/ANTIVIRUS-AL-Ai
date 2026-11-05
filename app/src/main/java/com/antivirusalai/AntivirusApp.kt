@@ -323,6 +323,86 @@ fun AntivirusApp() {
                             )
                         }
                     }
+                    Canvas(modifier = Modifier.fillMaxSize()) {
+                        val w = size.width
+                        val h = size.height
+                        val horizonY = h * 0.805f
+
+                        // Soft nebula glow and a distant planetary horizon.
+                        drawCircle(
+                            brush = Brush.radialGradient(
+                                colors = listOf(
+                                    Color(0xFFB98BFF).copy(alpha = 0.13f),
+                                    Color(0xFF7C55C4).copy(alpha = 0.045f),
+                                    Color.Transparent
+                                ),
+                                center = Offset(w * 0.5f, horizonY),
+                                radius = w * 0.9f
+                            ),
+                            radius = w * 0.9f,
+                            center = Offset(w * 0.5f, horizonY)
+                        )
+                        drawOval(
+                            brush = Brush.verticalGradient(
+                                colors = listOf(
+                                    Color(0xFFB68AFF).copy(alpha = 0.16f),
+                                    Color(0xFF5A3A91).copy(alpha = 0.035f),
+                                    Color.Transparent
+                                ),
+                                startY = horizonY - h * 0.035f,
+                                endY = horizonY + h * 0.13f
+                            ),
+                            topLeft = Offset(-w * 0.18f, horizonY - h * 0.035f),
+                            size = Size(w * 1.36f, h * 0.23f)
+                        )
+                        drawOval(
+                            color = Color(0xFFD5B8FF).copy(alpha = 0.25f),
+                            topLeft = Offset(-w * 0.16f, horizonY - h * 0.025f),
+                            size = Size(w * 1.32f, h * 0.22f),
+                            style = Stroke(width = 1.25f)
+                        )
+
+                        // Minimal orbital platform at the bottom, matching the supplied wallpaper.
+                        val platformY = h * 0.925f
+                        drawOval(
+                            brush = Brush.radialGradient(
+                                colors = listOf(
+                                    Color(0xFFB58AFF).copy(alpha = 0.12f),
+                                    Color(0xFF8B5BCB).copy(alpha = 0.045f),
+                                    Color.Transparent
+                                ),
+                                center = Offset(w * 0.5f, platformY),
+                                radius = w * 0.62f
+                            ),
+                            topLeft = Offset(w * 0.02f, platformY - h * 0.045f),
+                            size = Size(w * 0.96f, h * 0.11f)
+                        )
+                        drawOval(
+                            color = Color(0xFFC7A2FF).copy(alpha = 0.42f),
+                            topLeft = Offset(w * 0.09f, platformY - h * 0.035f),
+                            size = Size(w * 0.82f, h * 0.075f),
+                            style = Stroke(width = 2.2f)
+                        )
+                        drawOval(
+                            color = Color(0xFF9C6CEB).copy(alpha = 0.24f),
+                            topLeft = Offset(w * 0.16f, platformY - h * 0.021f),
+                            size = Size(w * 0.68f, h * 0.047f),
+                            style = Stroke(width = 1.1f)
+                        )
+                        drawLine(
+                            brush = Brush.horizontalGradient(
+                                listOf(Color.Transparent, Color(0xFFDCC7FF).copy(alpha = 0.48f), Color.Transparent)
+                            ),
+                            start = Offset(w * 0.12f, platformY + h * 0.038f),
+                            end = Offset(w * 0.88f, platformY + h * 0.038f),
+                            strokeWidth = 1f
+                        )
+                        drawCircle(
+                            color = Color(0xFFE3D1FF).copy(alpha = 0.48f),
+                            radius = 2.2f,
+                            center = Offset(w * 0.5f, platformY - h * 0.035f)
+                        )
+                    }
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
