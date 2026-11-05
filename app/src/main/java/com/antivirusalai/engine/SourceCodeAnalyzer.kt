@@ -482,7 +482,8 @@ object SourceCodeAnalyzer {
 
         for (rule in rules) {
             if (rule.extensions != null && extension !in rule.extensions) continue
-            for (match in rule.expression.findAll(codeOnly).take(5)) {
+            val scanText = if (rule.id == "TODO_OR_FIXME") source else codeOnly
+            for (match in rule.expression.findAll(scanText).take(5)) {
                 if (rule.id == "HARDCODED_SECRET") {
                     val value = match.groupValues.getOrNull(2).orEmpty().lowercase()
                     val placeholders = listOf("placeholder", "your_", "change_me", "changeme", "example", "dummy", "test", "xxxxxxxx")
