@@ -1,6 +1,15 @@
 package com.antivirusalai.engine
 
-enum class ScanVerdict { TEST_MARKER_MATCH, SUSPICIOUS, NO_KNOWN_INDICATOR, UNKNOWN_APK, UNSUPPORTED_FILE }
+enum class ScanVerdict {
+    TEST_MARKER_MATCH,
+    SUSPICIOUS,
+    NO_KNOWN_INDICATOR,
+    UNKNOWN_APK,
+    UNSUPPORTED_FILE,
+    CODE_ANALYZED,
+    CODE_ISSUES_FOUND,
+    CODE_ANALYSIS_LIMITED
+}
 enum class EvidenceSeverity { INFO, LOW, MEDIUM, HIGH }
 
 data class ScanEvidence(
@@ -35,5 +44,6 @@ data class ScanResult(
     val verdict: ScanVerdict,
     val evidence: List<ScanEvidence>,
     val apkMetadata: ApkMetadata?,
-    val durationMillis: Long
+    val durationMillis: Long,
+    val codeAnalysis: CodeAnalysisReport? = null
 )
