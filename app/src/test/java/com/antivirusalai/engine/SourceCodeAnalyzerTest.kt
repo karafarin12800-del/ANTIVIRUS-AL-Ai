@@ -118,6 +118,15 @@ class SourceCodeAnalyzerTest {
     }
 
     @Test
+    fun doesNotTreatAndroidManifestNamespaceAsCleartextTraffic() {
+        val report = SourceCodeAnalyzer.analyze(
+            "AndroidManifest.xml",
+            "<manifest xmlns:android=\"http://schemas.android.com/apk/res/android\"></manifest>"
+        )
+        assertFalse(report!!.diagnostics.any { it.ruleId == "CLEARTEXT_HTTP" })
+    }
+
+    @Test
     fun oversizedSourceReturnsExplicitLimitedReport() {
         val report = SourceCodeAnalyzer.limitedReport("large.kt")
         assertNotNull(report)
