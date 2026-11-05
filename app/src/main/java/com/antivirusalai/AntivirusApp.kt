@@ -624,7 +624,7 @@ private fun DashboardScreen(
                 StatusCard(
                     modifier = Modifier.weight(1f),
                     icon = "scan",
-                    title = tr(fa, "اسکن محلی", "Local scan"),
+                    title = tr(fa, "اسکن دستگاه", "Device scan"),
                     value = tr(fa, "آماده", "Ready"),
                     detail = tr(fa, "حافظه و فایل‌ها", "Selected files & APK"),
                     tint = BrandTeal
@@ -1104,7 +1104,7 @@ private fun ScanCenterScreen(
             EyebrowLabel(tr(fa, "تحلیل محلی", "ON-DEVICE ANALYSIS"))
             Text(tr(fa, "مرکز اسکن", "Scan center"), color = TextPrimary, fontSize = 25.sp, fontWeight = FontWeight.Bold)
             Text(
-                tr(fa, "یک پوشه را فقط یک‌بار انتخاب کن؛ فایل‌های داخل آن خودکار و پشت‌سرهم بررسی می‌شوند.", "No folder picker. Choose quick or deep scan to inspect accessible device storage automatically."),
+                tr(fa, "بدون انتخاب پوشه؛ اسکن سریع یا عمیق را انتخاب کن تا فایل‌های قابل‌دسترسی خودکار بررسی شوند.", "No folder picker. Choose quick or deep scan to inspect accessible device storage automatically."),
                 color = TextSecondary,
                 fontSize = 12.sp
             )
@@ -1113,26 +1113,27 @@ private fun ScanCenterScreen(
         ScanModeCard(
             icon = "file",
             title = tr(fa, "اسکن سریع", "Quick scan"),
-            description = tr(fa, "با انتخاب یک پوشه، فایل‌های داخل آن و زیرپوشه‌ها به‌صورت گروهی اسکن می‌شوند.", "Select one folder to scan its files and subfolders in a batch."),
+            description = tr(fa, "مسیرهای رایج مثل دانلودها، اسناد، تصاویر و رسانه‌ها سریع بررسی می‌شوند.", "Quickly checks common locations such as Downloads, Documents, photos and media."),
             tag = tr(fa, "قابل استفاده", "AVAILABLE"),
             enabled = !scanning,
             onClick = onFileScan
         )
         ScanModeCard(
             icon = "apk",
-            title = tr(fa, "تحلیل ایستای APK", "Static APK analysis"),
-            description = tr(fa, "تمام فایل‌های قابل‌دسترسی در حافظه اشتراکی و بسته‌های APK برنامه‌های نصب‌شده بررسی می‌شوند.", "Inspect accessible shared-storage files and APK archives for installed apps."),
+            title = tr(fa, "اسکن عمیق", "Deep scan"),
+            description = tr(fa, "کل حافظه اشتراکیِ قابل‌دسترسی، فایل‌های پنهانِ قابل‌خواندن و APK برنامه‌های نصب‌شده بررسی می‌شوند.", "Checks accessible shared storage, readable hidden files and installed-app APK archives."),
             tag = tr(fa, "قابل استفاده", "AVAILABLE"),
             enabled = !scanning,
             onClick = onApkScan
         )
-        ScanModeCard(
-            icon = "device",
-            title = tr(fa, "محدودیت دسترسی Android", "Android access limits"),
-            description = tr(fa, "Android اجازه دسترسی به داده خصوصی برنامه‌های دیگر، Android/data و Android/obb را نمی‌دهد.", "Android blocks access to other apps' private data, Android/data and Android/obb."),
-            tag = tr(fa, "در حال توسعه", "IN DEVELOPMENT"),
-            enabled = false,
-            onClick = {}
+        InfoBanner(
+            title = tr(fa, "محدودیت واقعی Android", "Android access boundary"),
+            body = tr(
+                fa,
+                "برای اسکن خودکار باید اجازه «مدیریت همه فایل‌ها» را در تنظیمات فعال کنی. حتی با این اجازه، Android داده خصوصی برنامه‌های دیگر و پوشه‌های Android/data و Android/obb را در اختیار این برنامه نمی‌گذارد.",
+                "Automatic scanning requires All files access in Android settings. Even then, Android blocks other apps' private data and the Android/data and Android/obb directories."
+            ),
+            warning = true
         )
 
         if (scanning) {
@@ -1150,7 +1151,7 @@ private fun ScanCenterScreen(
                         color = BrandTeal,
                         trackColor = BrandTeal.copy(alpha = 0.13f)
                     )
-                    Text(batchProgress ?: tr(fa, "فایل‌ها بدون نصب یا اجرا بررسی می‌شوند.", "Files are inspected without installation or execution."), color = TextSecondary, fontSize = 11.sp)
+                    Text(batchProgress ?: tr(fa, "فایل‌ها و APKها بدون نصب یا اجرا بررسی می‌شوند.", "Files and APKs are inspected without installation or execution."), color = TextSecondary, fontSize = 11.sp)
                 }
             }
         }
