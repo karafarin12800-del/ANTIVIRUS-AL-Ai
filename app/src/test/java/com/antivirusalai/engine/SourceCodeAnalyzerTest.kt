@@ -92,7 +92,8 @@ class SourceCodeAnalyzerTest {
 
     @Test
     fun rejectsBinaryLikeSourceContent() {
-        val report = SourceCodeAnalyzer.analyze("not-really-code.kt", "fun main() {\u0000\u0001}")
+        val binaryLike = "fun main() {" + 0.toChar() + 1.toChar() + "}"
+        val report = SourceCodeAnalyzer.analyze("not-really-code.kt", binaryLike)
         assertNotNull(report)
         assertFalse(report!!.completed)
         assertTrue(report.limitationEn.orEmpty().contains("NUL"))
