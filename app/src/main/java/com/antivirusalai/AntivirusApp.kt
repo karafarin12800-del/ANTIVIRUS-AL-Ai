@@ -728,8 +728,8 @@ private fun DashboardScreen(
                 QuickActionCard(
                     modifier = Modifier.weight(1f),
                     icon = "apk",
-                    title = tr(fa, "تحلیل APK", "APK analysis"),
-                    caption = tr(fa, "مجوزها و امضا", "Permissions & signer"),
+                    title = tr(fa, "اسکن عمیق", "Deep scan"),
+                    caption = tr(fa, "حافظه و برنامه‌ها", "Storage & apps"),
                     onClick = onApkScan
                 )
             }
@@ -755,7 +755,7 @@ private fun DashboardScreen(
                     modifier = Modifier.weight(1f),
                     icon = "shield",
                     title = tr(fa, "آسیب‌پذیری", "Vulnerability"),
-                    subtitle = tr(fa, "اسکن عمیق", "Deep scan"),
+                    subtitle = tr(fa, "تحلیل APK", "APK intelligence"),
                     status = tr(fa, "در توسعه", "In progress"),
                     tint = ColorWarning
                 )
@@ -2185,7 +2185,7 @@ private fun featureDescription(fa: Boolean, feature: String): String = when (fea
     "network" -> tr(fa, "محافظ شبکه هنوز فعال نیست. پیاده‌سازی آن به طراحی شفاف DNS/VPN محلی و بررسی سیاست‌های Android و Google Play نیاز دارد.", "Network protection is not active. Implementation requires transparent local DNS/VPN design and Android/Google Play policy review.")
     "brain" -> tr(fa, "فعلاً گزارش بر اساس قواعد محدود و شواهد قابل مشاهده ساخته می‌شود. امتیازدهی چندموتوره و تحلیل AI هنوز به موتور اسکن وصل نشده است.", "Reports currently use limited, visible rules and evidence. Multi-engine scoring and AI reasoning are not yet connected to the scanner.")
     "selfdefense" -> tr(fa, "برنامه از تنظیمات پایه مانند غیرفعال‌بودن cleartext و backup استفاده می‌کند. پایش یکپارچگی زمان اجرا و دفاع در برابر دست‌کاری هنوز نیازمند توسعه و آزمون است.", "The app uses baseline controls such as disabled cleartext traffic and backup. Runtime integrity and anti-tamper monitoring still require implementation and testing.")
-    "permissions" -> tr(fa, "اسکن سریع از انتخاب‌گر رسمی Android استفاده می‌کند. در این نسخه مجوز اسکن کامل برنامه‌های نصب‌شده، Accessibility، روت یا دسترسی به داده خصوصی برنامه‌های دیگر درخواست نمی‌شود.", "Quick scanning uses Android's document picker. This build does not request broad installed-app inventory, Accessibility, root or access to other apps' private data.")
+    "permissions" -> tr(fa, "اسکن سریع مسیرهای رایج حافظه را بررسی می‌کند. اسکن عمیق با اجازه مدیریت همه فایل‌ها، حافظه اشتراکی و APK برنامه‌های نصب‌شده را بررسی می‌کند؛ داده خصوصی برنامه‌های دیگر، Android/data و Android/obb قابل‌دسترسی نیستند.", "Quick scan checks common storage locations. Deep scan uses user-approved All files access to inspect shared storage and installed-app APKs; other apps’ private data, Android/data and Android/obb remain inaccessible.")
     else -> tr(fa, "کانال پشتیبانی رسمی پیش از عرضه عمومی اضافه می‌شود. در این نسخه نشانی پشتیبانی تأییدشده‌ای تعریف نشده است.", "An official support channel will be added before public release. No verified support address is configured in this build.")
 }
 
