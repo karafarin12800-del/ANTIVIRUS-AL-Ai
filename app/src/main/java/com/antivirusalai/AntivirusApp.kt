@@ -33,6 +33,11 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -74,6 +79,7 @@ import com.antivirusalai.engine.FolderScanItem
 import com.antivirusalai.engine.DeviceScanEngine
 import com.antivirusalai.engine.FolderScanReport
 import com.antivirusalai.engine.EvidenceSeverity
+import com.antivirusalai.engine.CodeIssueSeverity
 import com.antivirusalai.engine.ScanResult
 import com.antivirusalai.engine.ScanVerdict
 import com.antivirusalai.remediation.QuarantineManager
@@ -113,6 +119,7 @@ fun AntivirusApp() {
     var scanResult by remember { mutableStateOf<ScanResult?>(null) }
     var batchReport by remember { mutableStateOf<FolderScanReport?>(null) }
     var batchProgress by remember { mutableStateOf<String?>(null) }
+    var scanProgress by remember { mutableStateOf<Float?>(null) }
     var pendingDeepScan by remember { mutableStateOf(false) }
     var deviceScanDeep by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
@@ -143,11 +150,8 @@ fun AntivirusApp() {
         selectedUri = null
         scanResult = null
         batchReport = null
-        batchProgress = tr(
-            fa,
-            "در حال آماده‌سازی فهرست فایل‌ها و برنامه‌های نصب‌شده…",
-            "Preparing the file and installed-app inventory…"
-        )
+        batchProgress = tr(fa, "در حال آماده‌سازی اسکن…", "Preparing scan…")
+        scanProgress = null
         errorMessage = null
         notice = null
         activeTab = MainTab.SCAN.key
@@ -156,8 +160,15 @@ fun AntivirusApp() {
                 batchReport = DeviceScanEngine.scanDevice(
                     context.applicationContext,
                     deep
-                ) { current, total, name ->
-                    batchProgress = "$current / $total  •  $name"
+                ) { current, total, _ ->
+                    scanProgress = if (total > 0) {
+                        (current.toFloat() / total.toFloat()).coerceIn(0f, 1f)
+                    } else null
+                    batchProgress = if (total > 0) {
+                        tr(fa, "بررسی $current از $total فایل", "$current of $total files checked")
+                    } else {
+                        tr(fa, "در حال آماده‌سازی فهرست فایل‌ها…", "Preparing file inventory…")
+                    }
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled
@@ -165,6 +176,7 @@ fun AntivirusApp() {
                 errorMessage = error.message
                     ?: tr(fa, "اسکن حافظه دستگاه انجام نشد.", "Device scan could not be completed.")
             } finally {
+                if (batchReport != null && errorMessage == null) scanProgress = 1f
                 scanning = false
                 batchProgress = null
             }
@@ -311,6 +323,86 @@ fun AntivirusApp() {
                             )
                         }
                     }
+                    Canvas(modifier = Modifier.fillMaxSize()) {
+                        val w = size.width
+                        val h = size.height
+                        val horizonY = h * 0.805f
+
+                        // Soft nebula glow and a distant planetary horizon.
+                        drawCircle(
+                            brush = Brush.radialGradient(
+                                colors = listOf(
+                                    Color(0xFFB98BFF).copy(alpha = 0.13f),
+                                    Color(0xFF7C55C4).copy(alpha = 0.045f),
+                                    Color.Transparent
+                                ),
+                                center = Offset(w * 0.5f, horizonY),
+                                radius = w * 0.9f
+                            ),
+                            radius = w * 0.9f,
+                            center = Offset(w * 0.5f, horizonY)
+                        )
+                        drawOval(
+                            brush = Brush.verticalGradient(
+                                colors = listOf(
+                                    Color(0xFFB68AFF).copy(alpha = 0.16f),
+                                    Color(0xFF5A3A91).copy(alpha = 0.035f),
+                                    Color.Transparent
+                                ),
+                                startY = horizonY - h * 0.035f,
+                                endY = horizonY + h * 0.13f
+                            ),
+                            topLeft = Offset(-w * 0.18f, horizonY - h * 0.035f),
+                            size = Size(w * 1.36f, h * 0.23f)
+                        )
+                        drawOval(
+                            color = Color(0xFFD5B8FF).copy(alpha = 0.25f),
+                            topLeft = Offset(-w * 0.16f, horizonY - h * 0.025f),
+                            size = Size(w * 1.32f, h * 0.22f),
+                            style = Stroke(width = 1.25f)
+                        )
+
+                        // Minimal orbital platform at the bottom, matching the supplied wallpaper.
+                        val platformY = h * 0.925f
+                        drawOval(
+                            brush = Brush.radialGradient(
+                                colors = listOf(
+                                    Color(0xFFB58AFF).copy(alpha = 0.12f),
+                                    Color(0xFF8B5BCB).copy(alpha = 0.045f),
+                                    Color.Transparent
+                                ),
+                                center = Offset(w * 0.5f, platformY),
+                                radius = w * 0.62f
+                            ),
+                            topLeft = Offset(w * 0.02f, platformY - h * 0.045f),
+                            size = Size(w * 0.96f, h * 0.11f)
+                        )
+                        drawOval(
+                            color = Color(0xFFC7A2FF).copy(alpha = 0.42f),
+                            topLeft = Offset(w * 0.09f, platformY - h * 0.035f),
+                            size = Size(w * 0.82f, h * 0.075f),
+                            style = Stroke(width = 2.2f)
+                        )
+                        drawOval(
+                            color = Color(0xFF9C6CEB).copy(alpha = 0.24f),
+                            topLeft = Offset(w * 0.16f, platformY - h * 0.021f),
+                            size = Size(w * 0.68f, h * 0.047f),
+                            style = Stroke(width = 1.1f)
+                        )
+                        drawLine(
+                            brush = Brush.horizontalGradient(
+                                listOf(Color.Transparent, Color(0xFFDCC7FF).copy(alpha = 0.48f), Color.Transparent)
+                            ),
+                            start = Offset(w * 0.12f, platformY + h * 0.038f),
+                            end = Offset(w * 0.88f, platformY + h * 0.038f),
+                            strokeWidth = 1f
+                        )
+                        drawCircle(
+                            color = Color(0xFFE3D1FF).copy(alpha = 0.48f),
+                            radius = 2.2f,
+                            center = Offset(w * 0.5f, platformY - h * 0.035f)
+                        )
+                    }
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
@@ -342,6 +434,7 @@ fun AntivirusApp() {
                                 result = scanResult,
                                 batchReport = batchReport,
                                 batchProgress = batchProgress,
+                                scanProgress = scanProgress,
                                 deviceScanDeep = deviceScanDeep,
                                 errorMessage = errorMessage,
                                 notice = notice,
@@ -1598,12 +1691,151 @@ private fun StorePromoCard(fa: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
+private fun ScanGuardianHeader(
+    fa: Boolean,
+    scanning: Boolean,
+    completed: Boolean,
+    progress: Float?,
+    progressLabel: String?
+) {
+    val pulse = rememberInfiniteTransition(label = "guardian-neon")
+    val glowAlpha by pulse.animateFloat(
+        initialValue = 0.28f,
+        targetValue = 0.88f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 850),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "guardian-glow"
+    )
+    val glowColor = if (completed) Color(0xFF43E69A) else Color(0xFFB45CFF)
+    val showPulse = scanning
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF170D29))
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Box(
+                modifier = Modifier.fillMaxWidth().height(174.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Canvas(Modifier.matchParentSize()) {
+                    val center = Offset(size.width / 2f, size.height / 2f)
+                    val alpha = if (showPulse) glowAlpha else if (completed) 0.72f else 0.28f
+                    drawCircle(
+                        brush = Brush.radialGradient(
+                            listOf(
+                                glowColor.copy(alpha = alpha * 0.48f),
+                                glowColor.copy(alpha = alpha * 0.20f),
+                                Color.Transparent
+                            ),
+                            center = center,
+                            radius = size.height * 0.49f
+                        ),
+                        radius = size.height * 0.49f,
+                        center = center
+                    )
+                    drawCircle(
+                        color = glowColor.copy(alpha = alpha * 0.52f),
+                        radius = size.height * 0.43f,
+                        center = center,
+                        style = Stroke(width = 1.4f)
+                    )
+                }
+                FantasyGuardianIllustration(
+                    Modifier.size(width = 148.dp, height = 164.dp)
+                )
+                Box(
+                    Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 4.dp)
+                        .size(12.dp)
+                        .background(glowColor, CircleShape)
+                        .border(2.dp, Color.White.copy(alpha = 0.8f), CircleShape)
+                )
+            }
+            Text(
+                when {
+                    scanning -> tr(fa, "نگهبان در حال اسکن است", "GUARDIAN SCANNING")
+                    completed -> tr(fa, "چراغ نگهبان روشن است", "GUARDIAN LIGHT ON")
+                    else -> tr(fa, "نگهبان AL AI", "AL AI GUARDIAN")
+                },
+                color = if (completed) Color(0xFF65EBA9) else Color(0xFFE6D2FF),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.ExtraBold,
+                letterSpacing = 0.45.sp
+            )
+            if (scanning || completed) {
+                val knownProgress = progress
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        if (scanning) tr(fa, "پیشرفت اسکن", "SCAN PROGRESS")
+                        else tr(fa, "اسکن کامل شد", "SCAN COMPLETE"),
+                        color = TextSecondary,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        knownProgress?.let { "${(it.coerceIn(0f, 1f) * 100f).toInt()}%" } ?: "…",
+                        color = if (completed) Color(0xFF65EBA9) else Color(0xFFDDBBFF),
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                }
+                if (knownProgress != null) {
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .height(13.dp)
+                            .background(Color(0xFF39234E), RoundedCornerShape(50))
+                    ) {
+                        Box(
+                            Modifier
+                                .fillMaxWidth(knownProgress.coerceIn(0f, 1f))
+                                .height(13.dp)
+                                .background(
+                                    if (completed) Color(0xFF43E69A) else Color(0xFFB45CFF),
+                                    RoundedCornerShape(50)
+                                )
+                        )
+                    }
+                } else {
+                    LinearProgressIndicator(
+                        modifier = Modifier.fillMaxWidth().height(9.dp),
+                        color = Color(0xFFB45CFF),
+                        trackColor = Color(0xFF39234E)
+                    )
+                }
+                progressLabel?.let {
+                    Text(
+                        it,
+                        color = TextTertiary,
+                        fontSize = 10.sp,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun ScanCenterScreen(
     fa: Boolean,
     scanning: Boolean,
     result: ScanResult?,
     batchReport: FolderScanReport?,
     batchProgress: String?,
+    scanProgress: Float?,
     deviceScanDeep: Boolean,
     errorMessage: String?,
     notice: String?,
@@ -1615,61 +1847,35 @@ private fun ScanCenterScreen(
     onClearReport: () -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(15.dp)) {
+        ScanGuardianHeader(
+            fa = fa,
+            scanning = scanning,
+            completed = batchReport != null && !scanning && errorMessage == null,
+            progress = scanProgress,
+            progressLabel = batchProgress
+        )
+
         Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            EyebrowLabel(tr(fa, "تحلیل محلی", "ON-DEVICE ANALYSIS"))
+            EyebrowLabel(tr(fa, "AL AI  /  اسکن هوشمند", "AL AI  /  SMART SCAN"))
             Text(tr(fa, "مرکز اسکن", "Scan center"), color = TextPrimary, fontSize = 25.sp, fontWeight = FontWeight.Bold)
-            Text(
-                tr(fa, "بدون انتخاب پوشه؛ اسکن سریع یا عمیق را انتخاب کن تا فایل‌های قابل‌دسترسی خودکار بررسی شوند.", "No folder picker. Choose quick or deep scan to inspect accessible device storage automatically."),
-                color = TextSecondary,
-                fontSize = 12.sp
-            )
         }
 
         ScanModeCard(
             icon = "file",
             title = tr(fa, "اسکن سریع", "Quick scan"),
-            description = tr(fa, "برنامه‌های نصب‌شده، فایل‌های ریشه حافظه و مسیرهای مهم مثل دانلودها و اسناد بررسی می‌شوند.", "Checks installed-app packages, loose storage-root files, and key folders such as Downloads and Documents."),
-            tag = tr(fa, "قابل استفاده", "AVAILABLE"),
+            description = tr(fa, "بررسی خودکار مسیرهای مهم", "Automatically checks key locations"),
+            tag = tr(fa, "آماده", "READY"),
             enabled = !scanning,
             onClick = onFileScan
         )
         ScanModeCard(
             icon = "apk",
             title = tr(fa, "اسکن عمیق", "Deep scan"),
-            description = tr(fa, "کل حافظه اشتراکیِ قابل‌دسترسی، فایل‌های پنهانِ قابل‌خواندن و APK برنامه‌های نصب‌شده بررسی می‌شوند.", "Checks accessible shared storage, readable hidden files and installed-app APK archives."),
-            tag = tr(fa, "قابل استفاده", "AVAILABLE"),
+            description = tr(fa, "بررسی گسترده فایل‌های قابل‌دسترسی", "Broader scan of accessible files"),
+            tag = tr(fa, "آماده", "READY"),
             enabled = !scanning,
             onClick = onApkScan
         )
-        InfoBanner(
-            title = tr(fa, "محدودیت واقعی Android", "Android access boundary"),
-            body = tr(
-                fa,
-                "برای اسکن خودکار باید اجازه «مدیریت همه فایل‌ها» را در تنظیمات فعال کنی. حتی با این اجازه، Android داده خصوصی برنامه‌های دیگر و پوشه‌های Android/data و Android/obb را در اختیار این برنامه نمی‌گذارد.",
-                "Automatic scanning requires All files access in Android settings. Even then, Android blocks other apps' private data and the Android/data and Android/obb directories."
-            ),
-            warning = true
-        )
-
-        if (scanning) {
-            Card(
-                colors = CardDefaults.cardColors(containerColor = SurfaceBase),
-                shape = RoundedCornerShape(18.dp)
-            ) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-                        IconArt("scan", tint = BrandTeal, size = 19.dp)
-                        Text(tr(fa, "در حال اسکن حافظه دستگاه…", "Scanning device storage…"), color = TextPrimary, fontWeight = FontWeight.SemiBold)
-                    }
-                    LinearProgressIndicator(
-                        modifier = Modifier.fillMaxWidth(),
-                        color = BrandTeal,
-                        trackColor = BrandTeal.copy(alpha = 0.13f)
-                    )
-                    Text(batchProgress ?: tr(fa, "فایل‌ها و APKها بدون نصب یا اجرا بررسی می‌شوند.", "Files and APKs are inspected without installation or execution."), color = TextSecondary, fontSize = 11.sp)
-                }
-            }
-        }
 
         errorMessage?.let {
             InfoBanner(tr(fa, "اسکن انجام نشد", "Scan failed"), it, warning = true)
@@ -1697,17 +1903,6 @@ private fun ScanCenterScreen(
             )
         }
 
-        if (result == null && batchReport == null && errorMessage == null) {
-            InfoBanner(
-                title = tr(fa, "پیش از شروع", "Before you start"),
-                body = tr(
-                    fa,
-                    "فقط فایل‌های متعلق به خودت یا فایل‌هایی را که اجازه بررسی‌شان را داری انتخاب کن. موتور فعلی هنوز بانک امضای بدافزار تولیدی ندارد.",
-                    "Select only files you own or are authorized to inspect. The current engine does not yet contain a production malware-signature database."
-                ),
-                warning = false
-            )
-        }
     }
 }
 
@@ -1730,32 +1925,26 @@ private fun BatchScanSummaryCard(
                 fontWeight = FontWeight.Bold,
                 fontSize = 16.sp
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                MetricMini(Modifier.weight(1f), tr(fa, "بررسی‌شده", "Scanned"), report.scannedCount.toString())
-                MetricMini(Modifier.weight(1f), tr(fa, "مشکوک", "Suspicious"), report.suspiciousCount.toString())
-                MetricMini(Modifier.weight(1f), tr(fa, "نامشخص", "Unknown"), report.unknownCount.toString())
+            val threatItems = report.items.filter {
+                it.result.verdict == ScanVerdict.TEST_MARKER_MATCH ||
+                    it.result.verdict == ScanVerdict.SUSPICIOUS
             }
-            Text(
-                tr(
-                    fa,
-                    "از ${report.discoveredFiles} مورد قابل بررسی، ${report.scannedCount} مورد اسکن شدند. برای دیدن شواهد هر نتیجه، روی همان مورد بزن.",
-                    "${report.scannedCount} of ${report.discoveredFiles} discovered items were scanned. Tap an item to inspect its evidence."
-                ),
-                color = TextSecondary,
-                fontSize = 11.sp
-            )
-            if (report.items.isEmpty()) {
+            if (threatItems.isEmpty()) {
                 Text(
-                    tr(
-                        fa,
-                        "در محدوده قابل‌دسترسی این حالت فایلی پیدا نشد. مجوز حافظه و پوشه‌های رایج را بررسی کن؛ برای پوشش گسترده‌تر اسکن عمیق را اجرا کن.",
-                        "No readable files were found in this scan scope. Check storage access and common folders, or run a deep scan for broader coverage."
-                    ),
+                    tr(fa, "تهدیدی شناسایی نشد", "No threats detected"),
+                    color = ColorSuccess,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            } else {
+                Text(
+                    tr(fa, "${threatItems.size} مورد نیازمند بررسی", "${threatItems.size} items need attention"),
                     color = ColorWarning,
-                    fontSize = 12.sp
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold
                 )
             }
-            report.items.take(60).forEach { item ->
+            threatItems.take(60).forEach { item ->
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1772,28 +1961,10 @@ private fun BatchScanSummaryCard(
                     StatusBadge(verdictBadge(item.result.verdict, fa), verdictColor(item.result.verdict))
                 }
             }
-            if (report.scannedCount > report.items.size) {
+            if (threatItems.size > 60) {
                 Text(
-                    tr(fa, "۶۰ نتیجه اول نمایش داده شده‌اند؛ مجموعاً ${report.scannedCount} فایل اسکن شده است.", "Showing the first 60 of ${report.scannedCount} scanned files."),
+                    tr(fa, "۶۰ مورد اول نمایش داده می‌شوند.", "Showing the first 60 items."),
                     color = TextTertiary,
-                    fontSize = 10.sp
-                )
-            }
-            if (report.failures.isNotEmpty()) {
-                Text(
-                    tr(fa, "مواردی که بررسی نشدند: ${report.failures.size}", "Files or folders not scanned: ${report.failures.size}"),
-                    color = ColorWarning,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
-                report.failures.take(5).forEach { failure ->
-                    Text("${failure.name}: ${failure.reason}", color = TextSecondary, fontSize = 10.sp)
-                }
-            }
-            if (report.truncated || report.skippedFiles > 0) {
-                Text(
-                    tr(fa, "محدودیت ایمنی اسکن اعمال شد. موارد ردشده: ${report.skippedFiles}", "Safety scan limits were applied. Skipped: ${report.skippedFiles}"),
-                    color = ColorWarning,
                     fontSize = 10.sp
                 )
             }
@@ -1906,6 +2077,8 @@ private fun ScanResultCard(
                 }
             }
 
+            result.codeAnalysis?.let { CodeAnalysisPanel(it, fa) }
+
             Text(tr(fa, "شواهد بررسی", "Review evidence"), color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 14.sp)
             result.evidence.forEach { item ->
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Top) {
@@ -1927,32 +2100,154 @@ private fun ScanResultCard(
                 }
             }
 
-            Button(
-                onClick = onQuarantine,
-                enabled = !quarantining,
-                modifier = Modifier.fillMaxWidth().height(49.dp),
-                shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = BrandTeal, contentColor = AppBackground)
-            ) {
+            if (result.codeAnalysis == null) {
+                Button(
+                    onClick = onQuarantine,
+                    enabled = !quarantining,
+                    modifier = Modifier.fillMaxWidth().height(49.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = BrandTeal, contentColor = AppBackground)
+                ) {
+                    Text(
+                        if (quarantining) tr(fa, "در حال ذخیره…", "Saving…")
+                        else tr(fa, "ذخیره نسخه رمزنگاری‌شده", "Save encrypted copy"),
+                        fontWeight = FontWeight.Bold
+                    )
+                }
                 Text(
-                    if (quarantining) tr(fa, "در حال ذخیره…", "Saving…")
-                    else tr(fa, "ذخیره نسخه رمزنگاری‌شده", "Save encrypted copy"),
-                    fontWeight = FontWeight.Bold
+                    tr(
+                        fa,
+                        "این عملیات فایل اصلی را حذف یا غیرفعال نمی‌کند؛ فقط یک نسخه رمزنگاری‌شده در فضای خصوصی برنامه می‌سازد.",
+                        "This does not delete or disable the original. It creates an encrypted copy in private app storage."
+                    ),
+                    color = TextTertiary,
+                    fontSize = 10.sp,
+                    lineHeight = 15.sp
+                )
+            }
+            OutlinedButton(onClick = onClear, modifier = Modifier.fillMaxWidth()) {
+                Text(tr(fa, "پاک کردن گزارش از صفحه", "Clear report from screen"))
+            }
+        }
+    }
+}
+
+@Composable
+private fun CodeAnalysisPanel(
+    report: com.antivirusalai.engine.CodeAnalysisReport,
+    fa: Boolean
+) {
+    Card(
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = SurfaceRaised)
+    ) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+            Text(
+                tr(fa, "گزارش تحلیل کد", "Source-code analysis"),
+                color = TextPrimary,
+                fontWeight = FontWeight.Bold,
+                fontSize = 14.sp
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                MetricMini(
+                    Modifier.weight(1f),
+                    tr(fa, "زبان", "Language"),
+                    report.language
+                )
+                MetricMini(
+                    Modifier.weight(1f),
+                    tr(fa, "خطوط", "Lines"),
+                    report.lineCount.toString()
+                )
+                MetricMini(
+                    Modifier.weight(1f),
+                    tr(fa, "یافته‌ها", "Findings"),
+                    report.diagnostics.size.toString()
+                )
+            }
+            if (!report.completed) {
+                InfoBanner(
+                    tr(fa, "تحلیل ناقص", "Analysis incomplete"),
+                    if (fa) report.limitationFa.orEmpty() else report.limitationEn.orEmpty(),
+                    warning = true
+                )
+            }
+            if (report.completed && report.diagnostics.isEmpty()) {
+                Text(
+                    tr(
+                        fa,
+                        "در بررسی‌های فعلی خطای ساختاری یا الگوی پرخطرِ شناخته‌شده‌ای پیدا نشد.",
+                        "No structural error or known risky pattern was found by the current checks."
+                    ),
+                    color = BrandBlue,
+                    fontSize = 11.sp,
+                    lineHeight = 16.sp
+                )
+            }
+            report.diagnostics.take(40).forEach { finding ->
+                val tint = when (finding.severity) {
+                    CodeIssueSeverity.ERROR, CodeIssueSeverity.HIGH -> ColorWarning
+                    CodeIssueSeverity.MEDIUM -> BrandBlue
+                    CodeIssueSeverity.LOW, CodeIssueSeverity.INFO -> TextTertiary
+                }
+                val severityLabel = when (finding.severity) {
+                    CodeIssueSeverity.ERROR -> tr(fa, "خطا", "ERROR")
+                    CodeIssueSeverity.HIGH -> tr(fa, "زیاد", "HIGH")
+                    CodeIssueSeverity.MEDIUM -> tr(fa, "متوسط", "MEDIUM")
+                    CodeIssueSeverity.LOW -> tr(fa, "کم", "LOW")
+                    CodeIssueSeverity.INFO -> tr(fa, "اطلاعات", "INFO")
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            if (fa) finding.titleFa else finding.titleEn,
+                            color = TextPrimary,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.weight(1f)
+                        )
+                        StatusBadge(
+                            "${finding.line}:${finding.column}",
+                            tint
+                        )
+                    }
+                    Text(
+                        if (fa) finding.detailFa else finding.detailEn,
+                        color = TextSecondary,
+                        fontSize = 10.sp,
+                        lineHeight = 15.sp
+                    )
+                    Text(
+                        finding.ruleId + " • " + severityLabel,
+                        color = tint,
+                        fontSize = 9.sp
+                    )
+                }
+                if (finding != report.diagnostics.take(40).lastOrNull()) {
+                    androidx.compose.material3.HorizontalDivider(color = TextTertiary.copy(alpha = 0.2f))
+                }
+            }
+            if (report.diagnostics.size > 40) {
+                Text(
+                    tr(fa, "۴۰ یافته اول نمایش داده شده‌اند.", "Showing the first 40 findings."),
+                    color = TextTertiary,
+                    fontSize = 10.sp
                 )
             }
             Text(
                 tr(
                     fa,
-                    "این عملیات فایل اصلی را حذف یا غیرفعال نمی‌کند؛ فقط یک نسخه رمزنگاری‌شده در فضای خصوصی برنامه می‌سازد.",
-                    "This does not delete or disable the original. It creates an encrypted copy in private app storage."
+                    "این تحلیل ایستا و مبتنی بر قواعد است؛ کد اجرا یا خودکار اصلاح نمی‌شود. نبود یافته به معنی نبود همه خطاها یا آسیب‌پذیری‌ها نیست.",
+                    "This is rule-based static analysis. Code is not executed or automatically modified. No findings does not mean all bugs or vulnerabilities are absent."
                 ),
                 color = TextTertiary,
                 fontSize = 10.sp,
                 lineHeight = 15.sp
             )
-            OutlinedButton(onClick = onClear, modifier = Modifier.fillMaxWidth()) {
-                Text(tr(fa, "پاک کردن گزارش از صفحه", "Clear report from screen"))
-            }
         }
     }
 }
@@ -2006,6 +2301,18 @@ private fun SecurityToolsScreen(
             status = tr(fa, "پایه‌ای فعال", "BASIC"),
             tint = BrandTeal,
             onClick = { onFeature("quarantine") }
+        )
+        ToolModuleCard(
+            icon = "file",
+            title = tr(fa, "تحلیل و عیب‌یابی کد", "Code inspection"),
+            description = tr(
+                fa,
+                "فایل‌های کد قابل‌دسترسی را در اسکن سریع و عمیق از نظر ساختار، اسرار ثابت و چند الگوی ناامن بررسی کن.",
+                "Static checks for accessible source files, including structure, embedded secrets and selected risky patterns."
+            ),
+            status = tr(fa, "فعال • تحلیل ایستا", "ACTIVE • STATIC"),
+            tint = BrandBlue,
+            onClick = onOpenScan
         )
         ToolModuleCard(
             icon = "shield",
@@ -2626,6 +2933,9 @@ private fun verdictBadge(verdict: ScanVerdict, fa: Boolean): String = when (verd
     ScanVerdict.NO_KNOWN_INDICATOR -> tr(fa, "بدون تطبیق", "NO MATCH")
     ScanVerdict.UNKNOWN_APK -> tr(fa, "نامشخص", "UNKNOWN")
     ScanVerdict.UNSUPPORTED_FILE -> tr(fa, "تحلیل محدود", "LIMITED ANALYSIS")
+    ScanVerdict.CODE_ANALYZED -> tr(fa, "کد بررسی شد", "CODE CHECKED")
+    ScanVerdict.CODE_ISSUES_FOUND -> tr(fa, "یافته کد", "CODE FINDINGS")
+    ScanVerdict.CODE_ANALYSIS_LIMITED -> tr(fa, "تحلیل ناقص", "LIMITED CODE")
 }
 
 private fun verdictTitle(verdict: ScanVerdict, fa: Boolean): String = when (verdict) {
@@ -2634,6 +2944,9 @@ private fun verdictTitle(verdict: ScanVerdict, fa: Boolean): String = when (verd
     ScanVerdict.NO_KNOWN_INDICATOR -> tr(fa, "نشانگر شناخته‌شده‌ای پیدا نشد", "No known indicator found")
     ScanVerdict.UNKNOWN_APK -> tr(fa, "نتیجه نامشخص", "Unknown result")
     ScanVerdict.UNSUPPORTED_FILE -> tr(fa, "بررسی هش انجام شد؛ تحلیل محتوایی این قالب هنوز فعال نیست", "Hash checked; format analysis is not available yet")
+    ScanVerdict.CODE_ANALYZED -> tr(fa, "تحلیل ایستای کد انجام شد", "Static code analysis completed")
+    ScanVerdict.CODE_ISSUES_FOUND -> tr(fa, "یافته‌هایی در کد پیدا شد", "Code findings detected")
+    ScanVerdict.CODE_ANALYSIS_LIMITED -> tr(fa, "تحلیل کد کامل نشد", "Code analysis was limited")
 }
 
 private fun verdictDescription(verdict: ScanVerdict, fa: Boolean): String = when (verdict) {
@@ -2642,6 +2955,9 @@ private fun verdictDescription(verdict: ScanVerdict, fa: Boolean): String = when
     ScanVerdict.NO_KNOWN_INDICATOR -> tr(fa, "هیچ نشانگر موجود در نسخه فعلی با فایل تطبیق نکرد. این نتیجه تضمین پاک بودن نیست.", "No indicator in this MVP matched. This does not guarantee that the file is safe.")
     ScanVerdict.UNKNOWN_APK -> tr(fa, "اطلاعات APK قابل خواندن نبود؛ از اعلام پاک بودن خودداری می‌کنیم.", "APK metadata could not be read; the file is not declared clean.")
     ScanVerdict.UNSUPPORTED_FILE -> tr(fa, "هش SHA-256 فایل محاسبه و با نشانگرهای محلی فعلی مقایسه شد، اما موتور هنوز ساختار و محتوای این قالب را تحلیل نمی‌کند. بنابراین نتیجه ناشناخته است و به معنی پاک بودن فایل نیست.", "The SHA-256 hash was calculated and checked against the current local indicators, but this engine does not yet inspect this format’s structure or contents. The result is unknown, not a clean verdict.")
+    ScanVerdict.CODE_ANALYZED -> tr(fa, "قواعد ایستای فعلی یافته مهمی پیدا نکردند؛ این نتیجه صحت کامل، نبود خطای منطقی یا امن‌بودن کد را ثابت نمی‌کند.", "The current static rules found no actionable issue; this does not prove correctness, absence of logic bugs, or security.")
+    ScanVerdict.CODE_ISSUES_FOUND -> tr(fa, "گزارش شامل خطاهای ساختاری یا الگوهای نیازمند بازبینی است. یافته‌های ایستا به‌تنهایی اثبات آسیب‌پذیری یا بدافزار نیستند.", "The report contains structural errors or patterns that need review. Static findings alone do not prove exploitability or malware.")
+    ScanVerdict.CODE_ANALYSIS_LIMITED -> tr(fa, "محدودیت اندازه یا خوانایی اجازه تحلیل کامل نداد؛ فقط هش فایل بررسی شد.", "A size or decoding limit prevented full code analysis; only the file hash was checked.")
 }
 
 private fun verdictColor(verdict: ScanVerdict): Color = when (verdict) {
@@ -2649,7 +2965,9 @@ private fun verdictColor(verdict: ScanVerdict): Color = when (verdict) {
     ScanVerdict.SUSPICIOUS -> ColorWarning
     ScanVerdict.NO_KNOWN_INDICATOR -> ColorSuccess
     ScanVerdict.UNKNOWN_APK -> ColorWarning
-    ScanVerdict.UNSUPPORTED_FILE -> TextTertiary
+    ScanVerdict.UNSUPPORTED_FILE, ScanVerdict.CODE_ANALYSIS_LIMITED -> TextTertiary
+    ScanVerdict.CODE_ANALYZED -> BrandBlue
+    ScanVerdict.CODE_ISSUES_FOUND -> ColorWarning
 }
 
 private fun featureTitle(fa: Boolean, feature: String): String = when (feature) {
