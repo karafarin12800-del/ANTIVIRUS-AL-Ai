@@ -321,7 +321,7 @@ object SourceCodeAnalyzer {
         var offset = 0
         codeOnly.split('\n').forEach { line ->
             val first = line.trim()
-            if (keywords.containsMatchIn(first) && first.isNotBlank() && !first.endsWith(":")) {
+            if (keywords.containsMatchIn(first) && first.isNotBlank() && ':' !in first) {
                 findings += diagnostic(
                     source, offset + line.indexOfFirst { !it.isWhitespace() }.coerceAtLeast(0),
                     "PYTHON_MISSING_COLON",
