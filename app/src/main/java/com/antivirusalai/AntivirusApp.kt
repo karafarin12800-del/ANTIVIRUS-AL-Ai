@@ -390,8 +390,8 @@ fun AntivirusApp() {
                 Text(
                     tr(
                         fa,
-                        "در این نسخه فقط فایلی که خودت از انتخاب‌گر Android مشخص می‌کنی خوانده می‌شود. محتوای فایل آپلود نمی‌شود. قرنطینه یک نسخه رمزنگاری‌شده در فضای خصوصی برنامه می‌سازد و فایل اصلی را حذف نمی‌کند. اسکن کامل دستگاه و دسترسی به داده خصوصی برنامه‌های دیگر در این نسخه وجود ندارد.",
-                        "This build reads only files you explicitly select through Android's document picker. File contents are not uploaded. Quarantine creates an encrypted copy in private app storage and does not delete the original. Full-device scanning and access to other apps' private data are not available."
+                        "در این نسخه فقط پوشه‌ای که خودت در انتخاب‌گر Android مشخص می‌کنی و فایل‌های قابل‌دسترسی داخل آن خوانده می‌شوند. محتوای فایل‌ها آپلود نمی‌شود. قرنطینه فقط برای فایل انتخاب‌شده از گزارش، نسخه رمزنگاری‌شده می‌سازد و فایل اصلی را حذف نمی‌کند. اسکن کامل دستگاه و داده خصوصی برنامه‌های دیگر در دسترس نیست.",
+                        "This build reads only the folder you explicitly choose through Android's document picker and accessible files beneath it. File contents are not uploaded. Quarantine creates an encrypted copy only for a file selected from the report; it does not delete the original. Full-device scanning and access to other apps' private data are unavailable."
                     ),
                     color = TextSecondary
                 )
@@ -649,7 +649,7 @@ private fun DashboardScreen(
                     modifier = Modifier.weight(1f),
                     icon = "file",
                     title = tr(fa, "اسکن فایل", "File scan"),
-                    caption = tr(fa, "انتخاب فایل", "Choose a file"),
+                    caption = tr(fa, "انتخاب پوشه", "Choose folder"),
                     onClick = onFileScan
                 )
                 QuickActionCard(
@@ -769,8 +769,8 @@ private fun HeroSecurityCard(
                         Text(
                             tr(
                                 fa,
-                                "فایل یا APK را انتخاب کن؛ تحلیل در همین دستگاه انجام می‌شود.",
-                                "Choose a file or APK. Analysis runs locally on this device."
+                                "پوشه را انتخاب کن؛ فایل‌ها روی همین دستگاه بررسی می‌شوند.",
+                                "Choose a folder. Files are inspected locally on this device."
                             ),
                             color = Color(0xFFC1D4E5),
                             fontSize = 12.sp,
@@ -791,7 +791,7 @@ private fun HeroSecurityCard(
                 ) {
                     Text(
                         if (scanning) tr(fa, "در حال اسکن…", "Scanning…")
-                        else tr(fa, "شروع اسکن فایل", "Start file scan"),
+                        else tr(fa, "شروع اسکن پوشه", "Start folder scan"),
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold
                     )
