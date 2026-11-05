@@ -90,7 +90,6 @@ object FolderScanEngine {
                     val sizeColumn = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_SIZE)
 
                     while (cursor.moveToNext()) {
-                        currentCoroutineContext().ensureActive()
                         if (idColumn < 0) continue
                         val documentId = cursor.getString(idColumn) ?: continue
                         val name = if (nameColumn >= 0) cursor.getString(nameColumn).orEmpty() else documentId
@@ -127,19 +126,19 @@ object FolderScanEngine {
         val items = mutableListOf<FolderScanItem>()
         var skipped = 0
         var totalBytes = 0L
-        candidates.forEachIndexed { index, candidate ->
+        for ((index, candidate) in candidates.withIndex()) {
             currentCoroutineContext().ensureActive()
             if (candidate.declaredSize > ScanEngine.MAX_FILE_SIZE_BYTES) {
                 skipped++
                 failures += FolderScanFailure(candidate.name, "File exceeds the 200 MB per-file limit.")
-                return@forEachIndexed
+                continue
             }
             if (candidate.declaredSize > 0L &&
                 totalBytes + candidate.declaredSize > MAX_TOTAL_BYTES
             ) {
                 skipped++
                 failures += FolderScanFailure(candidate.name, "Folder scan reached the 1 GB total data limit.")
-                return@forEachIndexed
+                continue
             }
 
             withContext(Dispatchers.Main.immediate) {
@@ -158,8 +157,10 @@ object FolderScanEngine {
                             "Stopped after reaching the 1 GB total data limit."
                         )
                     }
-                    return@forEachIndexed
+                    break
                 }
+            } catch (error: kotlinx.coroutines.CancellationException) {
+                throw error
             } catch (error: Exception) {
                 failures += FolderScanFailure(candidate.name, error.message ?: "File scan failed.")
             }
