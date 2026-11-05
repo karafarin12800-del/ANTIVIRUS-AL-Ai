@@ -65,6 +65,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.antivirusalai.engine.DeviceQuickCheckEngine
+import com.antivirusalai.engine.DeviceQuickCheckReport
 import com.antivirusalai.engine.EvidenceSeverity
 import com.antivirusalai.engine.ScanEngine
 import com.antivirusalai.engine.ScanResult
@@ -105,6 +107,9 @@ fun AntivirusApp() {
     var quarantining by remember { mutableStateOf(false) }
     var selectedUri by rememberSaveable { mutableStateOf<Uri?>(null) }
     var scanResult by remember { mutableStateOf<ScanResult?>(null) }
+    var deviceChecking by remember { mutableStateOf(false) }
+    var deviceReport by remember { mutableStateOf<DeviceQuickCheckReport?>(null) }
+    var deviceError by remember { mutableStateOf<String?>(null) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var notice by remember { mutableStateOf<String?>(null) }
     var selectedPlan by remember { mutableStateOf<String?>(null) }
@@ -144,6 +149,26 @@ fun AntivirusApp() {
                     }
                 } finally {
                     scanning = false
+                }
+            }
+        }
+    }
+
+    val runDeviceQuickCheck: () -> Unit = {
+        if (!deviceChecking) {
+            deviceChecking = true
+            deviceError = null
+            deviceReport = null
+            activeTab = MainTab.SCAN.key
+            scope.launch {
+                try {
+                    deviceReport = DeviceQuickCheckEngine.run(context.applicationContext)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (error: Exception) {
+                    deviceError = error.message ?: tr(fa, "بررسی برنامه‌ها انجام نشد.", "Device check failed.")
+                } finally {
+                    deviceChecking = false
                 }
             }
         }
@@ -208,6 +233,9 @@ fun AntivirusApp() {
                                 fa = fa,
                                 scanning = scanning,
                                 result = scanResult,
+                                deviceChecking = deviceChecking,
+                                deviceReport = deviceReport,
+                                onQuickCheck = runDeviceQuickCheck,
                                 onOpenScan = { activeTab = MainTab.SCAN.key },
                                 onFileScan = launchFileScan,
                                 onApkScan = launchApkScan,
@@ -224,6 +252,10 @@ fun AntivirusApp() {
                                 quarantining = quarantining,
                                 onFileScan = launchFileScan,
                                 onApkScan = launchApkScan,
+                                deviceChecking = deviceChecking,
+                                deviceReport = deviceReport,
+                                deviceError = deviceError,
+                                onQuickCheck = runDeviceQuickCheck,
                                 onQuarantine = {
                                     val uri = selectedUri
                                     val result = scanResult
@@ -510,6 +542,9 @@ private fun DashboardScreen(
     fa: Boolean,
     scanning: Boolean,
     result: ScanResult?,
+    deviceChecking: Boolean,
+    deviceReport: DeviceQuickCheckReport?,
+    onQuickCheck: () -> Unit,
     onOpenScan: () -> Unit,
     onFileScan: () -> Unit,
     onApkScan: () -> Unit,
@@ -544,8 +579,8 @@ private fun DashboardScreen(
 
         HeroSecurityCard(
             fa = fa,
-            scanning = scanning,
-            onScan = onOpenScan,
+            scanning = deviceChecking,
+            onScan = onQuickCheck,
             onApk = onApkScan
         )
 
@@ -590,6 +625,10 @@ private fun DashboardScreen(
                     tint = ColorSuccess
                 )
             }
+        }
+
+        if (deviceReport != null) {
+            DeviceQuickCheckCard(report = deviceReport, fa = fa)
         }
 
         if (result != null) {
@@ -721,7 +760,7 @@ private fun HeroSecurityCard(
                         verticalArrangement = Arrangement.spacedBy(7.dp)
                     ) {
                         Text(
-                            tr(fa, "امنیت را آگاهانه بررسی کن", "Take control of your security"),
+                            tr(fa, "بررسی هوشمند امنیت دستگاه", "Smart device security check"),
                             color = TextPrimary,
                             fontSize = 20.sp,
                             lineHeight = 27.sp,
@@ -730,8 +769,8 @@ private fun HeroSecurityCard(
                         Text(
                             tr(
                                 fa,
-                                "فایل یا APK را انتخاب کن؛ تحلیل در همین دستگاه انجام می‌شود.",
-                                "Choose a file or APK. Analysis runs locally on this device."
+                                "با یک دکمه، برنامه‌های قابل مشاهده و مجوزهای حساس بررسی می‌شوند.",
+                                "Check visible apps and sensitive permissions with one tap."
                             ),
                             color = Color(0xFFC1D4E5),
                             fontSize = 12.sp,
@@ -752,7 +791,7 @@ private fun HeroSecurityCard(
                 ) {
                     Text(
                         if (scanning) tr(fa, "در حال اسکن…", "Scanning…")
-                        else tr(fa, "شروع اسکن فایل", "Start file scan"),
+                        else tr(fa, "شروع اسکن هوشمند دستگاه", "Start smart device check"),
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold
                     )
@@ -1018,6 +1057,44 @@ private fun StorePromoCard(fa: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
+
+@Composable
+private fun DeviceQuickCheckCard(report: DeviceQuickCheckReport, fa: Boolean) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = SurfaceBase),
+        shape = RoundedCornerShape(18.dp)
+    ) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+            Text(tr(fa, "گزارش بررسی هوشمند دستگاه", "Smart device check report"), color = TextPrimary, fontWeight = FontWeight.Bold)
+            Text(
+                tr(fa, "تعداد برنامه‌های قابل بررسی: ${report.checkedApps}", "Visible apps inspected: ${report.checkedApps}"),
+                color = BrandTeal, fontSize = 13.sp
+            )
+            Text(
+                if (report.hasIndicators) tr(fa, "برنامه‌های دارای نشانگر مجوز: ${report.appsWithIndicators.size}", "Apps with permission indicators: ${report.appsWithIndicators.size}")
+                else tr(fa, "نشانگر مجوز در برنامه‌های بررسی‌شده پیدا نشد", "No permission indicators found in inspected apps"),
+                color = if (report.hasIndicators) ColorWarning else ColorSuccess,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 12.sp
+            )
+            report.appsWithIndicators.take(8).forEach { finding ->
+                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text(finding.packageName, color = TextPrimary, fontSize = 11.sp)
+                    finding.riskIndicators.forEach { indicator ->
+                        Text("• $indicator", color = TextSecondary, fontSize = 10.sp)
+                    }
+                }
+            }
+            Text(
+                tr(fa, "این موارد فقط نشانگرهای نیازمند بازبینی‌اند و اثبات بدافزار بودن نیستند. نتیجه بدون نشانگر نیز تضمین پاک بودن نیست.", "These are review indicators, not proof of malware. No indicators does not guarantee an app is safe."),
+                color = ColorWarning, fontSize = 10.sp
+            )
+            Text(report.coverageNote, color = TextTertiary, fontSize = 9.sp)
+        }
+    }
+}
+
+@Composable
 private fun ScanCenterScreen(
     fa: Boolean,
     scanning: Boolean,
@@ -1027,6 +1104,10 @@ private fun ScanCenterScreen(
     quarantining: Boolean,
     onFileScan: () -> Unit,
     onApkScan: () -> Unit,
+    deviceChecking: Boolean,
+    deviceReport: DeviceQuickCheckReport?,
+    deviceError: String?,
+    onQuickCheck: () -> Unit,
     onQuarantine: () -> Unit,
     onClearReport: () -> Unit
 ) {
@@ -1041,6 +1122,19 @@ private fun ScanCenterScreen(
             )
         }
 
+        Button(
+            onClick = onQuickCheck,
+            enabled = !deviceChecking,
+            modifier = Modifier.fillMaxWidth().height(52.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = BrandTeal, contentColor = AppBackground),
+            shape = RoundedCornerShape(15.dp)
+        ) {
+            Text(if (deviceChecking) tr(fa, "در حال بررسی دستگاه…", "Checking device…") else tr(fa, "شروع اسکن و بررسی دستگاه", "Start smart device check"), fontWeight = FontWeight.Bold)
+        }
+        Text(
+            tr(fa, "برنامه‌های قابل مشاهده و مجوزهای درخواستی به‌صورت محلی بررسی می‌شوند؛ این اسکن جایگزین اسکن کامل یا محافظت بلادرنگ نیست.", "Visible installed apps and requested permissions are checked locally; this is not a full-device malware scan or real-time protection."),
+            color = TextSecondary, fontSize = 11.sp
+        )
         ScanModeCard(
             icon = "file",
             title = tr(fa, "اسکن فایل", "File scan"),
@@ -1059,9 +1153,9 @@ private fun ScanCenterScreen(
         )
         ScanModeCard(
             icon = "device",
-            title = tr(fa, "اسکن کامل دستگاه", "Full device scan"),
-            description = tr(fa, "در این نسخه موجود نیست؛ Android دسترسی آزاد به داده خصوصی برنامه‌های دیگر را نمی‌دهد.", "Not available in this build. Android does not allow free access to other apps' private data."),
-            tag = tr(fa, "در حال توسعه", "IN DEVELOPMENT"),
+            title = tr(fa, "بررسی هوشمند برنامه‌ها", "Smart app check"),
+            description = tr(fa, "فقط برنامه‌های قابل مشاهده و مجوزهای درخواستی بررسی می‌شوند؛ داده خصوصی و رفتار زمان اجرا قابل اسکن نیست.", "Only visible apps and requested permissions are inspected; private data and runtime behavior are not scanned."),
+            tag = tr(fa, "محدود", "LIMITED"),
             enabled = false,
             onClick = {}
         )
@@ -1085,6 +1179,12 @@ private fun ScanCenterScreen(
                 }
             }
         }
+
+        if (deviceChecking) {
+            LinearProgressIndicator(Modifier.fillMaxWidth(), color = BrandTeal)
+        }
+        deviceError?.let { InfoBanner(tr(fa, "بررسی دستگاه انجام نشد", "Device check failed"), it, warning = true) }
+        deviceReport?.let { DeviceQuickCheckCard(report = it, fa = fa) }
 
         errorMessage?.let {
             InfoBanner(tr(fa, "اسکن انجام نشد", "Scan failed"), it, warning = true)
