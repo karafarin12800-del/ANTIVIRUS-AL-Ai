@@ -41,11 +41,11 @@ jobs:
       - name: Label APK and write build identity
         if: success()
         run: |
-          cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/ANTIVIRUS-AL-AI-v0.2.0-debug.apk
+          cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/ANTIVIRUS-AL-AI-v0.3.0-debug.apk
           {
             echo "app=ANTIVIRUS AL AI"
-            echo "version=0.2.0"
-            echo "version_code=2"
+            echo "version=0.3.0"
+            echo "version_code=3"
             echo "commit=${GITHUB_SHA}"
             echo "workflow_run=${GITHUB_RUN_ID}"
           } > app/build/outputs/apk/debug/build-info.txt
@@ -53,9 +53,9 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: antivirus-al-ai-v0.2.0-debug
+          name: antivirus-al-ai-v0.3.0-debug
           path: |
-            app/build/outputs/apk/debug/ANTIVIRUS-AL-AI-v0.2.0-debug.apk
+            app/build/outputs/apk/debug/ANTIVIRUS-AL-AI-v0.3.0-debug.apk
             app/build/outputs/apk/debug/build-info.txt
           if-no-files-found: error
           retention-days: 14
