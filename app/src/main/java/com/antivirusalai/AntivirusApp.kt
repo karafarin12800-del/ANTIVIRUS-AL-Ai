@@ -123,7 +123,16 @@ fun AntivirusApp() {
     var showStoragePermissionRationale by remember { mutableStateOf(false) }
     var pendingScanAfterStorageSettings by remember { mutableStateOf(false) }
     var showFirstRunAccessPrompt by remember {
-        mutableStateOf(!context.getSharedPreferences("onboarding", 0).getBoolean("storage_prompt_seen", false))
+        val storageNotGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            !DeviceScanEngine.hasBroadStorageAccess()
+        } else {
+            context.checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) !=
+                android.content.pm.PackageManager.PERMISSION_GRANTED
+        }
+        mutableStateOf(
+            storageNotGranted &&
+                !context.getSharedPreferences("onboarding", 0).getBoolean("storage_prompt_seen", false)
+        )
     }
     var showAbout by remember { mutableStateOf(false) }
     val fa = language == "fa"
@@ -187,10 +196,11 @@ fun AntivirusApp() {
         } else if (!granted && pendingScanAfterStorageSettings) {
             pendingScanAfterStorageSettings = false
             errorMessage = tr(
-            fa,
-            "مجوز خواندن حافظه داده نشد.",
-            "Storage read permission was denied."
-        )
+                fa,
+                "مجوز خواندن حافظه داده نشد.",
+                "Storage read permission was denied."
+            )
+        }
     }
 
     val launchDeviceScan: (Boolean) -> Unit = { deep ->
