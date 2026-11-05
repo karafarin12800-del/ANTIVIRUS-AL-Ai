@@ -1,6 +1,6 @@
 # ANTIVIRUS AL AI
 
-Privacy-first Android security scanner. This repository starts with a buildable Android MVP foundation and a defensive, explainable scan pipeline.
+Privacy-first Android security scanner. Current Android milestone: **0.2.0 (versionCode 2)**. The app includes a bilingual Persian/English security dashboard, a scan centre, a security-tools catalogue, a plan catalogue, and the current local MVP scan pipeline.
 
 ## Current MVP scope
 
@@ -22,6 +22,8 @@ A clean result means only that this local MVP found no known indicator in the se
 The signed-feed core verifies ECDSA P-256 signatures, enforces expiry and monotonic versions, and stores accepted feeds in private app storage. No production signing key, live threat-intelligence source, or malware indicator list is included yet. Feed-signing private keys must never be stored in this repository or the Android application.
 
 ## Build
+
+The Android package version is `0.2.0` (`versionCode=2`). GitHub Actions publishes a clearly named debug artifact, `ANTIVIRUS-AL-AI-v0.2.0-debug.apk`, together with `build-info.txt` containing the exact source commit and workflow run ID. Debug APKs are for testing only and are not production-signed release packages.
 
 Open the repository in Android Studio or run the CI workflow. The project uses Kotlin, Jetpack Compose, and Android SDK 36. The CI workflow runs unit tests, Android lint, and a debug APK build.
 
