@@ -1,6 +1,10 @@
 package com.antivirusalai
 
+import android.Manifest
+import android.content.Intent
 import android.net.Uri
+import android.os.Build
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
@@ -65,9 +69,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.antivirusalai.engine.FolderScanEngine
 import com.antivirusalai.engine.FolderScanItem
-import com.antivirusalai.engine.FolderScanMode
+import com.antivirusalai.engine.DeviceScanEngine
 import com.antivirusalai.engine.FolderScanReport
 import com.antivirusalai.engine.EvidenceSeverity
 import com.antivirusalai.engine.ScanResult
@@ -109,7 +112,7 @@ fun AntivirusApp() {
     var scanResult by remember { mutableStateOf<ScanResult?>(null) }
     var batchReport by remember { mutableStateOf<FolderScanReport?>(null) }
     var batchProgress by remember { mutableStateOf<String?>(null) }
-    var pendingFolderMode by remember { mutableStateOf(FolderScanMode.ALL_FILES) }
+    var pendingDeepScan by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var notice by remember { mutableStateOf<String?>(null) }
     var selectedPlan by remember { mutableStateOf<String?>(null) }
@@ -118,61 +121,85 @@ fun AntivirusApp() {
     var showAbout by remember { mutableStateOf(false) }
     val fa = language == "fa"
 
-    val folderPicker = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocumentTree()
-    ) { treeUri: Uri? ->
-        if (treeUri != null) {
+    val executeDeviceScan: (Boolean) -> Unit = { deep ->
+        scanning = true
+        selectedUri = null
+        scanResult = null
+        batchReport = null
+        batchProgress = null
+        errorMessage = null
+        notice = null
+        activeTab = MainTab.SCAN.key
+        scope.launch {
             try {
-                context.contentResolver.takePersistableUriPermission(
-                    treeUri,
-                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
-                )
-            } catch (_: SecurityException) {
-                // Some document providers grant temporary access only.
-            }
-            scanning = true
-            selectedUri = null
-            scanResult = null
-            batchReport = null
-            batchProgress = null
-            errorMessage = null
-            notice = null
-            activeTab = MainTab.SCAN.key
-            val mode = pendingFolderMode
-            scope.launch {
-                try {
-                    batchReport = FolderScanEngine.scanFolder(
-                        context.applicationContext,
-                        treeUri,
-                        mode
-                    ) { current, total, name ->
-                        batchProgress = "$current / $total  •  $name"
-                    }
-                } catch (cancelled: CancellationException) {
-                    throw cancelled
-                } catch (error: Exception) {
-                    errorMessage = error.message
-                        ?: tr(fa, "خواندن پوشه یا اسکن فایل‌ها انجام نشد.", "Could not read the folder or scan its files.")
-                } finally {
-                    scanning = false
-                    batchProgress = null
+                batchReport = DeviceScanEngine.scanDevice(
+                    context.applicationContext,
+                    deep
+                ) { current, total, name ->
+                    batchProgress = "$current / $total  •  $name"
                 }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                errorMessage = error.message
+                    ?: tr(fa, "اسکن حافظه دستگاه انجام نشد.", "Device scan could not be completed.")
+            } finally {
+                scanning = false
+                batchProgress = null
             }
         }
     }
 
-    val launchFileScan: () -> Unit = {
-        if (!scanning) {
-            pendingFolderMode = FolderScanMode.ALL_FILES
-            folderPicker.launch(null)
+    val storageSettingsLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) {
+        if (DeviceScanEngine.hasBroadStorageAccess()) {
+            executeDeviceScan(pendingDeepScan)
+        } else {
+            errorMessage = tr(
+                fa,
+                "دسترسی حافظه فعال نشد؛ برای شروع اسکن باید اجازه مدیریت فایل‌ها را در تنظیمات بدهی.",
+                "Storage access was not granted. Allow all-files access in Android settings to start scanning."
+            )
         }
     }
-    val launchApkScan: () -> Unit = {
+
+    val legacyStoragePermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) executeDeviceScan(pendingDeepScan)
+        else errorMessage = tr(
+            fa,
+            "مجوز خواندن حافظه داده نشد.",
+            "Storage read permission was denied."
+        )
+    }
+
+    val launchDeviceScan: (Boolean) -> Unit = { deep ->
         if (!scanning) {
-            pendingFolderMode = FolderScanMode.APK_ONLY
-            folderPicker.launch(null)
+            pendingDeepScan = deep
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                if (DeviceScanEngine.hasBroadStorageAccess()) {
+                    executeDeviceScan(deep)
+                } else {
+                    val settingsIntent = Intent(
+                        Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                        Uri.parse("package:${context.packageName}")
+                    )
+                    storageSettingsLauncher.launch(settingsIntent)
+                }
+            } else if (context.checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) ==
+                android.content.pm.PackageManager.PERMISSION_GRANTED
+            ) {
+                executeDeviceScan(deep)
+            } else {
+                legacyStoragePermissionLauncher.launch(Manifest.permission.READ_EXTERNAL_STORAGE)
+            }
         }
     }
+
+    val launchFileScan: () -> Unit = { launchDeviceScan(false) }
+    val launchApkScan: () -> Unit = { launchDeviceScan(true) }
 
     CompositionLocalProvider(
         LocalLayoutDirection provides if (fa) LayoutDirection.Rtl else LayoutDirection.Ltr
@@ -390,8 +417,8 @@ fun AntivirusApp() {
                 Text(
                     tr(
                         fa,
-                        "در این نسخه فقط پوشه‌ای که خودت در انتخاب‌گر Android مشخص می‌کنی و فایل‌های قابل‌دسترسی داخل آن خوانده می‌شوند. محتوای فایل‌ها آپلود نمی‌شود. قرنطینه فقط برای فایل انتخاب‌شده از گزارش، نسخه رمزنگاری‌شده می‌سازد و فایل اصلی را حذف نمی‌کند. اسکن کامل دستگاه و داده خصوصی برنامه‌های دیگر در دسترس نیست.",
-                        "This build reads only the folder you explicitly choose through Android's document picker and accessible files beneath it. File contents are not uploaded. Quarantine creates an encrypted copy only for a file selected from the report; it does not delete the original. Full-device scanning and access to other apps' private data are unavailable."
+                        "برای اسکن خودکار، با اجازه صریح تو فایل‌های قابل‌دسترسی در حافظه اشتراکی دستگاه بررسی می‌شوند. Android همچنان دسترسی به پوشه‌های خصوصی برنامه‌های دیگر و بخش‌هایی مانند Android/data و Android/obb را مسدود می‌کند. محتوای فایل‌ها آپلود نمی‌شود. قرنطینه فقط نسخه رمزنگاری‌شده می‌سازد و فایل اصلی را حذف نمی‌کند.",
+                        "With your explicit permission, automatic scans inspect accessible files in shared device storage. Android still blocks other apps' private folders and protected areas such as Android/data and Android/obb. File contents are not uploaded. Quarantine creates an encrypted copy and does not delete the original."
                     ),
                     color = TextSecondary
                 )
@@ -599,7 +626,7 @@ private fun DashboardScreen(
                     icon = "scan",
                     title = tr(fa, "اسکن محلی", "Local scan"),
                     value = tr(fa, "آماده", "Ready"),
-                    detail = tr(fa, "فایل انتخابی و APK", "Selected files & APK"),
+                    detail = tr(fa, "حافظه و فایل‌ها", "Selected files & APK"),
                     tint = BrandTeal
                 )
                 StatusCard(
@@ -648,8 +675,8 @@ private fun DashboardScreen(
                 QuickActionCard(
                     modifier = Modifier.weight(1f),
                     icon = "file",
-                    title = tr(fa, "اسکن فایل", "File scan"),
-                    caption = tr(fa, "انتخاب پوشه", "Choose folder"),
+                    title = tr(fa, "اسکن سریع", "Quick scan"),
+                    caption = tr(fa, "اسکن خودکار", "Automatic scan"),
                     onClick = onFileScan
                 )
                 QuickActionCard(
@@ -698,8 +725,8 @@ private fun DashboardScreen(
             title = tr(fa, "گزارش‌دهی شفاف", "Transparent reporting"),
             body = tr(
                 fa,
-                "این نسخه اسکن کامل دستگاه یا محافظت بلادرنگ ندارد. نتیجه «بدون نشانگر شناخته‌شده» به معنی تضمین پاک بودن فایل نیست.",
-                "This version does not provide full-device or real-time protection. “No known indicator” does not guarantee that a file is safe."
+                "این نسخه محدودیت دسترسی Android یا محافظت بلادرنگ ندارد. نتیجه «بدون نشانگر شناخته‌شده» به معنی تضمین پاک بودن فایل نیست.",
+                "Deep scan inspects accessible shared-storage files and installed-app APKs; other apps' private data and real-time protection remain unavailable. “No known indicator” is not a clean guarantee."
             ),
             warning = true
         )
@@ -769,8 +796,8 @@ private fun HeroSecurityCard(
                         Text(
                             tr(
                                 fa,
-                                "پوشه را انتخاب کن؛ فایل‌ها روی همین دستگاه بررسی می‌شوند.",
-                                "Choose a folder. Files are inspected locally on this device."
+                                "اسکن سریع و عمیق، فایل‌های قابل‌دسترسی را روی همین دستگاه بررسی می‌کنند.",
+                                "Quick and deep scans inspect accessible files locally on this device."
                             ),
                             color = Color(0xFFC1D4E5),
                             fontSize = 12.sp,
@@ -791,7 +818,7 @@ private fun HeroSecurityCard(
                 ) {
                     Text(
                         if (scanning) tr(fa, "در حال اسکن…", "Scanning…")
-                        else tr(fa, "شروع اسکن پوشه", "Start folder scan"),
+                        else tr(fa, "شروع اسکن سریع", "Start quick scan"),
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold
                     )
@@ -809,7 +836,7 @@ private fun HeroSecurityCard(
                 ) {
                     IconArt("apk", tint = BrandTeal, size = 17.dp)
                     Spacer(Modifier.width(8.dp))
-                    Text(tr(fa, "تحلیل تخصصی APK", "APK security analysis"), fontSize = 12.sp)
+                    Text(tr(fa, "اسکن عمیق دستگاه", "Deep device scan"), fontSize = 12.sp)
                 }
             }
         }
@@ -1077,7 +1104,7 @@ private fun ScanCenterScreen(
             EyebrowLabel(tr(fa, "تحلیل محلی", "ON-DEVICE ANALYSIS"))
             Text(tr(fa, "مرکز اسکن", "Scan center"), color = TextPrimary, fontSize = 25.sp, fontWeight = FontWeight.Bold)
             Text(
-                tr(fa, "یک پوشه را فقط یک‌بار انتخاب کن؛ فایل‌های داخل آن خودکار و پشت‌سرهم بررسی می‌شوند.", "Choose a folder once. Files inside it are scanned automatically in sequence."),
+                tr(fa, "یک پوشه را فقط یک‌بار انتخاب کن؛ فایل‌های داخل آن خودکار و پشت‌سرهم بررسی می‌شوند.", "No folder picker. Choose quick or deep scan to inspect accessible device storage automatically."),
                 color = TextSecondary,
                 fontSize = 12.sp
             )
@@ -1085,7 +1112,7 @@ private fun ScanCenterScreen(
 
         ScanModeCard(
             icon = "file",
-            title = tr(fa, "اسکن فایل", "File scan"),
+            title = tr(fa, "اسکن سریع", "Quick scan"),
             description = tr(fa, "با انتخاب یک پوشه، فایل‌های داخل آن و زیرپوشه‌ها به‌صورت گروهی اسکن می‌شوند.", "Select one folder to scan its files and subfolders in a batch."),
             tag = tr(fa, "قابل استفاده", "AVAILABLE"),
             enabled = !scanning,
@@ -1094,15 +1121,15 @@ private fun ScanCenterScreen(
         ScanModeCard(
             icon = "apk",
             title = tr(fa, "تحلیل ایستای APK", "Static APK analysis"),
-            description = tr(fa, "تمام APKهای پوشه و زیرپوشه‌ها یک‌جا تحلیل ایستا می‌شوند؛ نیازی به انتخاب تک‌تک APKها نیست.", "Static-analyze every APK in the selected folder and subfolders—no one-by-one selection."),
+            description = tr(fa, "تمام فایل‌های قابل‌دسترسی در حافظه اشتراکی و بسته‌های APK برنامه‌های نصب‌شده بررسی می‌شوند.", "Inspect accessible shared-storage files and APK archives for installed apps."),
             tag = tr(fa, "قابل استفاده", "AVAILABLE"),
             enabled = !scanning,
             onClick = onApkScan
         )
         ScanModeCard(
             icon = "device",
-            title = tr(fa, "اسکن کامل دستگاه", "Full device scan"),
-            description = tr(fa, "در این نسخه موجود نیست؛ Android دسترسی آزاد به داده خصوصی برنامه‌های دیگر را نمی‌دهد.", "Not available in this build. Android does not allow free access to other apps' private data."),
+            title = tr(fa, "محدودیت دسترسی Android", "Android access limits"),
+            description = tr(fa, "Android اجازه دسترسی به داده خصوصی برنامه‌های دیگر، Android/data و Android/obb را نمی‌دهد.", "Android blocks access to other apps' private data, Android/data and Android/obb."),
             tag = tr(fa, "در حال توسعه", "IN DEVELOPMENT"),
             enabled = false,
             onClick = {}
@@ -1116,7 +1143,7 @@ private fun ScanCenterScreen(
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
                         IconArt("scan", tint = BrandTeal, size = 19.dp)
-                        Text(tr(fa, "در حال اسکن پوشه…", "Scanning folder…"), color = TextPrimary, fontWeight = FontWeight.SemiBold)
+                        Text(tr(fa, "در حال اسکن حافظه دستگاه…", "Scanning device storage…"), color = TextPrimary, fontWeight = FontWeight.SemiBold)
                     }
                     LinearProgressIndicator(
                         modifier = Modifier.fillMaxWidth(),
@@ -1178,7 +1205,7 @@ private fun BatchScanSummaryCard(
         colors = CardDefaults.cardColors(containerColor = SurfaceBase)
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
-            Text(tr(fa, "خلاصه اسکن پوشه", "Folder scan summary"), color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            Text(tr(fa, "خلاصه اسکن دستگاه", "Device scan summary"), color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 MetricMini(Modifier.weight(1f), tr(fa, "بررسی‌شده", "Scanned"), report.scannedCount.toString())
                 MetricMini(Modifier.weight(1f), tr(fa, "مشکوک", "Suspicious"), report.suspiciousCount.toString())
@@ -1564,7 +1591,7 @@ private fun StoreScreen(
             badge = tr(fa, "طرح فعلی", "CURRENT"),
             highlighted = true,
             features = listOf(
-                tr(fa, "اسکن فایل انتخابی و تحلیل پایه APK", "Selected-file scan and basic APK analysis"),
+                tr(fa, "اسکن سریع انتخابی و تحلیل پایه APK", "Selected-file scan and basic APK analysis"),
                 tr(fa, "گزارش شفاف و نمایش شواهد", "Transparent reports and evidence"),
                 tr(fa, "ذخیره نسخه رمزنگاری‌شده فایل", "Encrypted private copy"),
                 tr(fa, "پردازش محلی بدون آپلود محتوا", "Local processing without content uploads")
@@ -2111,7 +2138,7 @@ private fun featureDescription(fa: Boolean, feature: String): String = when (fea
     "network" -> tr(fa, "محافظ شبکه هنوز فعال نیست. پیاده‌سازی آن به طراحی شفاف DNS/VPN محلی و بررسی سیاست‌های Android و Google Play نیاز دارد.", "Network protection is not active. Implementation requires transparent local DNS/VPN design and Android/Google Play policy review.")
     "brain" -> tr(fa, "فعلاً گزارش بر اساس قواعد محدود و شواهد قابل مشاهده ساخته می‌شود. امتیازدهی چندموتوره و تحلیل AI هنوز به موتور اسکن وصل نشده است.", "Reports currently use limited, visible rules and evidence. Multi-engine scoring and AI reasoning are not yet connected to the scanner.")
     "selfdefense" -> tr(fa, "برنامه از تنظیمات پایه مانند غیرفعال‌بودن cleartext و backup استفاده می‌کند. پایش یکپارچگی زمان اجرا و دفاع در برابر دست‌کاری هنوز نیازمند توسعه و آزمون است.", "The app uses baseline controls such as disabled cleartext traffic and backup. Runtime integrity and anti-tamper monitoring still require implementation and testing.")
-    "permissions" -> tr(fa, "اسکن فایل از انتخاب‌گر رسمی Android استفاده می‌کند. در این نسخه مجوز اسکن کامل برنامه‌های نصب‌شده، Accessibility، روت یا دسترسی به داده خصوصی برنامه‌های دیگر درخواست نمی‌شود.", "File scanning uses Android's document picker. This build does not request broad installed-app inventory, Accessibility, root or access to other apps' private data.")
+    "permissions" -> tr(fa, "اسکن سریع از انتخاب‌گر رسمی Android استفاده می‌کند. در این نسخه مجوز اسکن کامل برنامه‌های نصب‌شده، Accessibility، روت یا دسترسی به داده خصوصی برنامه‌های دیگر درخواست نمی‌شود.", "Quick scanning uses Android's document picker. This build does not request broad installed-app inventory, Accessibility, root or access to other apps' private data.")
     else -> tr(fa, "کانال پشتیبانی رسمی پیش از عرضه عمومی اضافه می‌شود. در این نسخه نشانی پشتیبانی تأییدشده‌ای تعریف نشده است.", "An official support channel will be added before public release. No verified support address is configured in this build.")
 }
 
