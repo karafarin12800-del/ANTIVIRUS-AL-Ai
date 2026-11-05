@@ -156,7 +156,10 @@ object DeviceScanEngine {
                     ScanVerdict.UNSUPPORTED_FILE,
                     ScanVerdict.CODE_ANALYSIS_LIMITED -> unknownCount++
                     ScanVerdict.TEST_MARKER_MATCH -> matchedCount++
-                    ScanVerdict.CODE_ANALYZED -> codeAnalyzedCount++
+                    ScanVerdict.CODE_ANALYZED -> {
+                        codeAnalyzedCount++
+                        codeIssueCount += result.codeAnalysis?.diagnostics?.size ?: 0
+                    }
                     ScanVerdict.CODE_ISSUES_FOUND -> {
                         codeAnalyzedCount++
                         codeIssueCount += result.codeAnalysis?.diagnostics?.size ?: 0
