@@ -80,6 +80,25 @@ object ScanEngine {
                 displayName.endsWith(".apk", ignoreCase = true) ||
                 mimeType == "application/vnd.android.package-archive"
             val apk = if (looksLikeApk) ApkMetadataInspector.inspect(context, temp) else null
+            val codeAnalysis = if (!looksLikeApk && SourceCodeAnalyzer.supports(displayName)) {
+                if (totalBytes > SourceCodeAnalyzer.MAX_SOURCE_BYTES) {
+                    SourceCodeAnalyzer.limitedReport(displayName)
+                } else {
+                    runCatching {
+                        SourceCodeAnalyzer.analyze(displayName, temp.readText(Charsets.UTF_8))
+                    }.getOrElse {
+                        val detectedLanguage = SourceCodeAnalyzer.languageFor(displayName) ?: "Unknown"
+                        CodeAnalysisReport(
+                            language = detectedLanguage,
+                            lineCount = 0,
+                            diagnostics = emptyList(),
+                            completed = false,
+                            limitationFa = "فایل خوانده شد اما متن آن برای تحلیل قابل رمزگشایی نبود.",
+                            limitationEn = "The file was read, but its text could not be decoded for static analysis."
+                        )
+                    }
+                }
+            } else null
 
             val verdict = when {
                 localMatch != null -> {
@@ -106,6 +125,33 @@ object ScanEngine {
                     if (assessment.suspicious) ScanVerdict.SUSPICIOUS
                     else ScanVerdict.NO_KNOWN_INDICATOR
                 }
+                codeAnalysis != null && !codeAnalysis.completed -> {
+                    evidence += ScanEvidence(
+                        "CODE_ANALYSIS_LIMITED",
+                        "Source-code analysis was limited",
+                        codeAnalysis.limitationEn ?: "Static analysis could not be completed.",
+                        EvidenceSeverity.INFO
+                    )
+                    ScanVerdict.CODE_ANALYSIS_LIMITED
+                }
+                codeAnalysis != null && codeAnalysis.actionableIssueCount > 0 -> {
+                    evidence += ScanEvidence(
+                        "CODE_STATIC_FINDINGS",
+                        "Static source-code findings",
+                        "${codeAnalysis.actionableIssueCount} actionable static finding(s) across ${codeAnalysis.diagnostics.size} diagnostic(s). Findings need manual review and do not prove exploitability.",
+                        EvidenceSeverity.MEDIUM
+                    )
+                    ScanVerdict.CODE_ISSUES_FOUND
+                }
+                codeAnalysis != null -> {
+                    evidence += ScanEvidence(
+                        "CODE_STATIC_ANALYSIS_COMPLETE",
+                        "Static source-code analysis completed",
+                        "No high-priority structural or security pattern was detected by the current lightweight rules. This is not a proof of correctness or security.",
+                        EvidenceSeverity.INFO
+                    )
+                    ScanVerdict.CODE_ANALYZED
+                }
                 else -> {
                     evidence += ScanEvidence(
                         "NO_LOCAL_HASH_MATCH",
@@ -125,7 +171,8 @@ object ScanEngine {
                 verdict = verdict,
                 evidence = evidence,
                 apkMetadata = apk,
-                durationMillis = (System.nanoTime() - startedAt) / 1_000_000L
+                durationMillis = (System.nanoTime() - startedAt) / 1_000_000L,
+                codeAnalysis = codeAnalysis
             )
         } finally {
             temp.delete()
