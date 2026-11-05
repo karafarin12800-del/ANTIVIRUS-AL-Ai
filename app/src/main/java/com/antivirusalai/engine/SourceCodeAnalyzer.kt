@@ -81,6 +81,16 @@ object SourceCodeAnalyzer {
     fun analyze(fileName: String, source: String): CodeAnalysisReport? {
         val extension = fileName.substringAfterLast('.', "").lowercase()
         val language = languages[extension] ?: return null
+        if (source.any { it.code == 0 }) {
+            return CodeAnalysisReport(
+                language = language,
+                lineCount = 0,
+                diagnostics = emptyList(),
+                completed = false,
+                limitationFa = "محتوا دارای نویسه صفر است و به‌عنوان متن کد قابل اعتماد تحلیل نشد.",
+                limitationEn = "The content contains NUL bytes and was not treated as trustworthy source text."
+            )
+        }
         val findings = mutableListOf<CodeDiagnostic>()
         val codeOnly = inspectLexicalStructure(source, extension, findings)
 
