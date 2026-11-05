@@ -234,7 +234,7 @@ fun AntivirusApp() {
                         .fillMaxSize()
                         .background(
                             Brush.verticalGradient(
-                                colors = listOf(Color(0xFF24103D), Color(0xFF130B25), AppBackground)
+                                colors = listOf(Color(0xFF1B0B31), Color(0xFF11091F), AppBackground)
                             )
                         )
                         .padding(insets)
@@ -242,46 +242,50 @@ fun AntivirusApp() {
                     Canvas(modifier = Modifier.fillMaxSize()) {
                         val w = size.width
                         val h = size.height
-                        val upperGlow = Offset(w * 0.94f, h * 0.10f)
-                        val lowerGlow = Offset(w * 0.04f, h * 0.73f)
+                        val a = Offset(w * 0.98f, h * 0.06f)
+                        val b = Offset(w * 0.02f, h * 0.62f)
                         drawCircle(
                             brush = Brush.radialGradient(
-                                colors = listOf(Color(0xFF9A55F2).copy(alpha = 0.22f), Color.Transparent),
-                                center = upperGlow,
-                                radius = w * 0.86f
+                                listOf(Color(0xFF9A55F2).copy(alpha = 0.24f), Color.Transparent),
+                                center = a, radius = w * 0.92f
                             ),
-                            radius = w * 0.86f,
-                            center = upperGlow
+                            radius = w * 0.92f, center = a
                         )
                         drawCircle(
                             brush = Brush.radialGradient(
-                                colors = listOf(Color(0xFF57258D).copy(alpha = 0.18f), Color.Transparent),
-                                center = lowerGlow,
-                                radius = w * 0.94f
+                                listOf(Color(0xFF6731A7).copy(alpha = 0.18f), Color.Transparent),
+                                center = b, radius = w * 0.88f
                             ),
-                            radius = w * 0.94f,
-                            center = lowerGlow
+                            radius = w * 0.88f, center = b
                         )
                         drawOval(
-                            color = Color(0xFFB889FF).copy(alpha = 0.035f),
-                            topLeft = Offset(w * 0.53f, -h * 0.04f),
-                            size = Size(w * 0.88f, h * 0.34f)
+                            color = Color(0xFFC99EFF).copy(alpha = 0.035f),
+                            topLeft = Offset(w * 0.38f, h * 0.07f),
+                            size = Size(w * 0.94f, h * 0.29f)
                         )
-                        val orbit = Path().apply {
-                            moveTo(-w * 0.10f, h * 0.39f)
-                            cubicTo(w * 0.34f, h * 0.30f, w * 0.63f, h * 0.50f, w * 1.10f, h * 0.40f)
+                        val upperOrbit = Path().apply {
+                            moveTo(-w * 0.13f, h * 0.24f)
+                            cubicTo(w * 0.18f, h * 0.09f, w * 0.72f, h * 0.37f, w * 1.11f, h * 0.18f)
                         }
-                        drawPath(orbit, Color(0xFFC69BFF).copy(alpha = 0.075f), style = Stroke(width = 1.2f))
+                        drawPath(upperOrbit, Color(0xFFD2A9FF).copy(alpha = 0.08f),
+                            style = Stroke(width = 1.1f))
+                        val lowerOrbit = Path().apply {
+                            moveTo(-w * 0.12f, h * 0.77f)
+                            cubicTo(w * 0.30f, h * 0.61f, w * 0.71f, h * 0.92f, w * 1.12f, h * 0.73f)
+                        }
+                        drawPath(lowerOrbit, Color(0xFFA77BDA).copy(alpha = 0.06f),
+                            style = Stroke(width = 1f))
                         val stars = listOf(
-                            Offset(w * 0.12f, h * 0.12f), Offset(w * 0.79f, h * 0.18f),
-                            Offset(w * 0.89f, h * 0.34f), Offset(w * 0.19f, h * 0.50f),
-                            Offset(w * 0.72f, h * 0.63f), Offset(w * 0.91f, h * 0.79f),
-                            Offset(w * 0.29f, h * 0.88f), Offset(w * 0.58f, h * 0.94f)
+                            Offset(w * 0.12f, h * 0.08f), Offset(w * 0.82f, h * 0.12f),
+                            Offset(w * 0.91f, h * 0.29f), Offset(w * 0.17f, h * 0.43f),
+                            Offset(w * 0.78f, h * 0.55f), Offset(w * 0.89f, h * 0.70f),
+                            Offset(w * 0.23f, h * 0.82f), Offset(w * 0.62f, h * 0.94f),
+                            Offset(w * 0.47f, h * 0.18f), Offset(w * 0.06f, h * 0.93f)
                         )
                         stars.forEachIndexed { index, point ->
                             drawCircle(
-                                color = Color(0xFFE5D2FF).copy(alpha = if (index % 3 == 0) 0.46f else 0.22f),
-                                radius = if (index % 3 == 0) 2.0f else 1.15f,
+                                Color(0xFFEAD8FF).copy(alpha = if (index % 3 == 0) 0.38f else 0.18f),
+                                radius = if (index % 3 == 0) 1.9f else 1.1f,
                                 center = point
                             )
                         }
@@ -670,29 +674,30 @@ private fun DashboardScreen(
     onOpenTools: () -> Unit,
     onOpenStore: () -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(21.dp)) {
-        Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(23.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                EyebrowLabel(tr(fa, "نمای کلی دستگاه", "DEVICE OVERVIEW"))
+                EyebrowLabel(tr(fa, "AL AI  /  مرکز فرماندهی", "AL AI  /  SECURITY COMMAND"))
                 StatusBadge(
                     text = tr(fa, "نسخه ${BuildConfig.VERSION_NAME}", "VERSION ${BuildConfig.VERSION_NAME}"),
                     tint = TextTertiary
                 )
             }
             Text(
-                tr(fa, "مرکز امنیت", "Security center"),
+                tr(fa, "نگهبان هوشمند دستگاه", "Your digital guardian"),
                 color = TextPrimary,
-                fontSize = 26.sp,
-                fontWeight = FontWeight.Bold
+                fontSize = 25.sp,
+                fontWeight = FontWeight.ExtraBold,
+                letterSpacing = (-0.25).sp
             )
             Text(
-                tr(fa, "وضعیت قابلیت‌های امنیتی در این نسخه", "Security capabilities in this build"),
+                tr(fa, "یک نگاه روشن به وضعیت امنیت و ابزارهای دستگاهت", "A clear view of your device security and tools"),
                 color = TextSecondary,
-                fontSize = 13.sp
+                fontSize = 12.sp
             )
         }
 
@@ -703,26 +708,26 @@ private fun DashboardScreen(
             onApk = onApkScan
         )
 
-        Column(verticalArrangement = Arrangement.spacedBy(11.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             SectionTitle(
-                title = tr(fa, "وضعیت محافظت", "Protection status"),
-                detail = tr(fa, "واقعیت قابلیت‌ها، نه امتیاز ساختگی", "Implemented capabilities, not a made-up score")
+                title = tr(fa, "وضعیت لایه‌های امنیتی", "Security layers"),
+                detail = tr(fa, "وضعیت واقعی قابلیت‌های فعال", "Live status of implemented capabilities")
             )
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 StatusCard(
                     modifier = Modifier.weight(1f),
                     icon = "scan",
-                    title = tr(fa, "اسکن دستگاه", "Device scan"),
+                    title = tr(fa, "موتور اسکن", "Scan engine"),
                     value = tr(fa, "آماده", "Ready"),
-                    detail = tr(fa, "حافظه و فایل‌ها", "Selected files & APK"),
+                    detail = tr(fa, "تحلیل محلی فایل‌ها", "On-device file analysis"),
                     tint = BrandTeal
                 )
                 StatusCard(
                     modifier = Modifier.weight(1f),
                     icon = "database",
-                    title = tr(fa, "بانک تهدید", "Threat feed"),
-                    value = tr(fa, "متصل نیست", "Not connected"),
-                    detail = tr(fa, "کلید انتشار تنظیم نشده", "Publisher key not set"),
+                    title = tr(fa, "بانک تهدید", "Threat intelligence"),
+                    value = tr(fa, "متصل نیست", "Offline"),
+                    detail = tr(fa, "اتصال منتشرکننده تنظیم نشده", "Threat feed not configured"),
                     tint = ColorWarning
                 )
             }
@@ -732,7 +737,7 @@ private fun DashboardScreen(
                     icon = "activity",
                     title = tr(fa, "محافظت بلادرنگ", "Real-time guard"),
                     value = tr(fa, "غیرفعال", "Inactive"),
-                    detail = tr(fa, "هنوز پیاده‌سازی نشده", "Not implemented yet"),
+                    detail = tr(fa, "در حال توسعه", "Not implemented yet"),
                     tint = ColorDanger
                 )
                 StatusCard(
@@ -740,55 +745,51 @@ private fun DashboardScreen(
                     icon = "lock",
                     title = tr(fa, "حریم خصوصی", "Privacy"),
                     value = tr(fa, "محلی", "On-device"),
-                    detail = tr(fa, "بدون آپلود محتوا", "No content upload"),
+                    detail = tr(fa, "بدون آپلود محتوای فایل", "File contents stay local"),
                     tint = ColorSuccess
                 )
             }
         }
 
         if (result != null) {
-            RecentScanCard(
-                fa = fa,
-                result = result,
-                onClick = onOpenScan
-            )
+            RecentScanCard(fa = fa, result = result, onClick = onOpenScan)
         }
 
-        Column(verticalArrangement = Arrangement.spacedBy(11.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             SectionTitle(
-                title = tr(fa, "شروع سریع", "Quick actions"),
-                detail = tr(fa, "میان‌برهای کاربردی", "Frequently used actions")
+                title = tr(fa, "راه‌های شروع", "Start a scan"),
+                detail = tr(fa, "بدون انتخاب دستی پوشه", "No manual folder selection")
             )
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 QuickActionCard(
                     modifier = Modifier.weight(1f),
                     icon = "file",
                     title = tr(fa, "اسکن سریع", "Quick scan"),
-                    caption = tr(fa, "اسکن خودکار", "Automatic scan"),
+                    caption = tr(fa, "مسیرهای رایج", "Common locations"),
                     onClick = onFileScan
                 )
                 QuickActionCard(
                     modifier = Modifier.weight(1f),
                     icon = "apk",
                     title = tr(fa, "اسکن عمیق", "Deep scan"),
-                    caption = tr(fa, "حافظه و برنامه‌ها", "Storage & apps"),
+                    caption = tr(fa, "پوشش گسترده‌تر", "Broader coverage"),
                     onClick = onApkScan
                 )
             }
         }
 
-        Column(verticalArrangement = Arrangement.spacedBy(11.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             SectionTitle(
-                title = tr(fa, "جعبه‌ابزار امنیتی", "Security toolkit"),
-                detail = tr(fa, "ماژول‌های فعلی و آینده", "Current and planned modules"),
-                action = tr(fa, "مشاهده همه", "View all"),
+                title = tr(fa, "ابزارهای نگهبان", "Guardian toolkit"),
+                detail = tr(fa, "ماژول‌های فعلی و در حال توسعه", "Available and upcoming modules"),
+                action = tr(fa, "همه ابزارها", "All tools"),
                 onAction = onOpenTools
             )
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 MiniFeatureCard(
                     modifier = Modifier.weight(1f),
                     icon = "lock",
-                    title = tr(fa, "قرنطینه", "Quarantine"),
+                    title = tr(fa, "قرنطینه امن", "Secure quarantine"),
                     subtitle = tr(fa, "نسخه رمزنگاری‌شده", "Encrypted copy"),
                     status = tr(fa, "پایه‌ای", "Basic"),
                     tint = BrandTeal
@@ -796,25 +797,22 @@ private fun DashboardScreen(
                 MiniFeatureCard(
                     modifier = Modifier.weight(1f),
                     icon = "shield",
-                    title = tr(fa, "آسیب‌پذیری", "Vulnerability"),
-                    subtitle = tr(fa, "تحلیل APK", "APK intelligence"),
+                    title = tr(fa, "تحلیل APK", "APK analysis"),
+                    subtitle = tr(fa, "بررسی ایستای برنامه", "Static app inspection"),
                     status = tr(fa, "در توسعه", "In progress"),
                     tint = ColorWarning
                 )
             }
         }
 
-        StorePromoCard(
-            fa = fa,
-            onClick = onOpenStore
-        )
+        StorePromoCard(fa = fa, onClick = onOpenStore)
 
         InfoBanner(
-            title = tr(fa, "گزارش‌دهی شفاف", "Transparent reporting"),
+            title = tr(fa, "شفافیت در گزارش امنیت", "Transparent security reporting"),
             body = tr(
                 fa,
-                "اسکن عمیق فایل‌های قابل‌دسترسی حافظه اشتراکی و APK برنامه‌های نصب‌شده را بررسی می‌کند؛ داده خصوصی سایر برنامه‌ها و محافظت بلادرنگ در دسترس نیست. نتیجه «بدون نشانگر شناخته‌شده» تضمین پاک بودن نیست.",
-                "Deep scan inspects accessible shared-storage files and installed-app APKs; other apps' private data and real-time protection remain unavailable. “No known indicator” is not a clean guarantee."
+                "اسکن فقط فایل‌ها و مسیرهایی را بررسی می‌کند که Android در اختیار برنامه می‌گذارد. داده خصوصی برنامه‌های دیگر و پوشه‌های Android/data و Android/obb قابل‌دسترسی نیستند. نتیجه «بدون نشانگر شناخته‌شده» تضمین پاک بودن فایل نیست.",
+                "Scans only inspect files and locations Android makes accessible. Other apps' private data and Android/data or Android/obb remain blocked. “No known indicator” does not guarantee a file is safe."
             ),
             warning = true
         )
@@ -828,116 +826,258 @@ private fun HeroSecurityCard(
     onScan: () -> Unit,
     onApk: () -> Unit
 ) {
-    val cardShape = RoundedCornerShape(30.dp)
+    val cardShape = RoundedCornerShape(31.dp)
     Card(
-        modifier = Modifier.fillMaxWidth().border(1.dp, Color(0xFFCA9AFF).copy(alpha = 0.25f), cardShape),
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, Color(0xFFCA9AFF).copy(alpha = 0.34f), cardShape),
         shape = cardShape,
-        colors = CardDefaults.cardColors(containerColor = SurfaceRaised)
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A0D2B))
     ) {
-        Box(
-            modifier = Modifier.fillMaxWidth()
-                .background(Brush.linearGradient(listOf(Color(0xFF44206E), Color(0xFF28134B), Color(0xFF160D2C))))
-                .padding(horizontal = 18.dp, vertical = 19.dp)
-        ) {
-            Canvas(Modifier.matchParentSize()) {
-                val w = size.width
-                val h = size.height
-                val glow = Offset(w * 0.18f, h * 0.28f)
-                drawCircle(
-                    brush = Brush.radialGradient(
-                        listOf(Color(0xFFB66BFF).copy(alpha = 0.22f), Color.Transparent),
-                        center = glow, radius = w * 0.55f
-                    ),
-                    radius = w * 0.55f, center = glow
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    Brush.verticalGradient(
+                        listOf(Color(0xFF3D1D64), Color(0xFF281344), Color(0xFF160C28))
+                    )
                 )
-                val orbit = Path().apply {
-                    moveTo(w * 0.50f, h * 0.02f)
-                    cubicTo(w * 1.05f, h * 0.10f, w * 0.92f, h * 0.42f, w * 1.08f, h * 0.62f)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(250.dp)
+            ) {
+                Canvas(Modifier.matchParentSize()) {
+                    val w = size.width
+                    val h = size.height
+                    val center = Offset(w * 0.50f, h * 0.52f)
+                    drawCircle(
+                        brush = Brush.radialGradient(
+                            listOf(
+                                Color(0xFFE4C0FF).copy(alpha = 0.30f),
+                                Color(0xFFA35BEF).copy(alpha = 0.16f),
+                                Color(0xFF5E2A92).copy(alpha = 0.05f),
+                                Color.Transparent
+                            ),
+                            center = center,
+                            radius = h * 0.76f
+                        ),
+                        radius = h * 0.76f,
+                        center = center
+                    )
+                    // Layered orbital rings behind the guardian.
+                    listOf(0.79f, 0.66f, 0.54f).forEachIndexed { index, factor ->
+                        drawCircle(
+                            color = Color(0xFFD8B5FF).copy(alpha = 0.15f - index * 0.025f),
+                            radius = h * factor,
+                            center = center,
+                            style = Stroke(width = if (index == 0) 1.15f else 0.8f)
+                        )
+                    }
+                    val orbit = Path().apply {
+                        moveTo(w * 0.04f, h * 0.62f)
+                        cubicTo(w * 0.26f, h * 0.02f, w * 0.78f, h * 0.06f, w * 0.97f, h * 0.60f)
+                    }
+                    drawPath(orbit, Color(0xFFC69BFF).copy(alpha = 0.30f),
+                        style = Stroke(width = 1.35f))
+                    val orbit2 = Path().apply {
+                        moveTo(w * 0.10f, h * 0.38f)
+                        cubicTo(w * 0.35f, h * 0.94f, w * 0.78f, h * 0.98f, w * 0.91f, h * 0.37f)
+                    }
+                    drawPath(orbit2, Color(0xFF9B67D6).copy(alpha = 0.20f),
+                        style = Stroke(width = 1f))
+                    val stars = listOf(
+                        Offset(w * 0.14f, h * 0.32f), Offset(w * 0.24f, h * 0.15f),
+                        Offset(w * 0.80f, h * 0.20f), Offset(w * 0.90f, h * 0.52f),
+                        Offset(w * 0.18f, h * 0.73f), Offset(w * 0.77f, h * 0.77f),
+                        Offset(w * 0.37f, h * 0.12f), Offset(w * 0.63f, h * 0.87f)
+                    )
+                    stars.forEachIndexed { index, point ->
+                        drawCircle(
+                            Color(0xFFF1DFFF).copy(alpha = if (index % 3 == 0) 0.74f else 0.34f),
+                            radius = if (index % 3 == 0) 2.3f else 1.25f,
+                            center = point
+                        )
+                    }
+                    // A subtle faceted shield silhouette gives the scene a focal halo.
+                    val haloShield = Path().apply {
+                        moveTo(w * 0.50f, h * 0.08f)
+                        lineTo(w * 0.75f, h * 0.18f)
+                        lineTo(w * 0.72f, h * 0.54f)
+                        cubicTo(w * 0.68f, h * 0.77f, w * 0.56f, h * 0.88f, w * 0.50f, h * 0.92f)
+                        cubicTo(w * 0.44f, h * 0.88f, w * 0.32f, h * 0.77f, w * 0.28f, h * 0.54f)
+                        lineTo(w * 0.25f, h * 0.18f)
+                        close()
+                    }
+                    drawPath(haloShield, Color(0xFFD7B5FF).copy(alpha = 0.055f))
+                    drawPath(haloShield, Color(0xFFE5CEFF).copy(alpha = 0.20f),
+                        style = Stroke(width = 1.1f))
                 }
-                drawPath(orbit, Color(0xFFD6B4FF).copy(alpha = 0.13f), style = Stroke(width = 1.2f))
-                listOf(Offset(w * 0.82f, h * 0.13f), Offset(w * 0.92f, h * 0.31f),
-                    Offset(w * 0.12f, h * 0.49f), Offset(w * 0.74f, h * 0.79f)
-                ).forEachIndexed { index, point ->
-                    drawCircle(Color.White.copy(alpha = if (index == 1) 0.50f else 0.22f),
-                        radius = if (index == 1) 2.1f else 1.2f, center = point)
+
+                Row(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = 15.dp)
+                        .background(Color(0xFF130A24).copy(alpha = 0.70f), RoundedCornerShape(50))
+                        .border(1.dp, Color(0xFFD7B4FF).copy(alpha = 0.22f), RoundedCornerShape(50))
+                        .padding(horizontal = 13.dp, vertical = 7.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Box(Modifier.size(7.dp).background(Color(0xFF73E1AE), CircleShape))
+                    Text(
+                        tr(fa, "موتور محلی آماده تحلیل", "ON-DEVICE ENGINE READY"),
+                        color = Color(0xFFE7D5FF),
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.35.sp
+                    )
                 }
+
+                FantasyGuardianIllustration(
+                    Modifier
+                        .align(Alignment.Center)
+                        .padding(top = 13.dp)
+                        .size(width = 206.dp, height = 226.dp)
+                )
+
+                Text(
+                    "AL  /  GUARDIAN",
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 8.dp),
+                    color = Color(0xFFD9B9FF).copy(alpha = 0.72f),
+                    fontSize = 8.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    letterSpacing = 1.8.sp
+                )
             }
-            Column(verticalArrangement = Arrangement.spacedBy(17.dp)) {
+
+            Column(
+                modifier = Modifier.padding(horizontal = 20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(9.dp)
+            ) {
+                Text(
+                    tr(fa, "نگهبان هوشمند AL AI", "The AL AI guardian"),
+                    color = TextPrimary,
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    textAlign = TextAlign.Center
+                )
+                Text(
+                    tr(
+                        fa,
+                        "امنیت دستگاهت را با اسکن سریع یا تحلیل عمیق فایل‌های قابل‌دسترسی بررسی کن.",
+                        "Review your device with quick scans or deeper inspection of accessible files."
+                    ),
+                    color = Color(0xFFD0C0E4),
+                    fontSize = 12.sp,
+                    lineHeight = 19.sp,
+                    textAlign = TextAlign.Center
+                )
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                    horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(
-                        modifier = Modifier.background(Color(0xFFC69BFF).copy(alpha = 0.12f), RoundedCornerShape(50))
-                            .border(1.dp, Color(0xFFC69BFF).copy(alpha = 0.18f), RoundedCornerShape(50))
-                            .padding(horizontal = 11.dp, vertical = 7.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(7.dp)
-                    ) {
-                        Box(Modifier.size(7.dp).background(Color(0xFF75E7B2), CircleShape))
-                        Text(tr(fa, "موتور اسکن محلی آماده", "LOCAL SCAN ENGINE READY"),
-                            color = Color(0xFFE1C8FF), fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold, letterSpacing = 0.35.sp)
-                    }
-                    Text("AL  /  GUARDIAN", color = Color(0xFFB995EC).copy(alpha = 0.80f),
-                        fontSize = 8.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.1.sp)
+                    GuardianValuePill(
+                        icon = "lock",
+                        label = tr(fa, "محلی", "LOCAL")
+                    )
+                    Spacer(Modifier.width(7.dp))
+                    GuardianValuePill(
+                        icon = "activity",
+                        label = tr(fa, "شفاف", "CLEAR")
+                    )
+                    Spacer(Modifier.width(7.dp))
+                    GuardianValuePill(
+                        icon = "check",
+                        label = tr(fa, "مبتنی بر شواهد", "EVIDENCE")
+                    )
                 }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    FantasyGuardianIllustration(Modifier.size(width = 158.dp, height = 174.dp))
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(tr(fa, "نگهبان هوشمند AL AI", "Meet your AL AI guardian"),
-                            color = TextPrimary, fontSize = 19.sp, lineHeight = 26.sp, fontWeight = FontWeight.ExtraBold)
-                        Text(
-                            tr(fa,
-                                "امنیت دستگاهت را آگاهانه بررسی کن؛ با اسکن سریع یا تحلیل عمیق فایل‌های قابل‌دسترسی.",
-                                "Review your device with quick or deep scans of accessible files."),
-                            color = Color(0xFFD4C6E7), fontSize = 11.sp, lineHeight = 17.sp
-                        )
-                        Text(tr(fa, "محلی • شفاف • مبتنی بر شواهد", "LOCAL  •  CLEAR  •  EVIDENCE-BASED"),
-                            color = Color(0xFFBE96F2), fontSize = 8.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.25.sp)
-                    }
-                }
+            }
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 18.dp, vertical = 17.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
                 Button(
                     onClick = onScan,
-                    modifier = Modifier.fillMaxWidth().height(55.dp).background(
-                        Brush.horizontalGradient(listOf(Color(0xFFE1C4FF), Color(0xFFB77CFF), Color(0xFF9860F0))),
-                        RoundedCornerShape(17.dp)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp)
+                        .background(
+                            Brush.horizontalGradient(
+                                listOf(Color(0xFFE9D4FF), Color(0xFFC18BFF), Color(0xFF9857EA))
+                            ),
+                            RoundedCornerShape(18.dp)
+                        ),
+                    shape = RoundedCornerShape(18.dp),
+                    contentPadding = PaddingValues(horizontal = 17.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.Transparent,
+                        contentColor = Color(0xFF241036)
                     ),
-                    shape = RoundedCornerShape(17.dp),
-                    contentPadding = PaddingValues(horizontal = 15.dp, vertical = 11.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent, contentColor = Color(0xFF1B0B31)),
-                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp, pressedElevation = 0.dp)
+                    elevation = ButtonDefaults.buttonElevation(
+                        defaultElevation = 0.dp,
+                        pressedElevation = 0.dp
+                    )
                 ) {
-                    IconArt("spark", tint = Color(0xFF351552), size = 18.dp)
-                    Spacer(Modifier.width(9.dp))
-                    Text(if (scanning) tr(fa, "در حال اسکن…", "Scanning…")
+                    IconArt("spark", tint = Color(0xFF49216E), size = 18.dp)
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        if (scanning) tr(fa, "در حال اسکن…", "Scanning…")
                         else tr(fa, "شروع اسکن سریع", "Start quick scan"),
-                        fontSize = 14.sp, fontWeight = FontWeight.ExtraBold)
-                    Spacer(Modifier.width(8.dp))
-                    IconArt("arrow", tint = Color(0xFF351552), size = 17.dp)
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                    Spacer(Modifier.width(9.dp))
+                    IconArt("arrow", tint = Color(0xFF49216E), size = 18.dp)
                 }
+
                 OutlinedButton(
                     onClick = onApk,
                     modifier = Modifier.fillMaxWidth().height(49.dp),
-                    shape = RoundedCornerShape(16.dp),
+                    shape = RoundedCornerShape(17.dp),
                     contentPadding = PaddingValues(horizontal = 12.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFD9BDFF).copy(alpha = 0.36f)),
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp, Color(0xFFDCC1FF).copy(alpha = 0.36f)
+                    ),
                     colors = ButtonDefaults.outlinedButtonColors(
-                        containerColor = Color(0xFF160D2C).copy(alpha = 0.35f),
+                        containerColor = Color(0xFF170D2B).copy(alpha = 0.30f),
                         contentColor = Color(0xFFE9D9FF)
                     )
                 ) {
                     IconArt("apk", tint = Color(0xFFC69BFF), size = 17.dp)
-                    Spacer(Modifier.width(8.dp))
-                    Text(tr(fa, "اسکن عمیق دستگاه", "Deep device scan"), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.width(9.dp))
+                    Text(
+                        tr(fa, "اسکن عمیق دستگاه", "Deep device scan"),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
                 }
             }
+            Spacer(Modifier.height(2.dp))
         }
+    }
+}
+
+@Composable
+private fun GuardianValuePill(icon: String, label: String) {
+    Row(
+        modifier = Modifier
+            .background(Color(0xFFD6B8FF).copy(alpha = 0.075f), RoundedCornerShape(50))
+            .border(1.dp, Color(0xFFDCC6FF).copy(alpha = 0.13f), RoundedCornerShape(50))
+            .padding(horizontal = 9.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(5.dp)
+    ) {
+        IconArt(icon, tint = Color(0xFFD3B2FF), size = 12.dp)
+        Text(label, color = Color(0xFFD6C4EB), fontSize = 8.sp, fontWeight = FontWeight.SemiBold)
     }
 }
 
@@ -1136,28 +1276,67 @@ private fun StatusCard(
     detail: String,
     tint: Color
 ) {
-    val shape = RoundedCornerShape(21.dp)
+    val shape = RoundedCornerShape(23.dp)
     Card(
-        modifier = modifier.border(1.dp, tint.copy(alpha = 0.20f), shape),
+        modifier = modifier.border(
+            androidx.compose.foundation.BorderStroke(1.dp, tint.copy(alpha = 0.24f)),
+            shape
+        ),
         shape = shape,
-        colors = CardDefaults.cardColors(containerColor = SurfaceBase)
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF171027))
     ) {
-        Box(Modifier.fillMaxWidth().background(
-            Brush.linearGradient(listOf(tint.copy(alpha = 0.095f), SurfaceBase, SurfaceBase))
-        ).padding(horizontal = 13.dp, vertical = 14.dp)) {
-            Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(35.dp).background(tint.copy(alpha = 0.13f), RoundedCornerShape(12.dp)),
-                        contentAlignment = Alignment.Center) {
-                        IconArt(icon, tint = tint, size = 19.dp)
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .background(
+                    Brush.linearGradient(
+                        listOf(tint.copy(alpha = 0.13f), Color(0xFF211532), Color(0xFF171027))
+                    )
+                )
+                .padding(horizontal = 14.dp, vertical = 15.dp)
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        Modifier
+                            .size(38.dp)
+                            .background(tint.copy(alpha = 0.14f), RoundedCornerShape(13.dp))
+                            .border(1.dp, tint.copy(alpha = 0.20f), RoundedCornerShape(13.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        IconArt(icon, tint = tint, size = 20.dp)
                     }
-                    Box(Modifier.size(7.dp).background(tint, CircleShape))
+                    Box(
+                        Modifier
+                            .size(8.dp)
+                            .background(tint, CircleShape)
+                    )
                 }
-                Text(title, color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Medium)
-                Text(value, color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(detail, color = TextTertiary, fontSize = 10.sp, maxLines = 2, lineHeight = 14.sp)
+                Text(
+                    title,
+                    color = TextSecondary,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium
+                )
+                Text(
+                    value,
+                    color = TextPrimary,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    detail,
+                    color = TextTertiary,
+                    fontSize = 10.sp,
+                    maxLines = 2,
+                    lineHeight = 14.sp
+                )
             }
         }
     }
