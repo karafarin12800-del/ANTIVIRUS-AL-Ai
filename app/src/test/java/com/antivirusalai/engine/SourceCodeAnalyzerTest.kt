@@ -91,6 +91,14 @@ class SourceCodeAnalyzerTest {
     }
 
     @Test
+    fun rejectsBinaryLikeSourceContent() {
+        val report = SourceCodeAnalyzer.analyze("not-really-code.kt", "fun main() {\u0000\u0001}")
+        assertNotNull(report)
+        assertFalse(report!!.completed)
+        assertTrue(report.limitationEn.orEmpty().contains("NUL"))
+    }
+
+    @Test
     fun oversizedSourceReturnsExplicitLimitedReport() {
         val report = SourceCodeAnalyzer.limitedReport("large.kt")
         assertNotNull(report)
