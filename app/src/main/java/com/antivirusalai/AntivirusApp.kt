@@ -74,18 +74,18 @@ import com.antivirusalai.remediation.QuarantineManager
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
-private val AppBackground = Color(0xFF07111E)
-private val SurfaceBase = Color(0xFF101D2D)
-private val SurfaceRaised = Color(0xFF17283C)
-private val SurfaceSoft = Color(0xFF1B3046)
-private val BrandTeal = Color(0xFF42D9CF)
-private val BrandBlue = Color(0xFF71A3FF)
+private val AppBackground = Color(0xFF100B1B)
+private val SurfaceBase = Color(0xFF1B1428)
+private val SurfaceRaised = Color(0xFF251B36)
+private val SurfaceSoft = Color(0xFF302343)
+private val BrandTeal = Color(0xFFB99AFF)
+private val BrandBlue = Color(0xFF8066D8)
 private val TextPrimary = Color(0xFFF3F7FC)
-private val TextSecondary = Color(0xFF9FB1C5)
-private val TextTertiary = Color(0xFF73869D)
-private val ColorWarning = Color(0xFFFFC36E)
-private val ColorDanger = Color(0xFFFF7E86)
-private val ColorSuccess = Color(0xFF79DDB2)
+private val TextSecondary = Color(0xFFB9ADC9)
+private val TextTertiary = Color(0xFF8A7BA0)
+private val ColorWarning = Color(0xFFF2C66D)
+private val ColorDanger = Color(0xFFFF718C)
+private val ColorSuccess = Color(0xFF58D99A)
 
 private enum class MainTab(val key: String) {
     HOME("home"),
@@ -185,11 +185,24 @@ fun AntivirusApp() {
                         .fillMaxSize()
                         .background(
                             Brush.verticalGradient(
-                                colors = listOf(Color(0xFF0C1C2C), AppBackground, AppBackground)
+                                colors = listOf(Color(0xFF241735), Color(0xFF171022), AppBackground)
                             )
                         )
                         .padding(insets)
                 ) {
+                    Canvas(modifier = Modifier.fillMaxSize()) {
+                        val glowRadius = size.minDimension * 0.72f
+                        drawCircle(
+                            color = Color(0xFF9B72FF).copy(alpha = 0.10f),
+                            radius = glowRadius,
+                            center = Offset(size.width * 0.94f, size.height * 0.08f)
+                        )
+                        drawCircle(
+                            color = Color(0xFF6E4DB8).copy(alpha = 0.075f),
+                            radius = glowRadius * 0.82f,
+                            center = Offset(size.width * 0.04f, size.height * 0.68f)
+                        )
+                    }
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
@@ -467,7 +480,7 @@ private fun MainNavigationBar(
     onSelect: (MainTab) -> Unit
 ) {
     NavigationBar(
-        containerColor = Color(0xFF0B1725),
+        containerColor = Color(0xFF171021),
         contentColor = TextPrimary,
         tonalElevation = 0.dp
     ) {
