@@ -33,6 +33,11 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -114,6 +119,7 @@ fun AntivirusApp() {
     var scanResult by remember { mutableStateOf<ScanResult?>(null) }
     var batchReport by remember { mutableStateOf<FolderScanReport?>(null) }
     var batchProgress by remember { mutableStateOf<String?>(null) }
+    var scanProgress by remember { mutableStateOf<Float?>(null) }
     var pendingDeepScan by remember { mutableStateOf(false) }
     var deviceScanDeep by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
@@ -144,11 +150,8 @@ fun AntivirusApp() {
         selectedUri = null
         scanResult = null
         batchReport = null
-        batchProgress = tr(
-            fa,
-            "در حال آماده‌سازی فهرست فایل‌ها و برنامه‌های نصب‌شده…",
-            "Preparing the file and installed-app inventory…"
-        )
+        batchProgress = tr(fa, "در حال آماده‌سازی اسکن…", "Preparing scan…")
+        scanProgress = null
         errorMessage = null
         notice = null
         activeTab = MainTab.SCAN.key
@@ -157,8 +160,15 @@ fun AntivirusApp() {
                 batchReport = DeviceScanEngine.scanDevice(
                     context.applicationContext,
                     deep
-                ) { current, total, name ->
-                    batchProgress = "$current / $total  •  $name"
+                ) { current, total, _ ->
+                    scanProgress = if (total > 0) {
+                        (current.toFloat() / total.toFloat()).coerceIn(0f, 1f)
+                    } else null
+                    batchProgress = if (total > 0) {
+                        tr(fa, "بررسی $current از $total فایل", "$current of $total files checked")
+                    } else {
+                        tr(fa, "در حال آماده‌سازی فهرست فایل‌ها…", "Preparing file inventory…")
+                    }
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled
@@ -166,6 +176,7 @@ fun AntivirusApp() {
                 errorMessage = error.message
                     ?: tr(fa, "اسکن حافظه دستگاه انجام نشد.", "Device scan could not be completed.")
             } finally {
+                if (batchReport != null && errorMessage == null) scanProgress = 1f
                 scanning = false
                 batchProgress = null
             }
@@ -343,6 +354,7 @@ fun AntivirusApp() {
                                 result = scanResult,
                                 batchReport = batchReport,
                                 batchProgress = batchProgress,
+                                scanProgress = scanProgress,
                                 deviceScanDeep = deviceScanDeep,
                                 errorMessage = errorMessage,
                                 notice = notice,
@@ -1599,12 +1611,151 @@ private fun StorePromoCard(fa: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
+private fun ScanGuardianHeader(
+    fa: Boolean,
+    scanning: Boolean,
+    completed: Boolean,
+    progress: Float?,
+    progressLabel: String?
+) {
+    val pulse = rememberInfiniteTransition(label = "guardian-neon")
+    val glowAlpha by pulse.animateFloat(
+        initialValue = 0.28f,
+        targetValue = 0.88f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 850),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "guardian-glow"
+    )
+    val glowColor = if (completed) Color(0xFF43E69A) else Color(0xFFB45CFF)
+    val showPulse = scanning
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF170D29))
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Box(
+                modifier = Modifier.fillMaxWidth().height(174.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Canvas(Modifier.matchParentSize()) {
+                    val center = Offset(size.width / 2f, size.height / 2f)
+                    val alpha = if (showPulse) glowAlpha else if (completed) 0.72f else 0.28f
+                    drawCircle(
+                        brush = Brush.radialGradient(
+                            listOf(
+                                glowColor.copy(alpha = alpha * 0.48f),
+                                glowColor.copy(alpha = alpha * 0.20f),
+                                Color.Transparent
+                            ),
+                            center = center,
+                            radius = size.height * 0.49f
+                        ),
+                        radius = size.height * 0.49f,
+                        center = center
+                    )
+                    drawCircle(
+                        color = glowColor.copy(alpha = alpha * 0.52f),
+                        radius = size.height * 0.43f,
+                        center = center,
+                        style = Stroke(width = 1.4f)
+                    )
+                }
+                FantasyGuardianIllustration(
+                    Modifier.size(width = 148.dp, height = 164.dp)
+                )
+                Box(
+                    Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 4.dp)
+                        .size(12.dp)
+                        .background(glowColor, CircleShape)
+                        .border(2.dp, Color.White.copy(alpha = 0.8f), CircleShape)
+                )
+            }
+            Text(
+                when {
+                    scanning -> tr(fa, "نگهبان در حال اسکن است", "GUARDIAN SCANNING")
+                    completed -> tr(fa, "چراغ نگهبان روشن است", "GUARDIAN LIGHT ON")
+                    else -> tr(fa, "نگهبان AL AI", "AL AI GUARDIAN")
+                },
+                color = if (completed) Color(0xFF65EBA9) else Color(0xFFE6D2FF),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.ExtraBold,
+                letterSpacing = 0.45.sp
+            )
+            if (scanning || completed) {
+                val knownProgress = progress
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        if (scanning) tr(fa, "پیشرفت اسکن", "SCAN PROGRESS")
+                        else tr(fa, "اسکن کامل شد", "SCAN COMPLETE"),
+                        color = TextSecondary,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        knownProgress?.let { "${(it.coerceIn(0f, 1f) * 100f).toInt()}%" } ?: "…",
+                        color = if (completed) Color(0xFF65EBA9) else Color(0xFFDDBBFF),
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                }
+                if (knownProgress != null) {
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .height(13.dp)
+                            .background(Color(0xFF39234E), RoundedCornerShape(50))
+                    ) {
+                        Box(
+                            Modifier
+                                .fillMaxWidth(knownProgress.coerceIn(0f, 1f))
+                                .height(13.dp)
+                                .background(
+                                    if (completed) Color(0xFF43E69A) else Color(0xFFB45CFF),
+                                    RoundedCornerShape(50)
+                                )
+                        )
+                    }
+                } else {
+                    LinearProgressIndicator(
+                        modifier = Modifier.fillMaxWidth().height(9.dp),
+                        color = Color(0xFFB45CFF),
+                        trackColor = Color(0xFF39234E)
+                    )
+                }
+                progressLabel?.let {
+                    Text(
+                        it,
+                        color = TextTertiary,
+                        fontSize = 10.sp,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun ScanCenterScreen(
     fa: Boolean,
     scanning: Boolean,
     result: ScanResult?,
     batchReport: FolderScanReport?,
     batchProgress: String?,
+    scanProgress: Float?,
     deviceScanDeep: Boolean,
     errorMessage: String?,
     notice: String?,
@@ -1616,65 +1767,35 @@ private fun ScanCenterScreen(
     onClearReport: () -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(15.dp)) {
+        ScanGuardianHeader(
+            fa = fa,
+            scanning = scanning,
+            completed = batchReport != null && !scanning && errorMessage == null,
+            progress = scanProgress,
+            progressLabel = batchProgress
+        )
+
         Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            EyebrowLabel(tr(fa, "تحلیل محلی", "ON-DEVICE ANALYSIS"))
+            EyebrowLabel(tr(fa, "AL AI  /  اسکن هوشمند", "AL AI  /  SMART SCAN"))
             Text(tr(fa, "مرکز اسکن", "Scan center"), color = TextPrimary, fontSize = 25.sp, fontWeight = FontWeight.Bold)
-            Text(
-                tr(
-                    fa,
-                    "بدون انتخاب پوشه؛ اسکن سریع یا عمیق را اجرا کن. فایل‌های قابل‌دسترسی بررسی می‌شوند و فایل‌های کدِ پشتیبانی‌شده تحلیل ایستا می‌گیرند.",
-                    "No folder picker. Quick or deep scan inspects accessible files; supported source files also receive static code analysis."
-                ),
-                color = TextSecondary,
-                fontSize = 12.sp
-            )
         }
 
         ScanModeCard(
             icon = "file",
             title = tr(fa, "اسکن سریع", "Quick scan"),
-            description = tr(fa, "برنامه‌های نصب‌شده، فایل‌های ریشه حافظه و مسیرهای مهم مثل دانلودها و اسناد بررسی می‌شوند.", "Checks installed-app packages, loose storage-root files, and key folders such as Downloads and Documents."),
-            tag = tr(fa, "قابل استفاده", "AVAILABLE"),
+            description = tr(fa, "بررسی خودکار مسیرهای مهم", "Automatically checks key locations"),
+            tag = tr(fa, "آماده", "READY"),
             enabled = !scanning,
             onClick = onFileScan
         )
         ScanModeCard(
             icon = "apk",
             title = tr(fa, "اسکن عمیق", "Deep scan"),
-            description = tr(fa, "کل حافظه اشتراکیِ قابل‌دسترسی، فایل‌های پنهانِ قابل‌خواندن و APK برنامه‌های نصب‌شده بررسی می‌شوند.", "Checks accessible shared storage, readable hidden files and installed-app APK archives."),
-            tag = tr(fa, "قابل استفاده", "AVAILABLE"),
+            description = tr(fa, "بررسی گسترده فایل‌های قابل‌دسترسی", "Broader scan of accessible files"),
+            tag = tr(fa, "آماده", "READY"),
             enabled = !scanning,
             onClick = onApkScan
         )
-        InfoBanner(
-            title = tr(fa, "محدودیت واقعی Android", "Android access boundary"),
-            body = tr(
-                fa,
-                "برای اسکن خودکار باید اجازه «مدیریت همه فایل‌ها» را در تنظیمات فعال کنی. حتی با این اجازه، Android داده خصوصی برنامه‌های دیگر و پوشه‌های Android/data و Android/obb را در اختیار این برنامه نمی‌گذارد.",
-                "Automatic scanning requires All files access in Android settings. Even then, Android blocks other apps' private data and the Android/data and Android/obb directories."
-            ),
-            warning = true
-        )
-
-        if (scanning) {
-            Card(
-                colors = CardDefaults.cardColors(containerColor = SurfaceBase),
-                shape = RoundedCornerShape(18.dp)
-            ) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-                        IconArt("scan", tint = BrandTeal, size = 19.dp)
-                        Text(tr(fa, "در حال اسکن حافظه دستگاه…", "Scanning device storage…"), color = TextPrimary, fontWeight = FontWeight.SemiBold)
-                    }
-                    LinearProgressIndicator(
-                        modifier = Modifier.fillMaxWidth(),
-                        color = BrandTeal,
-                        trackColor = BrandTeal.copy(alpha = 0.13f)
-                    )
-                    Text(batchProgress ?: tr(fa, "فایل‌ها و APKها بدون نصب یا اجرا بررسی می‌شوند.", "Files and APKs are inspected without installation or execution."), color = TextSecondary, fontSize = 11.sp)
-                }
-            }
-        }
 
         errorMessage?.let {
             InfoBanner(tr(fa, "اسکن انجام نشد", "Scan failed"), it, warning = true)
@@ -1702,17 +1823,6 @@ private fun ScanCenterScreen(
             )
         }
 
-        if (result == null && batchReport == null && errorMessage == null) {
-            InfoBanner(
-                title = tr(fa, "پیش از شروع", "Before you start"),
-                body = tr(
-                    fa,
-                    "فقط فایل‌های متعلق به خودت یا فایل‌هایی را که اجازه بررسی‌شان را داری اسکن کن. فایل‌های کدِ پشتیبانی‌شده تحلیل ایستا می‌گیرند؛ این نسخه هنوز بانک امضای بدافزار تولیدی ندارد.",
-                    "Select only files you own or are authorized to inspect. The current engine does not yet contain a production malware-signature database."
-                ),
-                warning = false
-            )
-        }
     }
 }
 
@@ -1735,44 +1845,26 @@ private fun BatchScanSummaryCard(
                 fontWeight = FontWeight.Bold,
                 fontSize = 16.sp
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                MetricMini(Modifier.weight(1f), tr(fa, "بررسی‌شده", "Scanned"), report.scannedCount.toString())
-                MetricMini(Modifier.weight(1f), tr(fa, "مشکوک", "Suspicious"), report.suspiciousCount.toString())
-                MetricMini(Modifier.weight(1f), tr(fa, "نامشخص", "Unknown"), report.unknownCount.toString())
+            val threatItems = report.items.filter {
+                it.result.verdict == ScanVerdict.TEST_MARKER_MATCH ||
+                    it.result.verdict == ScanVerdict.SUSPICIOUS
             }
-            if (report.codeAnalyzedCount > 0) {
+            if (threatItems.isEmpty()) {
                 Text(
-                    tr(
-                        fa,
-                        "تحلیل ایستای کد: ${report.codeAnalyzedCount} فایل • ${report.codeIssueCount} یافته",
-                        "Static code analysis: ${report.codeAnalyzedCount} files • ${report.codeIssueCount} findings"
-                    ),
-                    color = if (report.codeIssueCount > 0) ColorWarning else BrandBlue,
-                    fontSize = 11.sp,
+                    tr(fa, "تهدیدی شناسایی نشد", "No threats detected"),
+                    color = ColorSuccess,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            } else {
+                Text(
+                    tr(fa, "${threatItems.size} مورد نیازمند بررسی", "${threatItems.size} items need attention"),
+                    color = ColorWarning,
+                    fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold
                 )
             }
-            Text(
-                tr(
-                    fa,
-                    "از ${report.discoveredFiles} مورد قابل بررسی، ${report.scannedCount} مورد اسکن شدند. برای دیدن شواهد هر نتیجه، روی همان مورد بزن.",
-                    "${report.scannedCount} of ${report.discoveredFiles} discovered items were scanned. Tap an item to inspect its evidence."
-                ),
-                color = TextSecondary,
-                fontSize = 11.sp
-            )
-            if (report.items.isEmpty()) {
-                Text(
-                    tr(
-                        fa,
-                        "در محدوده قابل‌دسترسی این حالت فایلی پیدا نشد. مجوز حافظه و پوشه‌های رایج را بررسی کن؛ برای پوشش گسترده‌تر اسکن عمیق را اجرا کن.",
-                        "No readable files were found in this scan scope. Check storage access and common folders, or run a deep scan for broader coverage."
-                    ),
-                    color = ColorWarning,
-                    fontSize = 12.sp
-                )
-            }
-            report.items.take(60).forEach { item ->
+            threatItems.take(60).forEach { item ->
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1789,28 +1881,10 @@ private fun BatchScanSummaryCard(
                     StatusBadge(verdictBadge(item.result.verdict, fa), verdictColor(item.result.verdict))
                 }
             }
-            if (report.scannedCount > report.items.size) {
+            if (threatItems.size > 60) {
                 Text(
-                    tr(fa, "۶۰ نتیجه اول نمایش داده شده‌اند؛ مجموعاً ${report.scannedCount} فایل اسکن شده است.", "Showing the first 60 of ${report.scannedCount} scanned files."),
+                    tr(fa, "۶۰ مورد اول نمایش داده می‌شوند.", "Showing the first 60 items."),
                     color = TextTertiary,
-                    fontSize = 10.sp
-                )
-            }
-            if (report.failures.isNotEmpty()) {
-                Text(
-                    tr(fa, "مواردی که بررسی نشدند: ${report.failures.size}", "Files or folders not scanned: ${report.failures.size}"),
-                    color = ColorWarning,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
-                report.failures.take(5).forEach { failure ->
-                    Text("${failure.name}: ${failure.reason}", color = TextSecondary, fontSize = 10.sp)
-                }
-            }
-            if (report.truncated || report.skippedFiles > 0) {
-                Text(
-                    tr(fa, "محدودیت ایمنی اسکن اعمال شد. موارد ردشده: ${report.skippedFiles}", "Safety scan limits were applied. Skipped: ${report.skippedFiles}"),
-                    color = ColorWarning,
                     fontSize = 10.sp
                 )
             }
