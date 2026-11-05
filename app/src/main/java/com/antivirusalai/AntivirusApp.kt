@@ -581,7 +581,7 @@ private fun DashboardScreen(
             fa = fa,
             scanning = deviceChecking,
             onScan = onQuickCheck,
-            onApk = onApkScan
+            onApk = onOpenScan
         )
 
         Column(verticalArrangement = Arrangement.spacedBy(11.dp)) {
@@ -627,9 +627,7 @@ private fun DashboardScreen(
             }
         }
 
-        if (deviceReport != null) {
-            DeviceQuickCheckCard(report = deviceReport, fa = fa)
-        }
+        deviceReport?.let { DeviceQuickCheckCard(report = it, fa = fa) }
 
         if (result != null) {
             RecentScanCard(
@@ -650,14 +648,14 @@ private fun DashboardScreen(
                     icon = "file",
                     title = tr(fa, "اسکن فایل", "File scan"),
                     caption = tr(fa, "انتخاب فایل", "Choose a file"),
-                    onClick = onFileScan
+                    onClick = onOpenScan
                 )
                 QuickActionCard(
                     modifier = Modifier.weight(1f),
                     icon = "apk",
                     title = tr(fa, "تحلیل APK", "APK analysis"),
                     caption = tr(fa, "مجوزها و امضا", "Permissions & signer"),
-                    onClick = onApkScan
+                    onClick = onOpenScan
                 )
             }
         }
