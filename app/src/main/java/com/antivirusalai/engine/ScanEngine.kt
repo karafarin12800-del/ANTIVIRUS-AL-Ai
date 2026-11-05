@@ -9,6 +9,8 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
+import java.nio.ByteBuffer
+import java.nio.charset.CodingErrorAction
 import java.security.MessageDigest
 
 class ScanTooLargeException(message: String) : Exception(message)
@@ -85,7 +87,13 @@ object ScanEngine {
                     SourceCodeAnalyzer.limitedReport(displayName)
                 } else {
                     runCatching {
-                        SourceCodeAnalyzer.analyze(displayName, temp.readText(Charsets.UTF_8))
+                        val sourceBytes = temp.readBytes()
+                        val sourceText = Charsets.UTF_8.newDecoder()
+                            .onMalformedInput(CodingErrorAction.REPORT)
+                            .onUnmappableCharacter(CodingErrorAction.REPORT)
+                            .decode(ByteBuffer.wrap(sourceBytes))
+                            .toString()
+                        SourceCodeAnalyzer.analyze(displayName, sourceText)
                     }.getOrElse {
                         val detectedLanguage = SourceCodeAnalyzer.languageFor(displayName) ?: "Unknown"
                         CodeAnalysisReport(
