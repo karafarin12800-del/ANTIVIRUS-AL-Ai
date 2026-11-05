@@ -23,8 +23,9 @@ object DeviceScanEngine {
     private const val QUICK_TOTAL_BYTES = 1024L * 1024L * 1024L
     private const val MAX_DEPTH = 64
     private val QUICK_DIRECTORIES = listOf(
-        "Download", "Documents", "Bluetooth", "DCIM",
-        "Pictures", "Movies", "Music", "Android/media"
+        "Download", "Downloads", "Documents", "Bluetooth", "DCIM",
+        "Pictures", "Movies", "Music", "Podcasts", "Notifications",
+        "Ringtones", "Recordings", "Android/media"
     )
 
     fun hasBroadStorageAccess(): Boolean =
@@ -90,15 +91,31 @@ object DeviceScanEngine {
             }
             addInstalledApplicationPackages(context, candidates, failures, maxFiles)
         } else {
-            roots.forEach { root ->
-                QUICK_DIRECTORIES.forEach { relative ->
-                    if (candidates.size >= maxFiles) return@forEach
+            // Include loose files placed directly in shared-storage roots. Some devices
+            // and users do not keep downloads inside the standard named folders.
+            for (root in roots) {
+                if (candidates.size >= maxFiles) break
+                runCatching { root.listFiles() }.getOrNull()
+                    ?.filter { it.isFile }
+                    ?.forEach { file ->
+                        if (candidates.size < maxFiles) addCandidate(file)
+                    }
+            }
+
+            for (root in roots) {
+                if (candidates.size >= maxFiles) break
+                for (relative in QUICK_DIRECTORIES) {
+                    if (candidates.size >= maxFiles) break
                     val directory = File(root, relative)
                     if (directory.isDirectory) {
                         collectQuickFiles(directory, candidates, failures, maxFiles)
                     }
                 }
             }
+
+            // Installed application packages are a high-value quick-scan target,
+            // not something users should have to wait for a deep scan to inspect.
+            addInstalledApplicationPackages(context, candidates, failures, maxFiles)
         }
 
         val items = mutableListOf<FolderScanItem>()
@@ -119,7 +136,7 @@ object DeviceScanEngine {
             }
             if (!deep && declaredSize > 0 && totalBytes + declaredSize > QUICK_TOTAL_BYTES) {
                 skipped++
-                failures += FolderScanFailure(file.name, "The 2 GB scan data limit was reached.")
+                failures += FolderScanFailure(file.name, "The 1 GB quick-scan data limit was reached.")
                 continue
             }
             if (index == 0 || index % 5 == 0 || index == list.lastIndex) {
@@ -244,16 +261,17 @@ object DeviceScanEngine {
         }
         apps.forEach { app ->
             if (output.size >= maxFiles) return@forEach
-            addPackageArchive(app.sourceDir, output)
-            app.splitSourceDirs.orEmpty().forEach { addPackageArchive(it, output) }
+            addPackageArchive(app.sourceDir, output, maxFiles)
+            app.splitSourceDirs.orEmpty().forEach { addPackageArchive(it, output, maxFiles) }
         }
     }
 
     private fun addPackageArchive(
         path: String?,
-        output: LinkedHashMap<String, File>
+        output: LinkedHashMap<String, File>,
+        maxFiles: Int
     ) {
-        if (path.isNullOrBlank()) return
+        if (output.size >= maxFiles || path.isNullOrBlank()) return
         val file = File(path)
         if (!file.isFile || !file.canRead()) return
         val canonical = runCatching { file.canonicalFile }.getOrNull() ?: return
