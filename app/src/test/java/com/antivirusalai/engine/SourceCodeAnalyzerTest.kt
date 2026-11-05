@@ -71,6 +71,24 @@ class SourceCodeAnalyzerTest {
     }
 
     @Test
+    fun doesNotFlagValidSingleLinePythonSuite() {
+        val report = SourceCodeAnalyzer.analyze(
+            "inline.py",
+            "if ready: print('ok')"
+        )
+        assertFalse(report!!.diagnostics.any { it.ruleId == "PYTHON_MISSING_COLON" })
+    }
+
+    @Test
+    fun findsTodoMarkersInsideComments() {
+        val report = SourceCodeAnalyzer.analyze(
+            "notes.js",
+            "// TODO: remove temporary compatibility path"
+        )
+        assertTrue(report!!.diagnostics.any { it.ruleId == "TODO_OR_FIXME" })
+    }
+
+    @Test
     fun reportsInvalidJsonStructure() {
         val report = SourceCodeAnalyzer.analyze(
             "settings.json",
