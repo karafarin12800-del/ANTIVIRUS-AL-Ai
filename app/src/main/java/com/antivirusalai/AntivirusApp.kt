@@ -65,10 +65,12 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.antivirusalai.engine.FolderScanEngine
+import com.antivirusalai.engine.FolderScanItem
+import com.antivirusalai.engine.FolderScanMode
+import com.antivirusalai.engine.FolderScanReport
 import com.antivirusalai.engine.EvidenceSeverity
-import com.antivirusalai.engine.ScanEngine
 import com.antivirusalai.engine.ScanResult
-import com.antivirusalai.engine.ScanTooLargeException
 import com.antivirusalai.engine.ScanVerdict
 import com.antivirusalai.remediation.QuarantineManager
 import kotlinx.coroutines.CancellationException
@@ -105,6 +107,9 @@ fun AntivirusApp() {
     var quarantining by remember { mutableStateOf(false) }
     var selectedUri by rememberSaveable { mutableStateOf<Uri?>(null) }
     var scanResult by remember { mutableStateOf<ScanResult?>(null) }
+    var batchReport by remember { mutableStateOf<FolderScanReport?>(null) }
+    var batchProgress by remember { mutableStateOf<String?>(null) }
+    var pendingFolderMode by remember { mutableStateOf(FolderScanMode.ALL_FILES) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var notice by remember { mutableStateOf<String?>(null) }
     var selectedPlan by remember { mutableStateOf<String?>(null) }
@@ -113,47 +118,60 @@ fun AntivirusApp() {
     var showAbout by remember { mutableStateOf(false) }
     val fa = language == "fa"
 
-    val picker = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument()
-    ) { uri: Uri? ->
-        if (uri != null) {
-            selectedUri = uri
+    val folderPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree()
+    ) { treeUri: Uri? ->
+        if (treeUri != null) {
             try {
                 context.contentResolver.takePersistableUriPermission(
-                    uri,
+                    treeUri,
                     android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
                 )
             } catch (_: SecurityException) {
-                // Some document providers grant only a temporary read permission.
+                // Some document providers grant temporary access only.
             }
             scanning = true
+            selectedUri = null
             scanResult = null
+            batchReport = null
+            batchProgress = null
             errorMessage = null
             notice = null
             activeTab = MainTab.SCAN.key
+            val mode = pendingFolderMode
             scope.launch {
                 try {
-                    scanResult = ScanEngine.scan(context.applicationContext, uri)
+                    batchReport = FolderScanEngine.scanFolder(
+                        context.applicationContext,
+                        treeUri,
+                        mode
+                    ) { current, total, name ->
+                        batchProgress = "$current / $total  •  $name"
+                    }
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (error: Exception) {
-                    errorMessage = if (error is ScanTooLargeException) {
-                        tr(fa, "حجم فایل از سقف ۲۰۰ مگابایت بیشتر است.", error.message ?: "File is larger than the 200 MB limit.")
-                    } else {
-                        error.message ?: tr(fa, "اسکن انجام نشد.", "Scan failed.")
-                    }
+                    errorMessage = error.message
+                        ?: tr(fa, "خواندن پوشه یا اسکن فایل‌ها انجام نشد.", "Could not read the folder or scan its files.")
                 } finally {
                     scanning = false
+                    batchProgress = null
                 }
             }
         }
     }
 
     val launchFileScan: () -> Unit = {
-        if (!scanning) picker.launch(arrayOf("*/*"))
+        if (!scanning) {
+            pendingFolderMode = FolderScanMode.ALL_FILES
+            folderPicker.launch(null)
+        }
     }
     val launchApkScan: () -> Unit = {
-        if (!scanning) picker.launch(arrayOf("application/vnd.android.package-archive"))
+        if (!scanning) {
+            pendingFolderMode = FolderScanMode.APK_ONLY
+            folderPicker.launch(null)
+        }
     }
 
     CompositionLocalProvider(
@@ -232,11 +250,17 @@ fun AntivirusApp() {
                                 fa = fa,
                                 scanning = scanning,
                                 result = scanResult,
+                                batchReport = batchReport,
+                                batchProgress = batchProgress,
                                 errorMessage = errorMessage,
                                 notice = notice,
                                 quarantining = quarantining,
                                 onFileScan = launchFileScan,
                                 onApkScan = launchApkScan,
+                                onSelectBatchItem = { item ->
+                                    selectedUri = item.uri
+                                    scanResult = item.result
+                                },
                                 onQuarantine = {
                                     val uri = selectedUri
                                     val result = scanResult
@@ -266,6 +290,8 @@ fun AntivirusApp() {
                                 },
                                 onClearReport = {
                                     scanResult = null
+                                    selectedUri = null
+                                    batchReport = null
                                     errorMessage = null
                                     notice = null
                                 }
@@ -1035,11 +1061,14 @@ private fun ScanCenterScreen(
     fa: Boolean,
     scanning: Boolean,
     result: ScanResult?,
+    batchReport: FolderScanReport?,
+    batchProgress: String?,
     errorMessage: String?,
     notice: String?,
     quarantining: Boolean,
     onFileScan: () -> Unit,
     onApkScan: () -> Unit,
+    onSelectBatchItem: (FolderScanItem) -> Unit,
     onQuarantine: () -> Unit,
     onClearReport: () -> Unit
 ) {
@@ -1048,7 +1077,7 @@ private fun ScanCenterScreen(
             EyebrowLabel(tr(fa, "تحلیل محلی", "ON-DEVICE ANALYSIS"))
             Text(tr(fa, "مرکز اسکن", "Scan center"), color = TextPrimary, fontSize = 25.sp, fontWeight = FontWeight.Bold)
             Text(
-                tr(fa, "فایل را انتخاب کن تا موتور محلی آن را بررسی کند.", "Choose a file for local inspection."),
+                tr(fa, "یک پوشه را فقط یک‌بار انتخاب کن؛ فایل‌های داخل آن خودکار و پشت‌سرهم بررسی می‌شوند.", "Choose a folder once. Files inside it are scanned automatically in sequence."),
                 color = TextSecondary,
                 fontSize = 12.sp
             )
@@ -1057,7 +1086,7 @@ private fun ScanCenterScreen(
         ScanModeCard(
             icon = "file",
             title = tr(fa, "اسکن فایل", "File scan"),
-            description = tr(fa, "محاسبه SHA-256 و بررسی نشانگرهای محلی برای فایل انتخابی.", "SHA-256 calculation and local indicator checks for the selected file."),
+            description = tr(fa, "با انتخاب یک پوشه، فایل‌های داخل آن و زیرپوشه‌ها به‌صورت گروهی اسکن می‌شوند.", "Select one folder to scan its files and subfolders in a batch."),
             tag = tr(fa, "قابل استفاده", "AVAILABLE"),
             enabled = !scanning,
             onClick = onFileScan
@@ -1065,7 +1094,7 @@ private fun ScanCenterScreen(
         ScanModeCard(
             icon = "apk",
             title = tr(fa, "تحلیل ایستای APK", "Static APK analysis"),
-            description = tr(fa, "بررسی فراداده، مجوزها، اجزای export شده و اثرانگشت گواهی؛ بدون نصب یا اجرا.", "Inspect metadata, permissions, exported components and signer fingerprint without installing or executing the APK."),
+            description = tr(fa, "تمام APKهای پوشه و زیرپوشه‌ها یک‌جا تحلیل ایستا می‌شوند؛ نیازی به انتخاب تک‌تک APKها نیست.", "Static-analyze every APK in the selected folder and subfolders—no one-by-one selection."),
             tag = tr(fa, "قابل استفاده", "AVAILABLE"),
             enabled = !scanning,
             onClick = onApkScan
@@ -1087,14 +1116,14 @@ private fun ScanCenterScreen(
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
                         IconArt("scan", tint = BrandTeal, size = 19.dp)
-                        Text(tr(fa, "در حال تحلیل فایل…", "Analyzing file…"), color = TextPrimary, fontWeight = FontWeight.SemiBold)
+                        Text(tr(fa, "در حال اسکن پوشه…", "Scanning folder…"), color = TextPrimary, fontWeight = FontWeight.SemiBold)
                     }
                     LinearProgressIndicator(
                         modifier = Modifier.fillMaxWidth(),
                         color = BrandTeal,
                         trackColor = BrandTeal.copy(alpha = 0.13f)
                     )
-                    Text(tr(fa, "فایل اجرا یا نصب نمی‌شود.", "The file is not executed or installed."), color = TextSecondary, fontSize = 11.sp)
+                    Text(batchProgress ?: tr(fa, "فایل‌ها بدون نصب یا اجرا بررسی می‌شوند.", "Files are inspected without installation or execution."), color = TextSecondary, fontSize = 11.sp)
                 }
             }
         }
@@ -1104,6 +1133,14 @@ private fun ScanCenterScreen(
         }
         notice?.let {
             InfoBanner(tr(fa, "وضعیت قرنطینه", "Quarantine status"), it, warning = false)
+        }
+
+        batchReport?.let { report ->
+            BatchScanSummaryCard(
+                report = report,
+                fa = fa,
+                onSelect = onSelectBatchItem
+            )
         }
 
         result?.let {
@@ -1116,7 +1153,7 @@ private fun ScanCenterScreen(
             )
         }
 
-        if (result == null && errorMessage == null) {
+        if (result == null && batchReport == null && errorMessage == null) {
             InfoBanner(
                 title = tr(fa, "پیش از شروع", "Before you start"),
                 body = tr(
@@ -1126,6 +1163,81 @@ private fun ScanCenterScreen(
                 ),
                 warning = false
             )
+        }
+    }
+}
+
+@Composable
+private fun BatchScanSummaryCard(
+    report: FolderScanReport,
+    fa: Boolean,
+    onSelect: (FolderScanItem) -> Unit
+) {
+    Card(
+        shape = RoundedCornerShape(21.dp),
+        colors = CardDefaults.cardColors(containerColor = SurfaceBase)
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
+            Text(tr(fa, "خلاصه اسکن پوشه", "Folder scan summary"), color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                MetricMini(Modifier.weight(1f), tr(fa, "بررسی‌شده", "Scanned"), report.scannedCount.toString())
+                MetricMini(Modifier.weight(1f), tr(fa, "مشکوک", "Suspicious"), report.suspiciousCount.toString())
+                MetricMini(Modifier.weight(1f), tr(fa, "نامشخص", "Unknown"), report.unknownCount.toString())
+            }
+            Text(
+                tr(fa, "برای دیدن جزئیات هر نتیجه، روی همان فایل بزن.", "Tap a file below to view its detailed report."),
+                color = TextSecondary,
+                fontSize = 11.sp
+            )
+            if (report.items.isEmpty()) {
+                Text(
+                    tr(fa, "فایل قابل اسکن پیدا نشد.", "No scannable files were found."),
+                    color = ColorWarning,
+                    fontSize = 12.sp
+                )
+            }
+            report.items.take(60).forEach { item ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onSelect(item) }
+                        .padding(vertical = 7.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconArt("file", tint = verdictColor(item.result.verdict), size = 19.dp)
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Text(item.result.displayName, color = TextPrimary, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(verdictTitle(item.result.verdict, fa), color = verdictColor(item.result.verdict), fontSize = 10.sp)
+                    }
+                    StatusBadge(verdictBadge(item.result.verdict, fa), verdictColor(item.result.verdict))
+                }
+            }
+            if (report.items.size > 60) {
+                Text(
+                    tr(fa, "۶۰ مورد اول نمایش داده شده‌اند؛ \${report.items.size - 60} مورد دیگر هم در گزارش ثبت شده‌اند.", "Showing the first 60 of \${report.items.size} scanned files."),
+                    color = TextTertiary,
+                    fontSize = 10.sp
+                )
+            }
+            if (report.failures.isNotEmpty()) {
+                Text(
+                    tr(fa, "مواردی که بررسی نشدند: \${report.failures.size}", "Files or folders not scanned: \${report.failures.size}"),
+                    color = ColorWarning,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+                report.failures.take(5).forEach { failure ->
+                    Text("\${failure.name}: \${failure.reason}", color = TextSecondary, fontSize = 10.sp)
+                }
+            }
+            if (report.truncated || report.skippedFiles > 0) {
+                Text(
+                    tr(fa, "محدودیت ایمنی اسکن اعمال شد. موارد ردشده: \${report.skippedFiles}", "Safety scan limits were applied. Skipped: \${report.skippedFiles}"),
+                    color = ColorWarning,
+                    fontSize = 10.sp
+                )
+            }
         }
     }
 }
@@ -1976,7 +2088,7 @@ private fun verdictDescription(verdict: ScanVerdict, fa: Boolean): String = when
 private fun verdictColor(verdict: ScanVerdict): Color = when (verdict) {
     ScanVerdict.TEST_MARKER_MATCH -> BrandBlue
     ScanVerdict.SUSPICIOUS -> ColorWarning
-    ScanVerdict.NO_KNOWN_INDICATOR -> BrandTeal
+    ScanVerdict.NO_KNOWN_INDICATOR -> ColorSuccess
     ScanVerdict.UNKNOWN_APK -> ColorWarning
     ScanVerdict.UNSUPPORTED_FILE -> TextTertiary
 }
