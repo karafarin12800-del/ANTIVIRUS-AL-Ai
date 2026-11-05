@@ -113,6 +113,7 @@ fun AntivirusApp() {
     var batchReport by remember { mutableStateOf<FolderScanReport?>(null) }
     var batchProgress by remember { mutableStateOf<String?>(null) }
     var pendingDeepScan by remember { mutableStateOf(false) }
+    var deviceScanDeep by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var notice by remember { mutableStateOf<String?>(null) }
     var selectedPlan by remember { mutableStateOf<String?>(null) }
@@ -124,10 +125,15 @@ fun AntivirusApp() {
 
     val executeDeviceScan: (Boolean) -> Unit = { deep ->
         scanning = true
+        deviceScanDeep = deep
         selectedUri = null
         scanResult = null
         batchReport = null
-        batchProgress = null
+        batchProgress = tr(
+            fa,
+            "در حال آماده‌سازی فهرست فایل‌ها و برنامه‌های نصب‌شده…",
+            "Preparing the file and installed-app inventory…"
+        )
         errorMessage = null
         notice = null
         activeTab = MainTab.SCAN.key
@@ -276,6 +282,7 @@ fun AntivirusApp() {
                                 result = scanResult,
                                 batchReport = batchReport,
                                 batchProgress = batchProgress,
+                                deviceScanDeep = deviceScanDeep,
                                 errorMessage = errorMessage,
                                 notice = notice,
                                 quarantining = quarantining,
@@ -1136,6 +1143,7 @@ private fun ScanCenterScreen(
     result: ScanResult?,
     batchReport: FolderScanReport?,
     batchProgress: String?,
+    deviceScanDeep: Boolean,
     errorMessage: String?,
     notice: String?,
     quarantining: Boolean,
@@ -1159,7 +1167,7 @@ private fun ScanCenterScreen(
         ScanModeCard(
             icon = "file",
             title = tr(fa, "اسکن سریع", "Quick scan"),
-            description = tr(fa, "مسیرهای رایج مثل دانلودها، اسناد، تصاویر و رسانه‌ها سریع بررسی می‌شوند.", "Quickly checks common locations such as Downloads, Documents, photos and media."),
+            description = tr(fa, "برنامه‌های نصب‌شده، فایل‌های ریشه حافظه و مسیرهای مهم مثل دانلودها و اسناد بررسی می‌شوند.", "Checks installed-app packages, loose storage-root files, and key folders such as Downloads and Documents."),
             tag = tr(fa, "قابل استفاده", "AVAILABLE"),
             enabled = !scanning,
             onClick = onFileScan
@@ -1213,6 +1221,7 @@ private fun ScanCenterScreen(
             BatchScanSummaryCard(
                 report = report,
                 fa = fa,
+                deep = deviceScanDeep,
                 onSelect = onSelectBatchItem
             )
         }
@@ -1245,6 +1254,7 @@ private fun ScanCenterScreen(
 private fun BatchScanSummaryCard(
     report: FolderScanReport,
     fa: Boolean,
+    deep: Boolean,
     onSelect: (FolderScanItem) -> Unit
 ) {
     Card(
@@ -1252,20 +1262,34 @@ private fun BatchScanSummaryCard(
         colors = CardDefaults.cardColors(containerColor = SurfaceBase)
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
-            Text(tr(fa, "خلاصه اسکن دستگاه", "Device scan summary"), color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            Text(
+                if (deep) tr(fa, "نتیجه اسکن عمیق", "Deep scan results")
+                else tr(fa, "نتیجه اسکن سریع", "Quick scan results"),
+                color = TextPrimary,
+                fontWeight = FontWeight.Bold,
+                fontSize = 16.sp
+            )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 MetricMini(Modifier.weight(1f), tr(fa, "بررسی‌شده", "Scanned"), report.scannedCount.toString())
                 MetricMini(Modifier.weight(1f), tr(fa, "مشکوک", "Suspicious"), report.suspiciousCount.toString())
                 MetricMini(Modifier.weight(1f), tr(fa, "نامشخص", "Unknown"), report.unknownCount.toString())
             }
             Text(
-                tr(fa, "برای دیدن جزئیات هر نتیجه، روی همان فایل بزن.", "Tap a file below to view its detailed report."),
+                tr(
+                    fa,
+                    "از ${report.discoveredFiles} مورد قابل بررسی، ${report.scannedCount} مورد اسکن شدند. برای دیدن شواهد هر نتیجه، روی همان مورد بزن.",
+                    "${report.scannedCount} of ${report.discoveredFiles} discovered items were scanned. Tap an item to inspect its evidence."
+                ),
                 color = TextSecondary,
                 fontSize = 11.sp
             )
             if (report.items.isEmpty()) {
                 Text(
-                    tr(fa, "فایل قابل اسکن پیدا نشد.", "No scannable files were found."),
+                    tr(
+                        fa,
+                        "در محدوده قابل‌دسترسی این حالت فایلی پیدا نشد. مجوز حافظه و پوشه‌های رایج را بررسی کن؛ برای پوشش گسترده‌تر اسکن عمیق را اجرا کن.",
+                        "No readable files were found in this scan scope. Check storage access and common folders, or run a deep scan for broader coverage."
+                    ),
                     color = ColorWarning,
                     fontSize = 12.sp
                 )
@@ -1289,7 +1313,7 @@ private fun BatchScanSummaryCard(
             }
             if (report.scannedCount > report.items.size) {
                 Text(
-                    tr(fa, "۶۰ نتیجه اول نمایش داده شده‌اند؛ مجموعاً ${report.scannedCount} فایل اسکن شده است.", "Showing the first 60 of \${report.items.size} scanned files."),
+                    tr(fa, "۶۰ نتیجه اول نمایش داده شده‌اند؛ مجموعاً ${report.scannedCount} فایل اسکن شده است.", "Showing the first 60 of ${report.scannedCount} scanned files."),
                     color = TextTertiary,
                     fontSize = 10.sp
                 )
