@@ -9,7 +9,6 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
-import java.io.File
 import java.security.MessageDigest
 
 class ScanTooLargeException(message: String) : Exception(message)
