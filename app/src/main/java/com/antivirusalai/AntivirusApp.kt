@@ -121,6 +121,10 @@ fun AntivirusApp() {
     var featureInfo by remember { mutableStateOf<String?>(null) }
     var showPrivacy by remember { mutableStateOf(false) }
     var showStoragePermissionRationale by remember { mutableStateOf(false) }
+    var pendingScanAfterStorageSettings by remember { mutableStateOf(false) }
+    var showFirstRunAccessPrompt by remember {
+        mutableStateOf(!context.getSharedPreferences("onboarding", 0).getBoolean("storage_prompt_seen", false))
+    }
     var showAbout by remember { mutableStateOf(false) }
     val fa = language == "fa"
 
@@ -161,9 +165,11 @@ fun AntivirusApp() {
     val storageSettingsLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) {
-        if (DeviceScanEngine.hasBroadStorageAccess()) {
+        if (DeviceScanEngine.hasBroadStorageAccess() && pendingScanAfterStorageSettings) {
+            pendingScanAfterStorageSettings = false
             executeDeviceScan(pendingDeepScan)
-        } else {
+        } else if (!DeviceScanEngine.hasBroadStorageAccess() && pendingScanAfterStorageSettings) {
+            pendingScanAfterStorageSettings = false
             errorMessage = tr(
                 fa,
                 "دسترسی حافظه فعال نشد؛ برای شروع اسکن باید اجازه مدیریت فایل‌ها را در تنظیمات بدهی.",
@@ -175,8 +181,12 @@ fun AntivirusApp() {
     val legacyStoragePermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
-        if (granted) executeDeviceScan(pendingDeepScan)
-        else errorMessage = tr(
+        if (granted && pendingScanAfterStorageSettings) {
+            pendingScanAfterStorageSettings = false
+            executeDeviceScan(pendingDeepScan)
+        } else if (!granted && pendingScanAfterStorageSettings) {
+            pendingScanAfterStorageSettings = false
+            errorMessage = tr(
             fa,
             "مجوز خواندن حافظه داده نشد.",
             "Storage read permission was denied."
@@ -185,6 +195,7 @@ fun AntivirusApp() {
 
     val launchDeviceScan: (Boolean) -> Unit = { deep ->
         if (!scanning) {
+            pendingScanAfterStorageSettings = true
             pendingDeepScan = deep
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 if (DeviceScanEngine.hasBroadStorageAccess()) {
@@ -447,6 +458,69 @@ fun AntivirusApp() {
                     onClick = { featureInfo = null },
                     colors = ButtonDefaults.buttonColors(containerColor = BrandTeal)
                 ) { Text(tr(fa, "بستن", "Close"), color = AppBackground) }
+            }
+        )
+    }
+
+    if (showFirstRunAccessPrompt) {
+        AlertDialog(
+            onDismissRequest = {
+                context.getSharedPreferences("onboarding", 0).edit()
+                    .putBoolean("storage_prompt_seen", true).apply()
+                showFirstRunAccessPrompt = false
+            },
+            containerColor = SurfaceRaised,
+            title = {
+                Text(tr(fa, "آماده‌سازی دسترسی اسکن", "Set up scan access"), color = TextPrimary)
+            },
+            text = {
+                Text(
+                    tr(
+                        fa,
+                        "برای اینکه اسکن سریع و عمیق بدون انتخاب پوشه کار کنند، Android باید دسترسی حافظه را به برنامه بدهد. این مجوز فقط برای خواندن فایل‌های قابل‌دسترسی و بررسی امنیتی استفاده می‌شود. می‌توانی نپذیری؛ در آن صورت اسکن خودکار تا زمان فعال‌کردن دسترسی کار نمی‌کند.",
+                        "For automatic quick and deep scans without choosing folders, Android must grant storage access. The permission is used to read accessible files for security checks. You can decline; automatic scanning will remain unavailable until access is enabled."
+                    ),
+                    color = TextSecondary
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        context.getSharedPreferences("onboarding", 0).edit()
+                            .putBoolean("storage_prompt_seen", true).apply()
+                        showFirstRunAccessPrompt = false
+                        pendingScanAfterStorageSettings = false
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                            val appSettingsIntent = Intent(
+                                Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                                Uri.parse("package:${context.packageName}")
+                            )
+                            try {
+                                storageSettingsLauncher.launch(appSettingsIntent)
+                            } catch (_: Exception) {
+                                storageSettingsLauncher.launch(
+                                    Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
+                                )
+                            }
+                        } else {
+                            legacyStoragePermissionLauncher.launch(Manifest.permission.READ_EXTERNAL_STORAGE)
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = BrandTeal)
+                ) {
+                    Text(tr(fa, "ادامه و اعطای دسترسی", "Continue to access"), color = AppBackground)
+                }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick = {
+                        context.getSharedPreferences("onboarding", 0).edit()
+                            .putBoolean("storage_prompt_seen", true).apply()
+                        showFirstRunAccessPrompt = false
+                    }
+                ) {
+                    Text(tr(fa, "فعلاً نه", "Not now"), color = TextPrimary)
+                }
             }
         )
     }
@@ -2541,7 +2615,7 @@ private fun verdictBadge(verdict: ScanVerdict, fa: Boolean): String = when (verd
     ScanVerdict.SUSPICIOUS -> tr(fa, "نیازمند بررسی", "REVIEW")
     ScanVerdict.NO_KNOWN_INDICATOR -> tr(fa, "بدون تطبیق", "NO MATCH")
     ScanVerdict.UNKNOWN_APK -> tr(fa, "نامشخص", "UNKNOWN")
-    ScanVerdict.UNSUPPORTED_FILE -> tr(fa, "پشتیبانی‌نشده", "UNSUPPORTED")
+    ScanVerdict.UNSUPPORTED_FILE -> tr(fa, "تحلیل محدود", "LIMITED ANALYSIS")
 }
 
 private fun verdictTitle(verdict: ScanVerdict, fa: Boolean): String = when (verdict) {
@@ -2549,7 +2623,7 @@ private fun verdictTitle(verdict: ScanVerdict, fa: Boolean): String = when (verd
     ScanVerdict.SUSPICIOUS -> tr(fa, "نیازمند بررسی بیشتر", "Needs further review")
     ScanVerdict.NO_KNOWN_INDICATOR -> tr(fa, "نشانگر شناخته‌شده‌ای پیدا نشد", "No known indicator found")
     ScanVerdict.UNKNOWN_APK -> tr(fa, "نتیجه نامشخص", "Unknown result")
-    ScanVerdict.UNSUPPORTED_FILE -> tr(fa, "این نوع فایل پشتیبانی نمی‌شود", "File type not covered")
+    ScanVerdict.UNSUPPORTED_FILE -> tr(fa, "بررسی هش انجام شد؛ تحلیل محتوایی این قالب هنوز فعال نیست", "Hash checked; format analysis is not available yet")
 }
 
 private fun verdictDescription(verdict: ScanVerdict, fa: Boolean): String = when (verdict) {
@@ -2557,7 +2631,7 @@ private fun verdictDescription(verdict: ScanVerdict, fa: Boolean): String = when
     ScanVerdict.SUSPICIOUS -> tr(fa, "چند نشانه ایستا دیده شده است. این نتیجه اثبات بدافزار بودن نیست.", "Static indicators were found. This is not proof of malware.")
     ScanVerdict.NO_KNOWN_INDICATOR -> tr(fa, "هیچ نشانگر موجود در نسخه فعلی با فایل تطبیق نکرد. این نتیجه تضمین پاک بودن نیست.", "No indicator in this MVP matched. This does not guarantee that the file is safe.")
     ScanVerdict.UNKNOWN_APK -> tr(fa, "اطلاعات APK قابل خواندن نبود؛ از اعلام پاک بودن خودداری می‌کنیم.", "APK metadata could not be read; the file is not declared clean.")
-    ScanVerdict.UNSUPPORTED_FILE -> tr(fa, "موتور فعلی تحلیل محتوایی این قالب را انجام نمی‌دهد؛ نتیجه ناشناخته است.", "The current engine does not perform content-aware analysis for this format; treat it as unknown.")
+    ScanVerdict.UNSUPPORTED_FILE -> tr(fa, "هش SHA-256 فایل محاسبه و با نشانگرهای محلی فعلی مقایسه شد، اما موتور هنوز ساختار و محتوای این قالب را تحلیل نمی‌کند. بنابراین نتیجه ناشناخته است و به معنی پاک بودن فایل نیست.", "The SHA-256 hash was calculated and checked against the current local indicators, but this engine does not yet inspect this format’s structure or contents. The result is unknown, not a clean verdict.")
 }
 
 private fun verdictColor(verdict: ScanVerdict): Color = when (verdict) {
