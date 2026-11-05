@@ -1055,8 +1055,6 @@ private fun StorePromoCard(fa: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-
-@Composable
 private fun DeviceQuickCheckCard(report: DeviceQuickCheckReport, fa: Boolean) {
     Card(
         colors = CardDefaults.cardColors(containerColor = SurfaceBase),
