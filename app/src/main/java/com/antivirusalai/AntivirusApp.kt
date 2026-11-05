@@ -888,7 +888,7 @@ private fun HeroSecurityCard(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    FantasyGuardianIllustration(Modifier.size(width = 142.dp, height = 154.dp))
+                    FantasyGuardianIllustration(Modifier.size(width = 158.dp, height = 174.dp))
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(tr(fa, "نگهبان هوشمند AL AI", "Meet your AL AI guardian"),
                             color = TextPrimary, fontSize = 19.sp, lineHeight = 26.sp, fontWeight = FontWeight.ExtraBold)
@@ -969,80 +969,161 @@ private fun EnergyShieldMark(modifier: Modifier = Modifier) {
 @Composable
 private fun FantasyGuardianIllustration(modifier: Modifier = Modifier) {
     Canvas(modifier) {
-        val sx = size.width / 142f
-        val sy = size.height / 154f
+        val sx = size.width / 158f
+        val sy = size.height / 174f
         fun p(x: Float, y: Float) = Offset(x * sx, y * sy)
-        fun rect(width: Float, height: Float) = Size(width * sx, height * sy)
-        val glowCenter = p(72f, 76f)
+        fun sz(w: Float, h: Float) = Size(w * sx, h * sy)
+        fun rr(x: Float, y: Float, w: Float, h: Float, radius: Float, color: Color) {
+            drawRoundRect(color = color, topLeft = p(x, y), size = sz(w, h),
+                cornerRadius = CornerRadius(radius * sx, radius * sy))
+        }
+        fun gradientRect(x: Float, y: Float, w: Float, h: Float, radius: Float, colors: List<Color>) {
+            drawRoundRect(
+                brush = Brush.linearGradient(colors, start = p(x, y), end = p(x + w, y + h)),
+                topLeft = p(x, y), size = sz(w, h),
+                cornerRadius = CornerRadius(radius * sx, radius * sy)
+            )
+        }
+
+        // Soft energy field and concentric orbital rings.
+        val core = p(78f, 76f)
         drawCircle(
             brush = Brush.radialGradient(
-                listOf(Color(0xFFCB9CFF).copy(alpha = 0.35f), Color(0xFF8E54D8).copy(alpha = 0.10f), Color.Transparent),
-                center = glowCenter, radius = 78f * sx
-            ),
-            radius = 78f * sx, center = glowCenter
+                listOf(Color(0xFFE8CFFF).copy(alpha = 0.30f),
+                    Color(0xFFB66CFF).copy(alpha = 0.17f),
+                    Color(0xFF6D36B2).copy(alpha = 0.045f), Color.Transparent),
+                center = core, radius = 91f * sx
+            ), radius = 91f * sx, center = core
         )
-        val orbit = Path().apply {
-            moveTo(4f * sx, 87f * sy)
-            cubicTo(24f * sx, 20f * sy, 116f * sx, 17f * sy, 137f * sx, 83f * sy)
-            cubicTo(114f * sx, 132f * sy, 31f * sx, 137f * sy, 4f * sx, 87f * sy)
+        val orbitBack = Path().apply {
+            moveTo(7f * sx, 91f * sy)
+            cubicTo(18f * sx, 19f * sy, 128f * sx, 11f * sy, 151f * sx, 81f * sy)
+            cubicTo(139f * sx, 150f * sy, 30f * sx, 160f * sy, 7f * sx, 91f * sy)
         }
-        drawPath(orbit, Color(0xFFD7B7FF).copy(alpha = 0.34f), style = Stroke(width = 1.1f * sx))
-        drawCircle(Color(0xFFEEDCFF), radius = 2.1f * sx, center = p(17f, 60f))
-        drawCircle(Color(0xFFB987FF), radius = 1.7f * sx, center = p(126f, 45f))
-        drawRoundRect(color = Color(0xFF5D368A), topLeft = p(34f, 93f), size = rect(74f, 48f),
-            cornerRadius = CornerRadius(17f * sx, 17f * sy))
-        drawRoundRect(brush = Brush.linearGradient(listOf(Color(0xFFD9C0FF), Color(0xFF9C67E8)),
-            start = p(39f, 89f), end = p(103f, 138f)), topLeft = p(39f, 89f), size = rect(64f, 49f),
-            cornerRadius = CornerRadius(17f * sx, 17f * sy))
-        drawRoundRect(color = Color(0xFF6A3B9C), topLeft = p(24f, 57f), size = rect(12f, 28f),
-            cornerRadius = CornerRadius(6f * sx, 6f * sy))
-        drawRoundRect(color = Color(0xFF6A3B9C), topLeft = p(106f, 57f), size = rect(12f, 28f),
-            cornerRadius = CornerRadius(6f * sx, 6f * sy))
-        drawRoundRect(color = Color(0xFF5C3686), topLeft = p(31f, 30f), size = rect(80f, 69f),
-            cornerRadius = CornerRadius(25f * sx, 25f * sy))
+        drawPath(orbitBack, Color(0xFFD9B7FF).copy(alpha = 0.25f), style = Stroke(width = 1.15f * sx))
+        drawPath(orbitBack, Color(0xFF8D56C8).copy(alpha = 0.16f),
+            style = Stroke(width = 4.2f * sx))
+        drawCircle(Color(0xFFF4E8FF), radius = 2.4f * sx, center = p(18f, 65f))
+        drawCircle(Color(0xFFC38AFF), radius = 2.1f * sx, center = p(137f, 42f))
+        drawCircle(Color(0xFF9E6BD5), radius = 1.7f * sx, center = p(143f, 120f))
+
+        // Rear silhouette, lower body and shoulder armour.
+        rr(36f, 101f, 86f, 54f, 22f, Color(0xFF29143F))
+        gradientRect(39f, 96f, 80f, 57f, 21f,
+            listOf(Color(0xFF9A68CB), Color(0xFF593184), Color(0xFF321B50)))
+        rr(47f, 108f, 64f, 39f, 14f, Color(0xFF26133C))
+        gradientRect(49f, 106f, 60f, 39f, 13f,
+            listOf(Color(0xFFDCC6FA), Color(0xFFA77BE0), Color(0xFF6A429B)))
+        drawLine(Color.White.copy(alpha = 0.52f), p(59f, 111f), p(98f, 111f),
+            strokeWidth = 1.3f * sx, cap = StrokeCap.Round)
+
+        // Side energy fins and their illuminated inner edges.
+        gradientRect(20f, 57f, 17f, 39f, 8f,
+            listOf(Color(0xFF9A6BD1), Color(0xFF4B286E), Color(0xFF321849)))
+        gradientRect(121f, 57f, 17f, 39f, 8f,
+            listOf(Color(0xFF9A6BD1), Color(0xFF4B286E), Color(0xFF321849)))
+        rr(25f, 64f, 5f, 24f, 3f, Color(0xFFD6B1FF).copy(alpha = 0.68f))
+        rr(128f, 64f, 5f, 24f, 3f, Color(0xFFD6B1FF).copy(alpha = 0.68f))
+
+        // Head shell: dark under-shell, metallic outer casing and glass visor.
+        rr(30f, 23f, 98f, 91f, 32f, Color(0xFF321A50))
+        gradientRect(33f, 18f, 92f, 88f, 31f,
+            listOf(Color(0xFFFFF0FF), Color(0xFFDCC2FF), Color(0xFFAC7BEA), Color(0xFF7547B4)))
         drawRoundRect(
             brush = Brush.linearGradient(
-                colors = listOf(Color(0xFFF0E3FF), Color(0xFFC29BFA), Color(0xFF8B58D2)),
-                start = p(42f, 29f), end = p(105f, 100f)
+                listOf(Color.White.copy(alpha = 0.52f), Color.Transparent, Color(0xFF633B98).copy(alpha = 0.20f)),
+                start = p(43f, 22f), end = p(111f, 102f)
             ),
-            topLeft = p(35f, 25f), size = rect(72f, 67f),
-            cornerRadius = CornerRadius(24f * sx, 24f * sy)
+            topLeft = p(39f, 24f), size = sz(80f, 77f),
+            cornerRadius = CornerRadius(27f * sx, 27f * sy)
         )
-        drawLine(Color.White.copy(alpha = 0.75f), p(52f, 31f), p(88f, 27f),
-            strokeWidth = 2f * sx, cap = StrokeCap.Round)
-        drawRoundRect(
-            brush = Brush.linearGradient(listOf(Color(0xFF2A1741), Color(0xFF140B24))),
-            topLeft = p(43f, 43f), size = rect(56f, 35f),
-            cornerRadius = CornerRadius(17f * sx, 17f * sy)
-        )
-        drawCircle(Color(0xFFB989FF).copy(alpha = 0.22f), radius = 9f * sx, center = p(60f, 60f))
-        drawCircle(Color(0xFFB989FF).copy(alpha = 0.22f), radius = 9f * sx, center = p(82f, 60f))
-        drawRoundRect(brush = Brush.verticalGradient(listOf(Color(0xFFEAD8FF), Color(0xFFB77CFF))),
-            topLeft = p(57f, 54f), size = rect(6f, 11f), cornerRadius = CornerRadius(4f * sx, 4f * sy))
-        drawRoundRect(brush = Brush.verticalGradient(listOf(Color(0xFFEAD8FF), Color(0xFFB77CFF))),
-            topLeft = p(79f, 54f), size = rect(6f, 11f), cornerRadius = CornerRadius(4f * sx, 4f * sy))
+        rr(43f, 38f, 72f, 48f, 21f, Color(0xFF28153E))
+        gradientRect(46f, 40f, 66f, 43f, 19f,
+            listOf(Color(0xFF43265F), Color(0xFF160D28)))
+        drawLine(Color.White.copy(alpha = 0.82f), p(53f, 26f), p(91f, 21f),
+            strokeWidth = 2.4f * sx, cap = StrokeCap.Round)
+        drawLine(Color(0xFFB88BEA).copy(alpha = 0.45f), p(105f, 32f), p(114f, 43f),
+            strokeWidth = 1.1f * sx, cap = StrokeCap.Round)
+
+        // Twin luminous eyes with layered bloom and glass highlights.
+        listOf(66f, 94f).forEach { x ->
+            drawCircle(Color(0xFFB981FF).copy(alpha = 0.22f), radius = 12f * sx, center = p(x, 61f))
+            drawCircle(Color(0xFF9D63E8).copy(alpha = 0.34f), radius = 8f * sx, center = p(x, 61f))
+            drawRoundRect(
+                brush = Brush.verticalGradient(listOf(Color(0xFFF4DFFF), Color(0xFFB97BFF), Color(0xFF8751D1)),
+                    startY = 51f * sy, endY = 72f * sy),
+                topLeft = p(x - 4f, 53f), size = sz(8f, 16f),
+                cornerRadius = CornerRadius(4f * sx, 4f * sy)
+            )
+            drawCircle(Color.White.copy(alpha = 0.90f), radius = 1.5f * sx, center = p(x - 1.5f, 56f))
+        }
+
+        // Shield is built from a shadow, bevel, face and a glass-like highlight.
         val shield = Path().apply {
-            moveTo(72f * sx, 83f * sy); lineTo(105f * sx, 94f * sy); lineTo(101f * sx, 119f * sy)
-            cubicTo(98f * sx, 132f * sy, 82f * sx, 140f * sy, 72f * sx, 144f * sy)
-            cubicTo(62f * sx, 140f * sy, 46f * sx, 132f * sy, 43f * sx, 119f * sy)
-            lineTo(39f * sx, 94f * sy); close()
+            moveTo(79f * sx, 91f * sy)
+            lineTo(126f * sx, 105f * sy)
+            lineTo(120f * sx, 137f * sy)
+            cubicTo(116f * sx, 153f * sy, 94f * sx, 164f * sy, 79f * sx, 170f * sy)
+            cubicTo(64f * sx, 164f * sy, 42f * sx, 153f * sy, 38f * sx, 137f * sy)
+            lineTo(32f * sx, 105f * sy)
+            close()
         }
-        drawPath(shield, Color(0xFF3A1D61))
-        drawPath(shield, Brush.linearGradient(listOf(Color(0xFFE5CFFF), Color(0xFFAD70FF), Color(0xFF6C35B8)),
-            start = p(48f, 86f), end = p(101f, 141f)))
-        drawPath(shield, Color.White.copy(alpha = 0.78f), style = Stroke(width = 1.5f * sx))
+        val shieldShadow = Path().apply {
+            addPath(shield)
+            translate(Offset(2.2f * sx, 3.5f * sy))
+        }
+        drawPath(shieldShadow, Color(0xFF160B27).copy(alpha = 0.78f))
+        drawPath(shield, Color(0xFF4B2774))
+        drawPath(shield, Brush.linearGradient(
+            listOf(Color(0xFFFFEFFF), Color(0xFFE0C5FF), Color(0xFFB47CFF), Color(0xFF713BBE)),
+            start = p(43f, 94f), end = p(116f, 166f)
+        ))
+        drawPath(shield, Color.White.copy(alpha = 0.82f), style = Stroke(width = 1.55f * sx))
+        val innerShield = Path().apply {
+            moveTo(79f * sx, 97f * sy)
+            lineTo(119f * sx, 109f * sy)
+            lineTo(114f * sx, 136f * sy)
+            cubicTo(110f * sx, 149f * sy, 91f * sx, 159f * sy, 79f * sx, 164f * sy)
+            cubicTo(67f * sx, 159f * sy, 48f * sx, 149f * sy, 44f * sx, 136f * sy)
+            lineTo(39f * sx, 109f * sy)
+            close()
+        }
+        drawPath(innerShield, Color(0xFF9E65E8).copy(alpha = 0.20f), style = Stroke(width = 1f * sx))
+        val facet = Path().apply {
+            moveTo(79f * sx, 97f * sy)
+            lineTo(119f * sx, 109f * sy)
+            lineTo(79f * sx, 123f * sy)
+            lineTo(39f * sx, 109f * sy)
+            close()
+        }
+        drawPath(facet, Color.White.copy(alpha = 0.15f))
+        drawLine(Color.White.copy(alpha = 0.48f), p(48f, 108f), p(78f, 99f),
+            strokeWidth = 1.5f * sx, cap = StrokeCap.Round)
         val check = Path().apply {
-            moveTo(56f * sx, 112f * sy); lineTo(68f * sx, 123f * sy); lineTo(88f * sx, 101f * sy)
+            moveTo(59f * sx, 128f * sy)
+            lineTo(73f * sx, 141f * sy)
+            lineTo(101f * sx, 112f * sy)
         }
-        drawPath(check, Color.White, style = Stroke(width = 3.5f * sx, cap = StrokeCap.Round, join = StrokeJoin.Round))
-        drawLine(Color.White.copy(alpha = 0.55f), p(50f, 97f), p(69f, 91f),
-            strokeWidth = 1.2f * sx, cap = StrokeCap.Round)
+        drawPath(check, Color(0xFF7B45C2).copy(alpha = 0.65f),
+            style = Stroke(width = 6f * sx, cap = StrokeCap.Round, join = StrokeJoin.Round))
+        drawPath(check, Color.White,
+            style = Stroke(width = 3.4f * sx, cap = StrokeCap.Round, join = StrokeJoin.Round))
+
+        // Floating crystal spark and small energy particles.
         val sparkle = Path().apply {
-            moveTo(120f * sx, 91f * sy); lineTo(123f * sx, 98f * sy); lineTo(130f * sx, 101f * sy)
-            lineTo(123f * sx, 104f * sy); lineTo(120f * sx, 111f * sy); lineTo(117f * sx, 104f * sy)
-            lineTo(110f * sx, 101f * sy); lineTo(117f * sx, 98f * sy); close()
+            moveTo(143f * sx, 87f * sy)
+            lineTo(147f * sx, 97f * sy)
+            lineTo(157f * sx, 101f * sy)
+            lineTo(147f * sx, 105f * sy)
+            lineTo(143f * sx, 115f * sy)
+            lineTo(139f * sx, 105f * sy)
+            lineTo(129f * sx, 101f * sy)
+            lineTo(139f * sx, 97f * sy)
+            close()
         }
-        drawPath(sparkle, Color(0xFFE9D5FF).copy(alpha = 0.85f))
+        drawPath(sparkle, Brush.linearGradient(listOf(Color.White, Color(0xFFC99BFF))))
+        drawCircle(Color.White.copy(alpha = 0.86f), radius = 1.7f * sx, center = p(25f, 112f))
+        drawCircle(Color(0xFFD6B5FF), radius = 1.3f * sx, center = p(132f, 27f))
     }
 }
 
