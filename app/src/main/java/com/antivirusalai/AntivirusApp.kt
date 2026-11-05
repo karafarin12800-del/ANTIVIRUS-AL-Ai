@@ -1620,7 +1620,11 @@ private fun ScanCenterScreen(
             EyebrowLabel(tr(fa, "تحلیل محلی", "ON-DEVICE ANALYSIS"))
             Text(tr(fa, "مرکز اسکن", "Scan center"), color = TextPrimary, fontSize = 25.sp, fontWeight = FontWeight.Bold)
             Text(
-                tr(fa, "بدون انتخاب پوشه؛ اسکن سریع یا عمیق را انتخاب کن تا فایل‌های قابل‌دسترسی خودکار بررسی شوند.", "No folder picker. Choose quick or deep scan to inspect accessible device storage automatically."),
+                tr(
+                    fa,
+                    "بدون انتخاب پوشه؛ اسکن سریع یا عمیق را اجرا کن. فایل‌های قابل‌دسترسی بررسی می‌شوند و فایل‌های کدِ پشتیبانی‌شده تحلیل ایستا می‌گیرند.",
+                    "No folder picker. Quick or deep scan inspects accessible files; supported source files also receive static code analysis."
+                ),
                 color = TextSecondary,
                 fontSize = 12.sp
             )
@@ -1703,7 +1707,7 @@ private fun ScanCenterScreen(
                 title = tr(fa, "پیش از شروع", "Before you start"),
                 body = tr(
                     fa,
-                    "فقط فایل‌های متعلق به خودت یا فایل‌هایی را که اجازه بررسی‌شان را داری انتخاب کن. موتور فعلی هنوز بانک امضای بدافزار تولیدی ندارد.",
+                    "فقط فایل‌های متعلق به خودت یا فایل‌هایی را که اجازه بررسی‌شان را داری اسکن کن. فایل‌های کدِ پشتیبانی‌شده تحلیل ایستا می‌گیرند؛ این نسخه هنوز بانک امضای بدافزار تولیدی ندارد.",
                     "Select only files you own or are authorized to inspect. The current engine does not yet contain a production malware-signature database."
                 ),
                 warning = false
