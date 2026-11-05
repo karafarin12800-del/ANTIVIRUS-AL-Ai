@@ -1287,9 +1287,9 @@ private fun BatchScanSummaryCard(
                     StatusBadge(verdictBadge(item.result.verdict, fa), verdictColor(item.result.verdict))
                 }
             }
-            if (report.items.size > 60) {
+            if (report.scannedCount > report.items.size) {
                 Text(
-                    tr(fa, "۶۰ مورد اول نمایش داده شده‌اند؛ ${report.items.size - 60} مورد دیگر هم در گزارش ثبت شده‌اند.", "Showing the first 60 of \${report.items.size} scanned files."),
+                    tr(fa, "۶۰ نتیجه اول نمایش داده شده‌اند؛ مجموعاً ${report.scannedCount} فایل اسکن شده است.", "Showing the first 60 of \${report.items.size} scanned files."),
                     color = TextTertiary,
                     fontSize = 10.sp
                 )
