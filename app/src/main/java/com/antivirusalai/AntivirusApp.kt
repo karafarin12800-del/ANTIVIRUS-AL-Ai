@@ -1215,25 +1215,25 @@ private fun BatchScanSummaryCard(
             }
             if (report.items.size > 60) {
                 Text(
-                    tr(fa, "۶۰ مورد اول نمایش داده شده‌اند؛ \${report.items.size - 60} مورد دیگر هم در گزارش ثبت شده‌اند.", "Showing the first 60 of \${report.items.size} scanned files."),
+                    tr(fa, "۶۰ مورد اول نمایش داده شده‌اند؛ ${report.items.size - 60} مورد دیگر هم در گزارش ثبت شده‌اند.", "Showing the first 60 of \${report.items.size} scanned files."),
                     color = TextTertiary,
                     fontSize = 10.sp
                 )
             }
             if (report.failures.isNotEmpty()) {
                 Text(
-                    tr(fa, "مواردی که بررسی نشدند: \${report.failures.size}", "Files or folders not scanned: \${report.failures.size}"),
+                    tr(fa, "مواردی که بررسی نشدند: ${report.failures.size}", "Files or folders not scanned: ${report.failures.size}"),
                     color = ColorWarning,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.SemiBold
                 )
                 report.failures.take(5).forEach { failure ->
-                    Text("\${failure.name}: \${failure.reason}", color = TextSecondary, fontSize = 10.sp)
+                    Text("${failure.name}: ${failure.reason}", color = TextSecondary, fontSize = 10.sp)
                 }
             }
             if (report.truncated || report.skippedFiles > 0) {
                 Text(
-                    tr(fa, "محدودیت ایمنی اسکن اعمال شد. موارد ردشده: \${report.skippedFiles}", "Safety scan limits were applied. Skipped: \${report.skippedFiles}"),
+                    tr(fa, "محدودیت ایمنی اسکن اعمال شد. موارد ردشده: ${report.skippedFiles}", "Safety scan limits were applied. Skipped: ${report.skippedFiles}"),
                     color = ColorWarning,
                     fontSize = 10.sp
                 )
