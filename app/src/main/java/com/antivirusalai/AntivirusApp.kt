@@ -118,6 +118,7 @@ fun AntivirusApp() {
     var selectedPlan by remember { mutableStateOf<String?>(null) }
     var featureInfo by remember { mutableStateOf<String?>(null) }
     var showPrivacy by remember { mutableStateOf(false) }
+    var showStoragePermissionRationale by remember { mutableStateOf(false) }
     var showAbout by remember { mutableStateOf(false) }
     val fa = language == "fa"
 
@@ -182,11 +183,7 @@ fun AntivirusApp() {
                 if (DeviceScanEngine.hasBroadStorageAccess()) {
                     executeDeviceScan(deep)
                 } else {
-                    val settingsIntent = Intent(
-                        Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
-                        Uri.parse("package:${context.packageName}")
-                    )
-                    storageSettingsLauncher.launch(settingsIntent)
+                    showStoragePermissionRationale = true
                 }
             } else if (context.checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) ==
                 android.content.pm.PackageManager.PERMISSION_GRANTED
@@ -404,6 +401,55 @@ fun AntivirusApp() {
                     onClick = { featureInfo = null },
                     colors = ButtonDefaults.buttonColors(containerColor = BrandTeal)
                 ) { Text(tr(fa, "بستن", "Close"), color = AppBackground) }
+            }
+        )
+    }
+
+    if (showStoragePermissionRationale) {
+        AlertDialog(
+            onDismissRequest = { showStoragePermissionRationale = false },
+            containerColor = SurfaceRaised,
+            title = {
+                Text(
+                    tr(fa, "اجازه اسکن حافظه", "Allow device scanning"),
+                    color = TextPrimary
+                )
+            },
+            text = {
+                Text(
+                    tr(
+                        fa,
+                        "برای اسکن خودکار، Android باید اجازه «مدیریت همه فایل‌ها» را بدهد. این دسترسی فقط برای بررسی فایل‌های حافظه اشتراکی و APKهای قابل‌دسترسی استفاده می‌شود؛ محتوای فایل‌ها از دستگاه خارج نمی‌شود. Android همچنان پوشه‌های خصوصی برنامه‌های دیگر و Android/data و Android/obb را مسدود می‌کند.",
+                        "Automatic scanning needs Android’s All files access. ANTIVIRUS AL AI uses it to inspect accessible shared-storage files and APKs only. File contents stay on this device. Android still blocks other apps’ private folders and Android/data and Android/obb."
+                    ),
+                    color = TextSecondary
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showStoragePermissionRationale = false
+                        val appSettingsIntent = Intent(
+                            Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                            Uri.parse("package:${context.packageName}")
+                        )
+                        try {
+                            storageSettingsLauncher.launch(appSettingsIntent)
+                        } catch (_: Exception) {
+                            storageSettingsLauncher.launch(
+                                Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
+                            )
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = BrandTeal)
+                ) {
+                    Text(tr(fa, "رفتن به تنظیمات", "Open settings"), color = AppBackground)
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { showStoragePermissionRationale = false }) {
+                    Text(tr(fa, "انصراف", "Cancel"), color = TextPrimary)
+                }
             }
         )
     }
