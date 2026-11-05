@@ -2018,11 +2018,30 @@ private fun CodeAnalysisPanel(
                     warning = true
                 )
             }
+            if (report.completed && report.diagnostics.isEmpty()) {
+                Text(
+                    tr(
+                        fa,
+                        "در بررسی‌های فعلی خطای ساختاری یا الگوی پرخطرِ شناخته‌شده‌ای پیدا نشد.",
+                        "No structural error or known risky pattern was found by the current checks."
+                    ),
+                    color = BrandBlue,
+                    fontSize = 11.sp,
+                    lineHeight = 16.sp
+                )
+            }
             report.diagnostics.take(40).forEach { finding ->
                 val tint = when (finding.severity) {
                     CodeIssueSeverity.ERROR, CodeIssueSeverity.HIGH -> ColorWarning
                     CodeIssueSeverity.MEDIUM -> BrandBlue
                     CodeIssueSeverity.LOW, CodeIssueSeverity.INFO -> TextTertiary
+                }
+                val severityLabel = when (finding.severity) {
+                    CodeIssueSeverity.ERROR -> tr(fa, "خطا", "ERROR")
+                    CodeIssueSeverity.HIGH -> tr(fa, "زیاد", "HIGH")
+                    CodeIssueSeverity.MEDIUM -> tr(fa, "متوسط", "MEDIUM")
+                    CodeIssueSeverity.LOW -> tr(fa, "کم", "LOW")
+                    CodeIssueSeverity.INFO -> tr(fa, "اطلاعات", "INFO")
                 }
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Row(
@@ -2049,7 +2068,7 @@ private fun CodeAnalysisPanel(
                         lineHeight = 15.sp
                     )
                     Text(
-                        finding.ruleId + " • " + finding.severity.name,
+                        finding.ruleId + " • " + severityLabel,
                         color = tint,
                         fontSize = 9.sp
                     )
