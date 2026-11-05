@@ -709,7 +709,7 @@ private fun DashboardScreen(
                     modifier = Modifier.weight(1f),
                     icon = "shield",
                     title = tr(fa, "آسیب‌پذیری", "Vulnerability"),
-                    subtitle = tr(fa, "تحلیل APK", "APK intelligence"),
+                    subtitle = tr(fa, "اسکن عمیق", "Deep scan"),
                     status = tr(fa, "در توسعه", "In progress"),
                     tint = ColorWarning
                 )
@@ -725,7 +725,7 @@ private fun DashboardScreen(
             title = tr(fa, "گزارش‌دهی شفاف", "Transparent reporting"),
             body = tr(
                 fa,
-                "این نسخه محدودیت دسترسی Android یا محافظت بلادرنگ ندارد. نتیجه «بدون نشانگر شناخته‌شده» به معنی تضمین پاک بودن فایل نیست.",
+                "اسکن عمیق فایل‌های قابل‌دسترسی حافظه اشتراکی و APK برنامه‌های نصب‌شده را بررسی می‌کند؛ داده خصوصی سایر برنامه‌ها و محافظت بلادرنگ در دسترس نیست. نتیجه «بدون نشانگر شناخته‌شده» تضمین پاک بودن نیست.",
                 "Deep scan inspects accessible shared-storage files and installed-app APKs; other apps' private data and real-time protection remain unavailable. “No known indicator” is not a clean guarantee."
             ),
             warning = true
