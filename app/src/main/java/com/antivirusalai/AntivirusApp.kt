@@ -700,7 +700,7 @@ private fun DashboardScreen(
         HeroSecurityCard(
             fa = fa,
             scanning = scanning,
-            onScan = onOpenScan,
+            onScan = onFileScan,
             onApk = onApkScan
         )
 
