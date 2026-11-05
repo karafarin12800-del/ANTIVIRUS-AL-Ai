@@ -125,6 +125,8 @@ object DeviceScanEngine {
         var suspiciousCount = 0
         var unknownCount = 0
         var matchedCount = 0
+        var codeAnalyzedCount = 0
+        var codeIssueCount = 0
         val list = candidates.values.toList()
         for ((index, file) in list.withIndex()) {
             currentCoroutineContext().ensureActive()
@@ -150,8 +152,15 @@ object DeviceScanEngine {
                 scannedCount++
                 when (result.verdict) {
                     ScanVerdict.SUSPICIOUS -> suspiciousCount++
-                    ScanVerdict.UNKNOWN_APK, ScanVerdict.UNSUPPORTED_FILE -> unknownCount++
+                    ScanVerdict.UNKNOWN_APK,
+                    ScanVerdict.UNSUPPORTED_FILE,
+                    ScanVerdict.CODE_ANALYSIS_LIMITED -> unknownCount++
                     ScanVerdict.TEST_MARKER_MATCH -> matchedCount++
+                    ScanVerdict.CODE_ANALYZED -> codeAnalyzedCount++
+                    ScanVerdict.CODE_ISSUES_FOUND -> {
+                        codeAnalyzedCount++
+                        codeIssueCount += result.codeAnalysis?.diagnostics?.size ?: 0
+                    }
                     ScanVerdict.NO_KNOWN_INDICATOR -> Unit
                 }
                 if (items.size < 60) items += FolderScanItem(Uri.fromFile(file), result)
@@ -183,7 +192,9 @@ object DeviceScanEngine {
             scannedCountOverride = scannedCount,
             suspiciousCountOverride = suspiciousCount,
             unknownCountOverride = unknownCount,
-            matchedCountOverride = matchedCount
+            matchedCountOverride = matchedCount,
+            codeAnalyzedCountOverride = codeAnalyzedCount,
+            codeIssueCountOverride = codeIssueCount
         )
     }
 
