@@ -21,7 +21,11 @@ import java.io.File
 object DeviceScanEngine {
     private const val QUICK_FILE_LIMIT = 350
     private const val QUICK_TOTAL_BYTES = 1024L * 1024L * 1024L
+    private const val DEEP_FILE_LIMIT = 10_000
+    private const val DEEP_TOTAL_BYTES = 5L * 1024L * 1024L * 1024L
     private const val MAX_DEPTH = 64
+    private const val MAX_DIRECTORY_VISITS = 20_000
+    private const val MAX_QUICK_DIRECTORY_VISITS = 3_000
     private val QUICK_DIRECTORIES = listOf(
         "Download", "Downloads", "Documents", "Bluetooth", "DCIM",
         "Pictures", "Movies", "Music", "Podcasts", "Notifications",
@@ -43,7 +47,8 @@ object DeviceScanEngine {
         val roots = findStorageRoots(context)
         val failures = mutableListOf<FolderScanFailure>()
         val candidates = linkedMapOf<String, File>()
-        val maxFiles = if (deep) Int.MAX_VALUE else QUICK_FILE_LIMIT
+        val maxFiles = if (deep) DEEP_FILE_LIMIT else QUICK_FILE_LIMIT
+        var traversalLimitReached = false
 
         fun addCandidate(file: File) {
             if (candidates.size >= maxFiles || !file.isFile || !file.canRead()) return
@@ -57,8 +62,18 @@ object DeviceScanEngine {
                 val queue = ArrayDeque<Pair<File, Int>>()
                 queue.add(rootCanonical to 0)
                 val visited = mutableSetOf<String>()
+                var directoryVisits = 0
                 while (queue.isNotEmpty() && candidates.size < maxFiles) {
                     currentCoroutineContext().ensureActive()
+                    directoryVisits++
+                    if (directoryVisits > MAX_DIRECTORY_VISITS) {
+                        failures += FolderScanFailure(
+                            rootCanonical.name,
+                            "Deep scan stopped after the 20,000-directory safety limit."
+                        )
+                        traversalLimitReached = true
+                        break
+                    }
                     val (directory, depth) = queue.removeFirst()
                     if (depth > MAX_DEPTH) {
                         failures += FolderScanFailure(directory.name, "Maximum directory depth reached.")
@@ -134,9 +149,18 @@ object DeviceScanEngine {
                 failures += FolderScanFailure(file.name, "File exceeds the 200 MB per-file limit.")
                 continue
             }
-            if (!deep && declaredSize > 0 && totalBytes + declaredSize > QUICK_TOTAL_BYTES) {
+            val totalByteLimit = if (deep) DEEP_TOTAL_BYTES else QUICK_TOTAL_BYTES
+            if (declaredSize > 0 && declaredSize > totalByteLimit - totalBytes) {
                 skipped++
-                failures += FolderScanFailure(file.name, "The 1 GB quick-scan data limit was reached.")
+                failures += FolderScanFailure(
+                    file.name,
+                    if (deep) "The 5 GB deep-scan data limit was reached."
+                    else "The 1 GB quick-scan data limit was reached."
+                )
+                if (totalBytes >= totalByteLimit) {
+                    skipped += list.size - index - 1
+                    break
+                }
                 continue
             }
             if (index == 0 || index % 5 == 0 || index == list.lastIndex) {
@@ -155,9 +179,13 @@ object DeviceScanEngine {
                     ScanVerdict.NO_KNOWN_INDICATOR -> Unit
                 }
                 if (items.size < 60) items += FolderScanItem(Uri.fromFile(file), result)
-                if (!deep && totalBytes >= QUICK_TOTAL_BYTES) {
+                if (totalBytes >= totalByteLimit && index < list.lastIndex) {
                     skipped += list.size - index - 1
-                    failures += FolderScanFailure("Remaining files", "Stopped at the 1 GB quick-scan data limit.")
+                    failures += FolderScanFailure(
+                        "Remaining files",
+                        if (deep) "Stopped at the 5 GB deep-scan data limit."
+                        else "Stopped at the 1 GB quick-scan data limit."
+                    )
                     break
                 }
             } catch (cancelled: kotlinx.coroutines.CancellationException) {
@@ -167,11 +195,12 @@ object DeviceScanEngine {
             }
         }
 
-        val truncated = !deep && candidates.size >= maxFiles
-        if (truncated) {
+        val truncated = traversalLimitReached || candidates.size >= maxFiles
+        if (candidates.size >= maxFiles) {
             failures += FolderScanFailure(
                 "Scan limit",
-                "The 350-file quick-scan limit was reached."
+                if (deep) "The 10,000-file deep-scan limit was reached."
+                else "The 350-file quick-scan limit was reached."
             )
         }
         FolderScanReport(
@@ -220,8 +249,17 @@ object DeviceScanEngine {
     ) {
         val queue = ArrayDeque<Pair<File, Int>>()
         queue.add(start to 0)
+        var directoryVisits = 0
         while (queue.isNotEmpty() && output.size < maxFiles) {
             currentCoroutineContext().ensureActive()
+            directoryVisits++
+            if (directoryVisits > MAX_QUICK_DIRECTORY_VISITS) {
+                failures += FolderScanFailure(
+                    start.name,
+                    "Quick scan stopped after the 3,000-directory safety limit."
+                )
+                return
+            }
             val (directory, depth) = queue.removeFirst()
             if (depth > 12) continue
             val children = try {
