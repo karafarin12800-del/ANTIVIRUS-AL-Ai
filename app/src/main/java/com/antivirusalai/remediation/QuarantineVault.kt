@@ -277,14 +277,14 @@ object QuarantineVault {
         return digest.digest().toHex()
     }
 
-    private fun deleteSource(context: Context, source: Uri): Boolean =
-        if (source.scheme == "file") {
-            File(source.path ?: return false).delete()
-        } else if (DocumentsContract.isDocumentUri(context, source)) {
-            DocumentsContract.deleteDocument(context.contentResolver, source)
-        } else {
-            context.contentResolver.delete(source, null, null) > 0
+    private fun deleteSource(context: Context, source: Uri): Boolean {
+        return when {
+            source.scheme == "file" -> source.path?.let { File(it).delete() } ?: false
+            DocumentsContract.isDocumentUri(context, source) ->
+                DocumentsContract.deleteDocument(context.contentResolver, source)
+            else -> context.contentResolver.delete(source, null, null) > 0
         }
+    }
 
     private fun atomicMove(source: File, destination: File) {
         try {
