@@ -78,6 +78,7 @@ object DeviceScanEngine {
                     val (directory, depth) = queue.removeFirst()
                     if (depth > MAX_DEPTH) {
                         failures += FolderScanFailure(directory.name, "Maximum directory depth reached.")
+                        traversalLimitReached = true
                         continue
                     }
                     val canonical = runCatching { directory.canonicalFile }.getOrNull() ?: continue
@@ -124,7 +125,9 @@ object DeviceScanEngine {
                     if (candidates.size >= maxFiles) break
                     val directory = File(root, relative)
                     if (directory.isDirectory) {
-                        collectQuickFiles(directory, candidates, failures, maxFiles)
+                        if (collectQuickFiles(directory, root, candidates, failures, maxFiles)) {
+                            traversalLimitReached = true
+                        }
                     }
                 }
             }
@@ -198,7 +201,7 @@ object DeviceScanEngine {
             }
         }
 
-        val truncated = traversalLimitReached || dataLimitReached || candidates.size >= maxFiles
+        val truncated = traversalLimitReached || dataLimitReached || candidates.size >= maxFiles || skipped > 0
         if (candidates.size >= maxFiles) {
             failures += FolderScanFailure(
                 "Scan limit",
@@ -246,13 +249,15 @@ object DeviceScanEngine {
 
     private suspend fun collectQuickFiles(
         start: File,
+        root: File,
         output: LinkedHashMap<String, File>,
         failures: MutableList<FolderScanFailure>,
         maxFiles: Int
-    ) {
+    ): Boolean {
         val queue = ArrayDeque<Pair<File, Int>>()
         queue.add(start to 0)
         var directoryVisits = 0
+        var limitReached = false
         while (queue.isNotEmpty() && output.size < maxFiles) {
             currentCoroutineContext().ensureActive()
             directoryVisits++
@@ -261,14 +266,28 @@ object DeviceScanEngine {
                     start.name,
                     "Quick scan stopped after the 3,000-directory safety limit."
                 )
-                return
+                return true
             }
             val (directory, depth) = queue.removeFirst()
-            if (depth > 12) continue
+            if (depth > 12) {
+                failures += FolderScanFailure(directory.name, "Quick scan maximum depth reached.")
+                limitReached = true
+                continue
+            }
+            val canonicalDirectory = runCatching { directory.canonicalFile }.getOrNull() ?: continue
+            val rootPath = root.canonicalPath
+            if (canonicalDirectory.path != rootPath &&
+                !canonicalDirectory.path.startsWith(rootPath + File.separator)
+            ) {
+                failures += FolderScanFailure(directory.name, "A path outside the selected storage root was skipped.")
+                limitReached = true
+                continue
+            }
+            if (isProtectedDirectory(root, canonicalDirectory)) continue
             val children = try {
-                directory.listFiles()
+                canonicalDirectory.listFiles()
             } catch (_: SecurityException) {
-                failures += FolderScanFailure(directory.name, "Access denied by Android.")
+                failures += FolderScanFailure(canonicalDirectory.name, "Access denied by Android.")
                 null
             } ?: continue
             children.forEach { child ->
@@ -276,10 +295,16 @@ object DeviceScanEngine {
                 if (child.isDirectory) queue.add(child to depth + 1)
                 else if (child.isFile && child.canRead()) {
                     val canonical = runCatching { child.canonicalFile }.getOrNull() ?: return@forEach
-                    output.putIfAbsent(canonical.path, canonical)
+                    if (canonical.path != rootPath && !canonical.path.startsWith(rootPath + File.separator)) {
+                        failures += FolderScanFailure(child.name, "A file path outside the selected storage root was skipped.")
+                        limitReached = true
+                    } else {
+                        output.putIfAbsent(canonical.path, canonical)
+                    }
                 }
             }
         }
+        return limitReached
     }
 
     private fun addInstalledApplicationPackages(
