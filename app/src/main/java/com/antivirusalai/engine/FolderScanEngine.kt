@@ -164,6 +164,7 @@ object FolderScanEngine {
             } catch (error: kotlinx.coroutines.CancellationException) {
                 throw error
             } catch (error: Exception) {
+                skipped++
                 failures += FolderScanFailure(candidate.name, error.message ?: "File scan failed.")
             }
         }
