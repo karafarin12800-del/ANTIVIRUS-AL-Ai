@@ -113,6 +113,7 @@ fun AntivirusApp() {
     var scanResult by remember { mutableStateOf<ScanResult?>(null) }
     var batchReport by remember { mutableStateOf<FolderScanReport?>(null) }
     var batchProgress by remember { mutableStateOf<String?>(null) }
+    var scanProgress by remember { mutableStateOf(0f) }
     var pendingDeepScan by remember { mutableStateOf(false) }
     var deviceScanDeep by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
@@ -130,6 +131,7 @@ fun AntivirusApp() {
         selectedUri = null
         scanResult = null
         batchReport = null
+        scanProgress = 0f
         batchProgress = tr(
             fa,
             "در حال آماده‌سازی فهرست فایل‌ها و برنامه‌های نصب‌شده…",
@@ -144,6 +146,7 @@ fun AntivirusApp() {
                     context.applicationContext,
                     deep
                 ) { current, total, name ->
+                    scanProgress = if (total > 0) (current.toFloat() / total.toFloat()).coerceIn(0f, 1f) else 0f
                     batchProgress = "$current / $total  •  $name"
                 }
             } catch (cancelled: CancellationException) {
@@ -308,6 +311,7 @@ fun AntivirusApp() {
                                 fa = fa,
                                 scanning = scanning,
                                 result = scanResult,
+                                batchReport = batchReport,
                                 onOpenScan = { activeTab = MainTab.SCAN.key },
                                 onFileScan = launchFileScan,
                                 onApkScan = launchApkScan,
@@ -321,6 +325,7 @@ fun AntivirusApp() {
                                 result = scanResult,
                                 batchReport = batchReport,
                                 batchProgress = batchProgress,
+                                scanProgress = scanProgress,
                                 deviceScanDeep = deviceScanDeep,
                                 errorMessage = errorMessage,
                                 notice = notice,
@@ -668,6 +673,7 @@ private fun DashboardScreen(
     fa: Boolean,
     scanning: Boolean,
     result: ScanResult?,
+    batchReport: FolderScanReport?,
     onOpenScan: () -> Unit,
     onFileScan: () -> Unit,
     onApkScan: () -> Unit,
@@ -706,6 +712,13 @@ private fun DashboardScreen(
             scanning = scanning,
             onScan = onFileScan,
             onApk = onApkScan
+        )
+
+        HomeSafetyStatusCard(
+            fa = fa,
+            scanning = scanning,
+            report = batchReport,
+            onOpenScan = onOpenScan
         )
 
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -1514,12 +1527,123 @@ private fun StorePromoCard(fa: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
+private fun HomeSafetyStatusCard(
+    fa: Boolean,
+    scanning: Boolean,
+    report: FolderScanReport?,
+    onOpenScan: () -> Unit
+) {
+    val hasFindings = (report?.suspiciousCount ?: 0) > 0
+    val accent = if (hasFindings) ColorWarning else ColorSuccess
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onOpenScan)
+            .border(1.dp, accent.copy(alpha = 0.25f), RoundedCornerShape(23.dp)),
+        shape = RoundedCornerShape(23.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF211337))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    Brush.horizontalGradient(
+                        listOf(accent.copy(alpha = 0.12f), Color(0xFF211337), Color(0xFF1A102C))
+                    )
+                )
+                .padding(horizontal = 17.dp, vertical = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(13.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .background(accent.copy(alpha = 0.13f), CircleShape)
+                    .border(1.dp, accent.copy(alpha = 0.45f), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                IconArt(if (hasFindings) "alert" else "shield", tint = accent, size = 25.dp)
+            }
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    when {
+                        scanning -> tr(fa, "اسکن دستگاه در حال اجراست", "Device scan is running")
+                        report == null -> tr(fa, "هنوز اسکن دستگاه انجام نشده", "No device scan yet")
+                        hasFindings -> tr(fa, "مواردی نیازمند بررسی هستند", "Items need your review")
+                        else -> tr(fa, "اسکن اخیر بدون مورد مشکوک", "No suspicious items in last scan")
+                    },
+                    color = accent,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.ExtraBold
+                )
+                Text(
+                    when {
+                        scanning -> tr(fa, "برای مشاهده جزئیات به مرکز اسکن برو", "Open the scan center for live details")
+                        report == null -> tr(fa, "برای بررسی فایل‌های قابل‌دسترسی اسکن را شروع کن", "Start a scan to inspect accessible files")
+                        else -> tr(
+                            fa,
+                            "${report.scannedCount} مورد بررسی • ${report.suspiciousCount} مشکوک • ${report.unknownCount} نامشخص",
+                            "${report.scannedCount} scanned • ${report.suspiciousCount} suspicious • ${report.unknownCount} unknown"
+                        )
+                    },
+                    color = TextSecondary,
+                    fontSize = 10.sp,
+                    lineHeight = 15.sp
+                )
+            }
+            IconArt("chevron", tint = accent, size = 18.dp)
+        }
+    }
+}
+
+@Composable
+private fun NeonProgressRing(progress: Float, modifier: Modifier = Modifier) {
+    val bounded = progress.coerceIn(0f, 1f)
+    Box(modifier = modifier, contentAlignment = Alignment.Center) {
+        Canvas(Modifier.fillMaxSize()) {
+            val stroke = size.minDimension * 0.085f
+            val inset = stroke / 2f
+            val arcSize = androidx.compose.ui.geometry.Size(
+                size.width - stroke,
+                size.height - stroke
+            )
+            drawArc(
+                color = Color(0xFF7136B5).copy(alpha = 0.48f),
+                startAngle = -90f,
+                sweepAngle = 360f,
+                useCenter = false,
+                topLeft = Offset(inset, inset),
+                size = arcSize,
+                style = Stroke(width = stroke, cap = StrokeCap.Round)
+            )
+            drawArc(
+                brush = Brush.sweepGradient(
+                    listOf(Color(0xFFE8C9FF), Color(0xFFB66CFF), Color(0xFF8B39F5), Color(0xFFE8C9FF))
+                ),
+                startAngle = -90f,
+                sweepAngle = 360f * bounded,
+                useCenter = false,
+                topLeft = Offset(inset, inset),
+                size = arcSize,
+                style = Stroke(width = stroke, cap = StrokeCap.Round)
+            )
+            drawCircle(
+                color = Color(0xFFC99AFF).copy(alpha = 0.08f),
+                radius = size.minDimension * 0.30f
+            )
+        }
+        EnergyShieldMark(Modifier.size(35.dp))
+    }
+}
+
+@Composable
 private fun ScanCenterScreen(
     fa: Boolean,
     scanning: Boolean,
     result: ScanResult?,
     batchReport: FolderScanReport?,
     batchProgress: String?,
+    scanProgress: Float,
     deviceScanDeep: Boolean,
     errorMessage: String?,
     notice: String?,
@@ -1577,12 +1701,36 @@ private fun ScanCenterScreen(
                         IconArt("scan", tint = BrandTeal, size = 19.dp)
                         Text(tr(fa, "در حال اسکن حافظه دستگاه…", "Scanning device storage…"), color = TextPrimary, fontWeight = FontWeight.SemiBold)
                     }
-                    LinearProgressIndicator(
+                    Row(
                         modifier = Modifier.fillMaxWidth(),
-                        color = BrandTeal,
-                        trackColor = BrandTeal.copy(alpha = 0.13f)
-                    )
-                    Text(batchProgress ?: tr(fa, "فایل‌ها و APKها بدون نصب یا اجرا بررسی می‌شوند.", "Files and APKs are inspected without installation or execution."), color = TextSecondary, fontSize = 11.sp)
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(18.dp)
+                    ) {
+                        NeonProgressRing(progress = scanProgress, modifier = Modifier.size(116.dp))
+                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                            Text(
+                                tr(fa, "تحلیل زنده فایل‌ها", "LIVE FILE ANALYSIS"),
+                                color = BrandTeal,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 0.7.sp
+                            )
+                            Text(
+                                "${(scanProgress * 100).toInt()}٪",
+                                color = TextPrimary,
+                                fontSize = 29.sp,
+                                fontWeight = FontWeight.ExtraBold
+                            )
+                            Text(
+                                batchProgress ?: tr(fa, "فایل‌ها و APKها بدون نصب یا اجرا بررسی می‌شوند.", "Files and APKs are inspected without installation or execution."),
+                                color = TextSecondary,
+                                fontSize = 10.sp,
+                                lineHeight = 15.sp,
+                                maxLines = 3,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
                 }
             }
         }
