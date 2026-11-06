@@ -49,6 +49,7 @@ object DeviceScanEngine {
         val candidates = linkedMapOf<String, File>()
         val maxFiles = if (deep) DEEP_FILE_LIMIT else QUICK_FILE_LIMIT
         var traversalLimitReached = false
+        var dataLimitReached = false
 
         fun addCandidate(file: File) {
             if (candidates.size >= maxFiles || !file.isFile || !file.canRead()) return
@@ -151,6 +152,7 @@ object DeviceScanEngine {
             }
             val totalByteLimit = if (deep) DEEP_TOTAL_BYTES else QUICK_TOTAL_BYTES
             if (declaredSize > 0 && declaredSize > totalByteLimit - totalBytes) {
+                dataLimitReached = true
                 skipped++
                 failures += FolderScanFailure(
                     file.name,
@@ -195,7 +197,7 @@ object DeviceScanEngine {
             }
         }
 
-        val truncated = traversalLimitReached || candidates.size >= maxFiles
+        val truncated = traversalLimitReached || dataLimitReached || candidates.size >= maxFiles
         if (candidates.size >= maxFiles) {
             failures += FolderScanFailure(
                 "Scan limit",
