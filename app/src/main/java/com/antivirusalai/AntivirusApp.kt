@@ -1987,7 +1987,7 @@ private fun BatchScanSummaryCard(
     val importantItems = report.items.filter { item ->
         item.result.verdict in setOf(ScanVerdict.KNOWN_MALWARE, ScanVerdict.POTENTIALLY_UNWANTED, ScanVerdict.SUSPICIOUS)
     }
-    val visibleItems = if (showAllResults) report.items.take(60) else importantItems.take(8)
+    val visibleItems = importantItems.take(if (showAllResults) 60 else 8)
     Card(shape = RoundedCornerShape(21.dp), colors = CardDefaults.cardColors(containerColor = SurfaceBase)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
             Text(if (deep) tr(fa, "نتیجه اسکن عمیق", "Deep scan results") else tr(fa, "نتیجه اسکن سریع", "Quick scan results"), color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp)
