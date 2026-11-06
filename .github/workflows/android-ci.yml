@@ -10,8 +10,10 @@ permissions:
   contents: read
 
 # Do not cancel an active validation run just because a newer commit was pushed.
+# Isolate each source revision so a stuck emulator run for an older commit
+# cannot keep the newest revision queued behind the same PR concurrency group.
 concurrency:
-  group: android-ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: android-ci-${{ github.workflow }}-${{ github.sha }}
   cancel-in-progress: false
 
 jobs:
