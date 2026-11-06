@@ -710,15 +710,10 @@ private fun DashboardScreen(
         HeroSecurityCard(
             fa = fa,
             scanning = scanning,
+            report = batchReport,
+            onOpenScan = onOpenScan,
             onScan = onFileScan,
             onApk = onApkScan
-        )
-
-        HomeSafetyStatusCard(
-            fa = fa,
-            scanning = scanning,
-            report = batchReport,
-            onOpenScan = onOpenScan
         )
 
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -836,6 +831,8 @@ private fun DashboardScreen(
 private fun HeroSecurityCard(
     fa: Boolean,
     scanning: Boolean,
+    report: FolderScanReport?,
+    onOpenScan: () -> Unit,
     onScan: () -> Unit,
     onApk: () -> Unit
 ) {
@@ -948,11 +945,11 @@ private fun HeroSecurityCard(
                     )
                 }
 
-                FantasyGuardianIllustration(
+                GuardianRobotArtwork(
                     Modifier
                         .align(Alignment.Center)
                         .padding(top = 13.dp)
-                        .size(width = 206.dp, height = 226.dp)
+                        .size(width = 220.dp, height = 238.dp)
                 )
 
                 Text(
@@ -1011,6 +1008,13 @@ private fun HeroSecurityCard(
                     )
                 }
             }
+
+            HomeSafetyStatusCard(
+                fa = fa,
+                scanning = scanning,
+                report = report,
+                onOpenScan = onOpenScan
+            )
 
             Column(
                 modifier = Modifier
