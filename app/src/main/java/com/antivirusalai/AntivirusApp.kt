@@ -525,8 +525,8 @@ fun AntivirusApp() {
                 Text(
                     tr(
                         fa,
-                        "برای اسکن خودکار، Android باید اجازه «مدیریت همه فایل‌ها» را بدهد. این دسترسی فقط برای بررسی فایل‌های حافظه اشتراکی و APKهای قابل‌دسترسی استفاده می‌شود؛ محتوای فایل‌ها از دستگاه خارج نمی‌شود. Android همچنان پوشه‌های خصوصی برنامه‌های دیگر و Android/data و Android/obb را مسدود می‌کند.",
-                        "Automatic scanning needs Android’s All files access. ANTIVIRUS AL AI uses it to inspect accessible shared-storage files and APKs only. File contents stay on this device. Android still blocks other apps’ private folders and Android/data and Android/obb."
+                        "برای اسکن خودکار فایل‌ها، Android باید اجازه «مدیریت همه فایل‌ها» را بدهد. هنگام اسکنِ آغازشده توسط کاربر، برنامه همچنین فهرست برنامه‌های نصب‌شده را فقط برای بررسی امنیتی محلی می‌خواند. فایل‌ها و فهرست برنامه‌ها آپلود یا برای تبلیغات استفاده نمی‌شوند. Android همچنان پوشه‌های خصوصی برنامه‌های دیگر و Android/data و Android/obb را مسدود می‌کند؛ با رد دسترسی گسترده، اسکن خودکار دستگاه اجرا نمی‌شود.",
+                        "Automatic file scanning needs Android’s All files access. When a user starts a scan, the app also reads the installed-app inventory for local security review. Files and app inventory are not uploaded or used for advertising. Android still blocks other apps’ private folders and Android/data and Android/obb. Device-wide automatic scanning is unavailable when broad access is declined."
                     ),
                     color = TextSecondary
                 )
@@ -569,8 +569,8 @@ fun AntivirusApp() {
                 Text(
                     tr(
                         fa,
-                        "برای اسکن خودکار، با اجازه صریح تو فایل‌های قابل‌دسترسی در حافظه اشتراکی دستگاه بررسی می‌شوند. Android همچنان دسترسی به پوشه‌های خصوصی برنامه‌های دیگر و بخش‌هایی مانند Android/data و Android/obb را مسدود می‌کند. محتوای فایل‌ها آپلود نمی‌شود. قرنطینه پس از تأیید کاربر نسخه رمزنگاری‌شده می‌سازد و فقط در صورت اجازه Android برای حذف فایل اصلی تلاش می‌کند.",
-                        "With your explicit permission, automatic scans inspect accessible files in shared device storage. Android still blocks other apps' private folders and protected areas such as Android/data and Android/obb. File contents are not uploaded. Quarantine verifies an encrypted copy first and attempts source deletion only after user confirmation and when Android permits it."
+                        "اسکن خودکار فقط پس از شروع توسط کاربر انجام می‌شود. فایل‌های قابل‌دسترسی حافظه اشتراکی و فهرست برنامه‌های نصب‌شده برای بررسی امنیتی روی خود دستگاه پردازش می‌شوند؛ محتوای فایل‌ها یا فهرست برنامه‌ها به سرور ارسال یا برای تبلیغات استفاده نمی‌شوند. Android همچنان پوشه‌های خصوصی برنامه‌های دیگر و Android/data و Android/obb را مسدود می‌کند. قرنطینه پس از تأیید کاربر نسخه رمزنگاری‌شده را بررسی می‌کند و فقط در صورت اجازه Android برای حذف منبع تلاش می‌کند.",
+                        "Scanning starts only when the user requests it. Accessible shared-storage files and the installed-app inventory are processed locally for security review; file contents and the app inventory are not sent to a server or used for advertising. Android still blocks other apps' private folders and protected areas such as Android/data and Android/obb. Quarantine verifies an encrypted copy first and attempts source deletion only after user confirmation and when Android permits it."
                     ),
                     color = TextSecondary
                 )
