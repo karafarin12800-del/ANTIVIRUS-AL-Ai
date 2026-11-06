@@ -22,6 +22,7 @@ class MainActivityLaunchTest {
                 ) { "Guardian robot drawable did not decode to a Bitmap on Android" }
                 assertTrue("Guardian robot bitmap must have a valid width", bitmap.width > 0)
                 assertTrue("Guardian robot bitmap must have a valid height", bitmap.height > 0)
+                activity.finish()
             }
         }
     }
@@ -32,6 +33,7 @@ class MainActivityLaunchTest {
             scenario.onActivity { activity ->
                 assertNotNull(activity.window)
                 assertNotNull(activity.window.decorView)
+                activity.finish()
             }
         }
     }
