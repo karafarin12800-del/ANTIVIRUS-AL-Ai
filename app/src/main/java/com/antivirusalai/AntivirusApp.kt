@@ -338,7 +338,8 @@ fun AntivirusApp() {
                                 onFileScan = launchFileScan,
                                 onApkScan = launchApkScan,
                                 onOpenTools = { activeTab = MainTab.TOOLS.key },
-                                onOpenStore = { activeTab = MainTab.STORE.key }
+                                onOpenStore = { activeTab = MainTab.STORE.key },
+                                onOpenSettings = { activeTab = MainTab.SETTINGS.key }
                             )
 
                             MainTab.SCAN.key -> ScanCenterScreen(
@@ -704,7 +705,8 @@ private fun DashboardScreen(
     onFileScan: () -> Unit,
     onApkScan: () -> Unit,
     onOpenTools: () -> Unit,
-    onOpenStore: () -> Unit
+    onOpenStore: () -> Unit,
+    onOpenSettings: () -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(23.dp)) {
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -741,6 +743,36 @@ private fun DashboardScreen(
             onScan = onFileScan,
             onApk = onApkScan
         )
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(9.dp)
+        ) {
+            DashboardShortcutCard(
+                modifier = Modifier.weight(1f),
+                icon = "scan",
+                label = tr(fa, "گزارش‌ها", "Reports"),
+                onClick = onOpenScan
+            )
+            DashboardShortcutCard(
+                modifier = Modifier.weight(1f),
+                icon = "shield",
+                label = tr(fa, "محافظت هوشمند", "Smart guard"),
+                onClick = onOpenTools
+            )
+            DashboardShortcutCard(
+                modifier = Modifier.weight(1f),
+                icon = "lock",
+                label = tr(fa, "قرنطینه", "Quarantine"),
+                onClick = onOpenScan
+            )
+            DashboardShortcutCard(
+                modifier = Modifier.weight(1f),
+                icon = "settings",
+                label = tr(fa, "تنظیمات", "Settings"),
+                onClick = onOpenSettings
+            )
+        }
 
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             SectionTitle(
@@ -1553,6 +1585,40 @@ private fun StorePromoCard(fa: Boolean, onClick: () -> Unit) {
             }
             IconArt("chevron", tint = BrandTeal, size = 18.dp)
         }
+    }
+}
+
+@Composable
+private fun DashboardShortcutCard(
+    modifier: Modifier = Modifier,
+    icon: String,
+    label: String,
+    onClick: () -> Unit
+) {
+    Column(
+        modifier = modifier
+            .clickable(onClick = onClick)
+            .background(
+                Brush.verticalGradient(
+                    listOf(Color(0xFF35165B), Color(0xFF1B102F))
+                ),
+                RoundedCornerShape(17.dp)
+            )
+            .border(1.dp, Color(0xFFB77AFF).copy(alpha = 0.24f), RoundedCornerShape(17.dp))
+            .padding(horizontal = 4.dp, vertical = 12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        IconArt(icon, tint = Color(0xFFD8B6FF), size = 22.dp)
+        Text(
+            label,
+            color = Color(0xFFE8D8FA),
+            fontSize = 9.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center
+        )
     }
 }
 
