@@ -149,7 +149,7 @@ object DeviceScanEngine {
                 totalBytes += result.sizeBytes
                 scannedCount++
                 when (result.verdict) {
-                    ScanVerdict.SUSPICIOUS -> suspiciousCount++
+                    ScanVerdict.KNOWN_MALWARE, ScanVerdict.POTENTIALLY_UNWANTED, ScanVerdict.SUSPICIOUS -> suspiciousCount++
                     ScanVerdict.UNKNOWN_APK, ScanVerdict.UNSUPPORTED_FILE -> unknownCount++
                     ScanVerdict.TEST_MARKER_MATCH -> matchedCount++
                     ScanVerdict.NO_KNOWN_INDICATOR -> Unit
