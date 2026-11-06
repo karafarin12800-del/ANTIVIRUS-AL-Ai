@@ -5,12 +5,18 @@ import java.io.InputStream
 
 /**
  * Recognizes the harmless EICAR antivirus test string.
- * This is a regression-test marker, not a production malware signature.
+ *
+ * This is a regression-test marker only. It is not a production malware signature
+ * and must never be presented as evidence of real-world malware detection.
  */
 object EicarTestDetector {
-    private val pattern: ByteArray =
-        "X5O!P%@AP[4\\PZX54(P^)7CC)7}\\$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!\\$H+H*"
-            .toByteArray(Charsets.US_ASCII)
+    private val pattern: ByteArray = buildString {
+        append("X5O!P%@AP[4\\PZX54(P^)7}")
+        append('$')
+        append("EICAR-STANDARD-ANTIVIRUS-TEST-FILE!")
+        append('$')
+        append("H+H*")
+    }.toByteArray(Charsets.US_ASCII)
 
     private val prefix: IntArray = IntArray(pattern.size).also { table ->
         var matched = 0
@@ -32,6 +38,8 @@ object EicarTestDetector {
         while (true) {
             val count = input.read(buffer)
             if (count < 0) return false
+            if (count == 0) continue
+
             for (i in 0 until count) {
                 val value = buffer[i]
                 while (matched > 0 && value != pattern[matched]) {
