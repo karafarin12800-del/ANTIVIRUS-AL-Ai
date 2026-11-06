@@ -23,6 +23,16 @@ object ThreatFeedRuntime {
         "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEAzDOX+WcMzHRxjHa/zC4ZHIUePAR3IxTWtedJPzrM/sov5xWIWbvlnw/WBJczc6Jix9ccV5Z2EqgfKfLaQrNhg=="
 
     private val hashPattern = Regex("[0-9a-fA-F]{64}")
+    private val cacheLock = Any()
+
+    @Volatile
+    private var cachedFeed: SignedThreatFeed? = null
+
+    @Volatile
+    private var cachedFileLength: Long = -1L
+
+    @Volatile
+    private var cachedFileModified: Long = -1L
 
     private fun verifier(): FeedSignatureVerifier {
         val key: PublicKey =
@@ -39,11 +49,30 @@ object ThreatFeedRuntime {
     /** Null means no valid, current signed feed is available; it never means clean. */
     fun lookup(context: Context, sha256: String): ThreatIndicator? {
         if (!hashPattern.matches(sha256)) return null
-        return runCatching { store(context).lookup(sha256.lowercase()) }.getOrNull()
+        return currentFeed(context)?.indicators?.get(sha256.lowercase())
     }
 
-    fun currentFeed(context: Context): SignedThreatFeed? =
-        runCatching { store(context).loadCurrent() }.getOrNull()
+    fun currentFeed(context: Context): SignedThreatFeed? {
+        val file = File(context.applicationContext.filesDir, "threat-intelligence/current.alfeed")
+        if (!file.isFile) return null
+        synchronized(cacheLock) {
+            val length = file.length()
+            val modified = file.lastModified()
+            val cached = cachedFeed
+            val now = System.currentTimeMillis() / 1000L
+            if (cached != null &&
+                cachedFileLength == length &&
+                cachedFileModified == modified &&
+                cached.expiresAtEpochSeconds > now
+            ) return cached
+
+            val loaded = runCatching { store(context).loadCurrent() }.getOrNull()
+            cachedFeed = loaded
+            cachedFileLength = length
+            cachedFileModified = modified
+            return loaded
+        }
+    }
 
     suspend fun refresh(context: Context): SignedThreatFeed = withContext(Dispatchers.IO) {
         val url = URL(FEED_URL)
@@ -83,7 +112,14 @@ object ThreatFeedRuntime {
 
             // install() verifies signature, key ID, expiry, entry order and rollback
             // before atomically replacing the previously accepted feed.
-            store(context).install(bytes)
+            val installed = store(context).install(bytes)
+            synchronized(cacheLock) {
+                val file = File(context.applicationContext.filesDir, "threat-intelligence/current.alfeed")
+                cachedFeed = installed
+                cachedFileLength = file.length()
+                cachedFileModified = file.lastModified()
+            }
+            installed
         } finally {
             connection.disconnect()
         }
