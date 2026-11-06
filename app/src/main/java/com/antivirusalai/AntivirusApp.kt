@@ -1534,7 +1534,12 @@ private fun HomeSafetyStatusCard(
     onOpenScan: () -> Unit
 ) {
     val hasFindings = (report?.suspiciousCount ?: 0) > 0
-    val accent = if (hasFindings) ColorWarning else ColorSuccess
+    val hasUnknown = (report?.unknownCount ?: 0) > 0
+    val accent = when {
+        report == null -> BrandTeal
+        hasFindings || hasUnknown -> ColorWarning
+        else -> ColorSuccess
+    }
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -1570,7 +1575,8 @@ private fun HomeSafetyStatusCard(
                         scanning -> tr(fa, "اسکن دستگاه در حال اجراست", "Device scan is running")
                         report == null -> tr(fa, "هنوز اسکن دستگاه انجام نشده", "No device scan yet")
                         hasFindings -> tr(fa, "مواردی نیازمند بررسی هستند", "Items need your review")
-                        else -> tr(fa, "اسکن اخیر بدون مورد مشکوک", "No suspicious items in last scan")
+                        hasUnknown -> tr(fa, "بعضی فایل‌ها نتیجه قطعی ندارند", "Some files have no definitive verdict")
+                        else -> tr(fa, "در محدوده اسکن مورد مشکوکی نبود", "No suspicious items in scanned scope")
                     },
                     color = accent,
                     fontSize = 14.sp,
