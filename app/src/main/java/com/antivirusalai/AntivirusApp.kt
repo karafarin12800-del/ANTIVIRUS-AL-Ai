@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.os.SystemClock
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -43,6 +44,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -78,6 +80,7 @@ import com.antivirusalai.engine.ScanResult
 import com.antivirusalai.engine.ScanVerdict
 import com.antivirusalai.remediation.QuarantineManager
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private val AppBackground = Color(0xFF0B0618)
@@ -114,6 +117,10 @@ fun AntivirusApp() {
     var batchReport by remember { mutableStateOf<FolderScanReport?>(null) }
     var batchProgress by remember { mutableStateOf<String?>(null) }
     var scanProgress by remember { mutableStateOf(0f) }
+    var scanCurrent by remember { mutableStateOf(0) }
+    var scanTotal by remember { mutableStateOf(0) }
+    var scanStartedAtMs by remember { mutableStateOf(0L) }
+    var scanElapsedMs by remember { mutableStateOf(0L) }
     var pendingDeepScan by remember { mutableStateOf(false) }
     var deviceScanDeep by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
@@ -125,7 +132,18 @@ fun AntivirusApp() {
     var showAbout by remember { mutableStateOf(false) }
     val fa = language == "fa"
 
+    LaunchedEffect(scanning, scanStartedAtMs) {
+        while (scanning) {
+            scanElapsedMs = (SystemClock.elapsedRealtime() - scanStartedAtMs).coerceAtLeast(0L)
+            delay(1000L)
+        }
+    }
+
     val executeDeviceScan: (Boolean) -> Unit = { deep ->
+        scanStartedAtMs = SystemClock.elapsedRealtime()
+        scanElapsedMs = 0L
+        scanCurrent = 0
+        scanTotal = 0
         scanning = true
         deviceScanDeep = deep
         selectedUri = null
@@ -146,6 +164,9 @@ fun AntivirusApp() {
                     context.applicationContext,
                     deep
                 ) { current, total, name ->
+                    scanCurrent = current
+                    scanTotal = total
+                    scanElapsedMs = (SystemClock.elapsedRealtime() - scanStartedAtMs).coerceAtLeast(0L)
                     scanProgress = if (total > 0) (current.toFloat() / total.toFloat()).coerceIn(0f, 1f) else 0f
                     batchProgress = "$current / $total  •  $name"
                 }
@@ -155,6 +176,7 @@ fun AntivirusApp() {
                 errorMessage = error.message
                     ?: tr(fa, "اسکن حافظه دستگاه انجام نشد.", "Device scan could not be completed.")
             } finally {
+                scanElapsedMs = (SystemClock.elapsedRealtime() - scanStartedAtMs).coerceAtLeast(0L)
                 scanning = false
                 batchProgress = null
             }
@@ -326,6 +348,9 @@ fun AntivirusApp() {
                                 batchReport = batchReport,
                                 batchProgress = batchProgress,
                                 scanProgress = scanProgress,
+                                scanCurrent = scanCurrent,
+                                scanTotal = scanTotal,
+                                scanElapsedMs = scanElapsedMs,
                                 deviceScanDeep = deviceScanDeep,
                                 errorMessage = errorMessage,
                                 notice = notice,
@@ -1654,6 +1679,9 @@ private fun ScanCenterScreen(
     batchReport: FolderScanReport?,
     batchProgress: String?,
     scanProgress: Float,
+    scanCurrent: Int,
+    scanTotal: Int,
+    scanElapsedMs: Long,
     deviceScanDeep: Boolean,
     errorMessage: String?,
     notice: String?,
@@ -1741,6 +1769,21 @@ private fun ScanCenterScreen(
                             )
                         }
                     }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(9.dp)
+                    ) {
+                        LiveScanMetric(
+                            modifier = Modifier.weight(1f),
+                            label = tr(fa, "موارد بررسی‌شده", "Items checked"),
+                            value = "$scanCurrent / $scanTotal"
+                        )
+                        LiveScanMetric(
+                            modifier = Modifier.weight(1f),
+                            label = tr(fa, "زمان سپری‌شده", "Elapsed time"),
+                            value = formatScanDuration(scanElapsedMs)
+                        )
+                    }
                 }
             }
         }
@@ -1782,6 +1825,32 @@ private fun ScanCenterScreen(
                 warning = false
             )
         }
+    }
+}
+
+@Composable
+private fun LiveScanMetric(modifier: Modifier = Modifier, label: String, value: String) {
+    Column(
+        modifier = modifier
+            .background(Color(0xFF160D27), RoundedCornerShape(13.dp))
+            .border(1.dp, Color(0xFFB77AFF).copy(alpha = 0.16f), RoundedCornerShape(13.dp))
+            .padding(horizontal = 11.dp, vertical = 9.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Text(label, color = TextTertiary, fontSize = 9.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(value, color = TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+    }
+}
+
+private fun formatScanDuration(durationMs: Long): String {
+    val totalSeconds = (durationMs / 1000L).coerceAtLeast(0L)
+    val hours = totalSeconds / 3600L
+    val minutes = (totalSeconds % 3600L) / 60L
+    val seconds = totalSeconds % 60L
+    return if (hours > 0L) {
+        "%02d:%02d:%02d".format(hours, minutes, seconds)
+    } else {
+        "%02d:%02d".format(minutes, seconds)
     }
 }
 
