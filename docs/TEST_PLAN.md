@@ -7,20 +7,23 @@
 - Harmless EICAR test-string recognition across stream-buffer boundaries.
 - EICAR near-miss and ordinary-text rejection; test marker is never counted as live malware.
 - Signed-feed parser accepts generated P-256 test signatures and rejects payload tampering, unknown keys, expired feeds, future issue time, duplicate/unsorted hashes, and rollback.
-- Permission heuristic calibration: one sensitive permission alone is not malware; exported components remain informational.
+- Permission heuristic calibration: one sensitive permission alone is not malware; a single capability cluster remains evidence only; independent clusters are required for a suspicious review verdict.
 - Existing APK archive identification tests for renamed, malformed, and non-APK files.
+- Android instrumentation test for AES-GCM quarantine: verified source copy, list, restore byte equality, deletion, and rejection of a SHA-256 mismatch without leaving an entry.
 
 ## CI validation gates
 
-1. `testDebugUnitTest`, `lintDebug`, and `assembleDebug` must all pass.
-2. APK ZIP integrity and build metadata must be verified.
-3. Instrumentation tests must decode the shipped robot resource and launch the real launcher Activity.
-4. An instrumentation failure must be investigated from the test report/logcat; a green assembly step is not evidence that the app launched.
-5. Signed threat-feed publisher tests must remain offline/mocked and must not require a live API key in pull requests.
+1. The APK build job must assemble the app, verify APK ZIP integrity, verify its signature and package/version identity, then upload the artifact independently of later quality gates.
+2. The quality job must pass `testDebugUnitTest` and `lintDebug`.
+3. Instrumentation must decode the shipped robot resource, launch the real launcher Activity, and validate the quarantine vault on Android API 33 and API 35.
+4. An instrumentation failure must be investigated from the test report/logcat; a green APK assembly step alone is not evidence that the app launched.
+5. Every artifact must be tied to its exact source commit and workflow run. An artifact from an older commit is not a substitute for the current branch head.
+6. Signed threat-feed publisher tests must remain offline/mocked and must not require a live API key in pull requests.
 
 ## Required Android device tests before public release
 
-- Verify file selection, automatic quick/deep scans, provider-backed files, empty/small/large files, changed-after-scan handling, and cancellation.
+- Verify automatic quick/deep scans, accessible shared-storage coverage, provider-backed files, empty/small/large files, changed-after-scan handling, and cancellation.
+- Verify that reported scope limits are visible and honest: quick scan 350 files/1 GiB, deep scan 10,000 files/5 GiB, 200 MiB per file; Android-protected locations remain excluded.
 - Test API 26 through current Android versions, including protected storage boundaries, app inventory visibility, split APKs, and malformed archives.
 - Validate Android Keystore AES-GCM encryption, tag-tamper detection, key invalidation, vault list/restore/delete, and restore through multiple document providers.
 - Confirm source deletion is never attempted before explicit confirmation and a verified encrypted copy; validate the "source not removed" failure state.
