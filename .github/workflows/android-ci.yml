@@ -91,10 +91,11 @@ jobs:
       - name: Launch app and run instrumentation tests
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 35
+          api-level: 34
           target: google_apis
           arch: x86_64
           profile: pixel_2
           disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot -wipe-data
+          emulator-boot-timeout: 900
           script: gradle --no-daemon connectedDebugAndroidTest --stacktrace
