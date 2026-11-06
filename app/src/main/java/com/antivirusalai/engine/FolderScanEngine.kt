@@ -42,6 +42,8 @@ object FolderScanEngine {
     const val MAX_FILES = 300
     const val MAX_DEPTH = 20
     const val MAX_TOTAL_BYTES = 1024L * 1024L * 1024L
+    private const val MAX_DIRECTORY_VISITS = 2_000
+    private const val MAX_PENDING_DIRECTORIES = 3_000
 
     private data class Candidate(
         val uri: Uri,
@@ -62,9 +64,19 @@ object FolderScanEngine {
         val queue = ArrayDeque<Pair<String, Int>>()
         queue.add(DocumentsContract.getTreeDocumentId(treeUri) to 0)
         var truncated = false
+        var directoryVisits = 0
 
         while (queue.isNotEmpty()) {
             currentCoroutineContext().ensureActive()
+            directoryVisits++
+            if (directoryVisits > MAX_DIRECTORY_VISITS) {
+                failures += FolderScanFailure(
+                    "Folder traversal",
+                    "Stopped after the 2,000-directory safety limit."
+                )
+                truncated = true
+                break
+            }
             val (directoryId, depth) = queue.removeFirst()
             if (depth > MAX_DEPTH) {
                 failures += FolderScanFailure(directoryId, "Maximum folder depth reached.")
@@ -100,7 +112,15 @@ object FolderScanEngine {
                         val size = if (sizeColumn >= 0 && !cursor.isNull(sizeColumn)) cursor.getLong(sizeColumn) else -1L
 
                         if (mime == DocumentsContract.Document.MIME_TYPE_DIR) {
-                            queue.add(documentId to depth + 1)
+                            if (queue.size < MAX_PENDING_DIRECTORIES) {
+                                queue.add(documentId to depth + 1)
+                            } else {
+                                failures += FolderScanFailure(
+                                    name.ifBlank { documentId },
+                                    "Directory queue reached the 3,000-entry safety limit."
+                                )
+                                truncated = true
+                            }
                         } else {
                             val isApk = name.endsWith(".apk", ignoreCase = true) ||
                                 mime == "application/vnd.android.package-archive"
