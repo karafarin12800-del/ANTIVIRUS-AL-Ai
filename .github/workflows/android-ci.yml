@@ -36,6 +36,8 @@ jobs:
           packages: platform-tools
       - name: Install Android 36 SDK packages
         run: sdkmanager "platforms;android-36" "build-tools;36.0.0" "platform-tools"
+      - name: Run unit tests, lint, and debug build
+        run: gradle --no-daemon clean testDebugUnitTest lintDebug assembleDebug
       - name: Label APK and write build identity
         run: |
           cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/ANTIVIRUS-AL-AI-v0.2.0-debug.apk
