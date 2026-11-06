@@ -51,7 +51,7 @@ def previous_version(path: str | None) -> int:
 
 
 def fetch_recent_detections(auth_key: str) -> list[dict]:
-    body = urllib.parse.urlencode({"query": "recent_detections", "hours": "72"}).encode()
+    body = urllib.parse.urlencode({"query": "recent_detections", "hours": "168"}).encode()
     request = urllib.request.Request(
         API_URL,
         data=body,
