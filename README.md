@@ -1,36 +1,45 @@
 # ANTIVIRUS AL AI
 
-Privacy-first Android security scanner. Current Android milestone: **0.2.0 (versionCode 2)**. The app includes a bilingual Persian/English security dashboard, a scan centre, a security-tools catalogue, a plan catalogue, and the current local MVP scan pipeline.
+Privacy-first Android security scanner. Current Android milestone: **0.3.0 (versionCode 3)**. The app includes a bilingual Persian/English dashboard, automatic quick/deep shared-storage scanning, a bounded local scan pipeline, an authenticated threat-feed client, and an encrypted quarantine vault.
 
-## Current MVP scope
+## Implemented security layers
 
-- User-selected file scanning through Android's Storage Access Framework.
-- Streaming SHA-256 calculation with a configurable maximum file size.
-- A local, explicit indicator database for known test indicators.
-- APK metadata inspection using Android's package parser (no APK execution).
-- Permission and component heuristics reported as evidence, never as proof of malware.
-- Evidence-based verdicts: known test indicator, suspicious, no known threat, or unsupported/unknown.
-- Private app-storage quarantine copy with hash verification. The original file is not silently deleted.
-- The current MVP does not uninstall apps or remove original files; those remediation flows are not implemented yet.
-- Offline-first operation. No file upload, telemetry, VPN, accessibility service, root, or broad package inventory in this MVP.
-- A strict signed-feed verification and storage core is implemented and unit-tested; it is not activated until a production public key and publisher feed are provisioned.
+- Streaming SHA-256 calculation for files up to the configured 200 MiB per-file limit.
+- EICAR harmless antivirus test-string detection for scanner regression checks. EICAR is not live malware and is never described as malware.
+- APK package metadata inspection without installation or execution.
+- Conservative permission/component evidence. Static metadata patterns are leads for review, not proof of malware.
+- ECDSA P-256 signed-feed verification with a pinned public key, strict format, expiry, monotonic version checks, and atomic private-storage replacement.
+- Hash-reputation verdicts for feed entries classified as MALWARE, PUA, or SUSPICIOUS. These are exact SHA-256 matches, not behavioral or machine-learning detection.
+- WorkManager refresh scheduling for the signed feed. Network/battery constraints and Android Doze may delay work; this is not continuous device monitoring.
+- AES-GCM private quarantine vault with verified-copy creation, listing, restore, and removal APIs. The UI requires confirmation before requesting source deletion; Android or a document provider can refuse.
+- File contents and file hashes are not uploaded by the scanning path. The app downloads only the public signed feed.
 
-## Important security boundary
+## Live threat-feed activation
 
-A clean result means only that this local MVP found no known indicator in the selected file. It is **not** a guarantee that the file is safe. Permission patterns and APK metadata can create leads for investigation, not definitive malware verdicts. The current local indicator database contains only a benign project test fixture; this is not a production malware-signature database.
+The Android client and publisher workflow are prepared, but a live database is **not active until the repository owner configures** these GitHub Actions secrets:
 
-The signed-feed core verifies ECDSA P-256 signatures, enforces expiry and monotonic versions, and stores accepted feeds in private app storage. No production signing key, live threat-intelligence source, or malware indicator list is included yet. Feed-signing private keys must never be stored in this repository or the Android application.
+- `MALWAREBAZAAR_AUTH_KEY` — provider API credential.
+- `ALAI_FEED_SIGNING_KEY_PEM` — matching ECDSA P-256 private key; never commit it or place it in the app.
+- `ALAI_ABUSECH_COMMERCIAL_USE_APPROVED` — set to `true` only after the owner has confirmed that the selected provider plan and terms allow this commercial use.
+
+The publisher queries hash/family metadata only; it does not download malware samples. MalwareBazaar documents that its community API is free under fair-use principles, while company or for-profit use may require the enhanced commercial API. The approval flag is only an owner attestation; it is not provider approval or legal advice. Do not activate the workflow until the applicable plan/terms have been confirmed.
+
+The private signing key corresponding to the app-pinned public key is a separate secret. If it is lost or compromised, a reviewed app update and key-rotation procedure are required.
+
+## Important Android and detection boundaries
+
+A clean result means only that no currently loaded feed hash or configured static signal matched. It is **not** a guarantee that a file is safe. Hash matching misses unknown, modified, packed, or polymorphic files. The app does not inspect other apps' private data or live process memory, does not replace Google Play Protect, and does not currently provide real-time protection for every app or network connection.
+
+The manifest requests `MANAGE_EXTERNAL_STORAGE` and `QUERY_ALL_PACKAGES` to support broad shared-storage scanning and installed-app inventory. Both are sensitive capabilities and require accurate in-app disclosure and Google Play declaration/review where applicable. Android still restricts other apps' private storage and protected directories such as `Android/data` and `Android/obb`.
+
+Quarantine can remove an accessible source file only when Android/the provider permits deletion. It cannot silently uninstall installed packages, remove system apps, or guarantee physical secure erasure on flash storage.
+
+## Validation status
+
+Automated unit tests cover the signed-feed parser, signature tampering/replay/expiry rejection, EICAR stream matching, and selected static heuristics. The emulator launch/instrumentation test is tracked separately. No independent AV-TEST/AV-Comparatives-style malware detection report has been completed; no detection-rate or false-positive-rate claim is made.
+
+See `docs/DETECTION_VALIDATION.md`, `docs/THREAT_INTEL_OPERATIONS.md`, and `docs/ANDROID_LIMITATIONS.md`.
 
 ## Build
 
-The Android package version is `0.2.0` (`versionCode=2`). GitHub Actions publishes a clearly named debug artifact, `ANTIVIRUS-AL-AI-v0.2.0-debug.apk`, together with `build-info.txt` containing the exact source commit and workflow run ID. Debug APKs are for testing only and are not production-signed release packages.
-
-Open the repository in Android Studio or run the CI workflow. The project uses Kotlin, Jetpack Compose, and Android SDK 36. The CI workflow runs unit tests, Android lint, and a debug APK build.
-
-## Roadmap
-
-See [docs/ROADMAP.md](docs/ROADMAP.md) and the signed-feed design in [docs/THREAT_FEED_FORMAT.md](docs/THREAT_FEED_FORMAT.md).
-
-## Responsible testing
-
-Use benign test files, synthetic indicator data, and the included unit tests. Do not download or execute live malware. The repository does not contain malware samples.
+The Android package version is `0.3.0` (`versionCode=3`). GitHub Actions publishes `ANTIVIRUS-AL-AI-v0.3.0-debug.apk` with source commit, workflow run ID, and SHA-256 metadata. Debug APKs are for testing only and are not production-signed release packages. CI runs unit tests, Android lint, APK assembly, and emulator instrumentation tests.
