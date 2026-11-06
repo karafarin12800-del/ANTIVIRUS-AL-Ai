@@ -1,8 +1,10 @@
 package com.antivirusalai
 
 import android.graphics.BitmapFactory
+import android.view.ViewGroup
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -13,6 +15,7 @@ class MainActivityLaunchTest {
     @Test
     fun guardianArtworkResourceDecodesToBitmap() {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            InstrumentationRegistry.getInstrumentation().waitForIdleSync()
             scenario.onActivity { activity ->
                 val bitmap = requireNotNull(
                     BitmapFactory.decodeResource(
@@ -22,18 +25,26 @@ class MainActivityLaunchTest {
                 ) { "Guardian robot drawable did not decode to a Bitmap on Android" }
                 assertTrue("Guardian robot bitmap must have a valid width", bitmap.width > 0)
                 assertTrue("Guardian robot bitmap must have a valid height", bitmap.height > 0)
-                activity.finish()
             }
         }
     }
 
     @Test
-    fun launcherActivityStartsAndRendersItsWindow() {
+    fun launcherActivityAttachesItsComposeContentAfterStartup() {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            InstrumentationRegistry.getInstrumentation().waitForIdleSync()
             scenario.onActivity { activity ->
-                assertNotNull(activity.window)
-                assertNotNull(activity.window.decorView)
-                activity.finish()
+                assertNotNull("The launcher Activity must create a window.", activity.window)
+                val content = activity.findViewById<ViewGroup>(android.R.id.content)
+                assertNotNull("The Activity content host must exist.", content)
+                assertTrue(
+                    "setContent must attach a content view before startup is considered successful.",
+                    content.childCount > 0
+                )
+                assertTrue(
+                    "The Compose content root must be attached to the active window.",
+                    content.getChildAt(0).isAttachedToWindow
+                )
             }
         }
     }
