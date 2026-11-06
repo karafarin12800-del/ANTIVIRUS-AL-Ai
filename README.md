@@ -4,14 +4,14 @@ Privacy-first Android security scanner. Current Android milestone: **0.3.0 (vers
 
 ## Implemented security layers
 
-- Streaming SHA-256 calculation for files up to the configured 200 MiB per-file limit.
+- Bounded device scanning: quick scan up to 350 files/1 GiB; deep scan up to 10,000 files/5 GiB; 200 MiB per file. Results disclose skipped files and incomplete coverage.
 - EICAR harmless antivirus test-string detection for scanner regression checks. EICAR is not live malware and is never described as malware.
 - APK package metadata inspection without installation or execution.
 - Conservative permission/component evidence. Static metadata patterns are leads for review, not proof of malware.
 - ECDSA P-256 signed-feed verification with a pinned public key, strict format, expiry, monotonic version checks, and atomic private-storage replacement.
 - Hash-reputation verdicts for feed entries classified as MALWARE, PUA, or SUSPICIOUS. These are exact SHA-256 matches, not behavioral or machine-learning detection.
 - WorkManager refresh scheduling for the signed feed. Network/battery constraints and Android Doze may delay work; this is not continuous device monitoring.
-- AES-GCM private quarantine vault with verified-copy creation, listing, restore, and removal APIs. The UI requires confirmation before requesting source deletion; Android or a document provider can refuse.
+- AES-GCM private quarantine vault with verified-copy creation, listing, restore, and removal APIs. Source-removal action is restricted to malware/PUA/suspicious verdicts, requires explicit user confirmation and a verified copy, and can still be refused by Android or the document provider. A full quarantine-management screen remains outstanding.
 - File contents and file hashes are not uploaded by the scanning path. The app downloads only the public signed feed.
 
 ## Live threat-feed activation
@@ -36,7 +36,7 @@ Quarantine can remove an accessible source file only when Android/the provider p
 
 ## Validation status
 
-Automated unit tests cover the signed-feed parser, signature tampering/replay/expiry rejection, EICAR stream matching, and selected static heuristics. The emulator launch/instrumentation test is tracked separately. No independent AV-TEST/AV-Comparatives-style malware detection report has been completed; no detection-rate or false-positive-rate claim is made.
+Automated unit tests cover the signed-feed parser, signature tampering/replay/expiry rejection, EICAR stream matching, and selected static heuristics. Emulator instrumentation covers launch/artwork and AES-GCM quarantine integrity, restore, and deletion; the current API 33/35 run must pass before this revision is treated as validated. No independent AV-TEST/AV-Comparatives-style malware detection report has been completed; no detection-rate or false-positive-rate claim is made.
 
 See `docs/DETECTION_VALIDATION.md`, `docs/THREAT_INTEL_OPERATIONS.md`, and `docs/ANDROID_LIMITATIONS.md`.
 
