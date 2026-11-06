@@ -608,8 +608,8 @@ fun AntivirusApp() {
                 Text(
                     tr(
                         fa,
-                        "نسخه ${BuildConfig.VERSION_NAME} • Android • اسکن محلی و گزارش مبتنی بر شواهد. تطبیق feed امضاشده و به‌روزرسانی زمان‌بندی‌شده آماده است، اما انتشار بانک واقعی به تنظیم امن اعتبارنامه و مجوز منبع داده وابسته است. محافظت بلادرنگ و پرداخت هنوز فعال نیستند.",
-                        "Version ${BuildConfig.VERSION_NAME} • Android • Local scanning and evidence-based reports. Signed-feed matching and scheduled refresh are implemented, but a live database requires approved provider credentials and licensing. Real-time device monitoring and billing are not active."
+                        "نسخه ${BuildConfig.VERSION_NAME} • ابزارهای امنیتی برای بررسی و نگهداری امن دستگاه.",
+                        "Version ${BuildConfig.VERSION_NAME} • Security tools to inspect and help protect your device."
                     ),
                     color = TextSecondary
                 )
@@ -2352,7 +2352,7 @@ private fun QuarantineVaultScreen(
                 IconArt("lock", tint = BrandTeal, size = 23.dp)
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     Text(tr(fa, "حفاظت از نسخه‌های قرنطینه", "Quarantine protection"), color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                    Text(tr(fa, "بازیابی یا حذف فقط با انتخاب صریح شما انجام می‌شود.", "Restore or deletion requires an explicit choice."), color = TextSecondary, fontSize = 10.sp)
+                    Text(tr(fa, "حذف نسخه قرنطینه فقط با تأیید شما انجام می‌شود.", "Deleting a quarantined copy always requires your confirmation."), color = TextSecondary, fontSize = 10.sp)
                 }
             }
         }
