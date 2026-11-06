@@ -9,8 +9,8 @@ import androidx.compose.ui.res.painterResource
 /**
  * Displays the isolated guardian artwork from the Android drawable resources.
  *
- * Keeping the image as a real PNG resource avoids runtime Base64 decoding and
- * prevents malformed embedded image data from crashing the first composition.
+ * Keeping the image as a real WebP drawable avoids runtime Base64 decoding and
+ * lets the Android resource decoder validate the artwork before the screen uses it.
  */
 @Composable
 internal fun GuardianRobotArtwork(modifier: Modifier = Modifier) {
