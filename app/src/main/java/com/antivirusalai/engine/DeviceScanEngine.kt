@@ -193,6 +193,7 @@ object DeviceScanEngine {
             } catch (cancelled: kotlinx.coroutines.CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
+                skipped++
                 failures += FolderScanFailure(file.name, error.message ?: "File scan failed.")
             }
         }
