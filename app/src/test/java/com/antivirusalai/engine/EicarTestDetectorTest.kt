@@ -8,7 +8,7 @@ import java.io.ByteArrayInputStream
 
 class EicarTestDetectorTest {
     private val eicar = buildString {
-        append("X5O!P%@AP[4\\PZX54(P^)7}")
+        append("X5O!P%@AP[4\\PZX54(P^)7CC)7}")
         append('$')
         append("EICAR-STANDARD-ANTIVIRUS-TEST-FILE!")
         append('$')
