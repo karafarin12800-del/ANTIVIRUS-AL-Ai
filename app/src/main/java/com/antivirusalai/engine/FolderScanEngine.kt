@@ -68,6 +68,7 @@ object FolderScanEngine {
             val (directoryId, depth) = queue.removeFirst()
             if (depth > MAX_DEPTH) {
                 failures += FolderScanFailure(directoryId, "Maximum folder depth reached.")
+                truncated = true
                 continue
             }
             if (!visited.add(directoryId)) continue
@@ -119,8 +120,10 @@ object FolderScanEngine {
                 } ?: failures.add(FolderScanFailure(directoryId, "Folder contents could not be listed."))
             } catch (error: SecurityException) {
                 failures += FolderScanFailure(directoryId, "Access denied by the document provider.")
+                truncated = true
             } catch (error: Exception) {
                 failures += FolderScanFailure(directoryId, error.message ?: "Folder could not be read.")
+                truncated = true
             }
             if (truncated) break
         }
@@ -140,6 +143,7 @@ object FolderScanEngine {
             ) {
                 skipped++
                 failures += FolderScanFailure(candidate.name, "Folder scan reached the 1 GB total data limit.")
+                truncated = true
                 continue
             }
 
@@ -174,7 +178,7 @@ object FolderScanEngine {
             failures = failures,
             discoveredFiles = candidates.size,
             skippedFiles = skipped,
-            truncated = truncated
+            truncated = truncated || skipped > 0
         )
     }
 }
