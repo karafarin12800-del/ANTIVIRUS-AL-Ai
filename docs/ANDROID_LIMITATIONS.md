@@ -6,7 +6,7 @@ The manifest requests `MANAGE_EXTERNAL_STORAGE` for broad shared-storage scannin
 
 ## What the current app can inspect
 
-- Readable files in shared storage that Android exposes after the user grants the relevant access.
+- Readable shared-storage files Android exposes after the user grants the relevant access, within explicit scan limits: quick scan 350 files/1 GiB; deep scan 10,000 files/5 GiB; 200 MiB per file.
 - APK archives that are readable from shared storage or exposed through package metadata.
 - Package metadata exposed by Android's PackageManager: declared permissions, components, target SDK, and signing-certificate information where available.
 - SHA-256 hashes calculated locally, then checked against the currently installed authenticated feed.
@@ -23,7 +23,7 @@ The manifest requests `MANAGE_EXTERNAL_STORAGE` for broad shared-storage scannin
 
 ## Remediation and quarantine
 
-The AES-GCM vault creates and verifies an encrypted app-private copy before attempting source deletion. The UI requires explicit user confirmation. Android or the document provider can reject deletion; the app reports whether the source was actually removed. Listing, restore, and delete APIs are present, but a complete quarantine-management UI and provider-specific restore tests remain outstanding.
+The AES-GCM vault creates and verifies an encrypted app-private copy before attempting source deletion. The UI requires explicit user confirmation. Android or the document provider can reject deletion; the app reports whether the source was actually removed. Listing, restore, and delete APIs are present. Emulator tests cover the encrypted vault's core file-URI flow; provider-specific restore tests and a complete quarantine-management UI remain outstanding. The UI only offers source-removal quarantine for malware/PUA/suspicious verdicts, never for unknown, unsupported, clean-labelled or harmless test-marker results.
 
 This does not silently uninstall applications. An ordinary app cannot remove system apps or bypass Android's package manager confirmation. Deleting a file from flash storage also cannot guarantee physical secure overwrite because of wear levelling and filesystem behavior.
 
