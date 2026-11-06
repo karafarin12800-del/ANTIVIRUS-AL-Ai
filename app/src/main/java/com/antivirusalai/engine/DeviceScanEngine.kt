@@ -103,19 +103,37 @@ object DeviceScanEngine {
                         traversalLimitReached = true
                         continue
                     }
-                    val canonical = runCatching { directory.canonicalFile }.getOrNull() ?: continue
+                    val canonical = try {
+                        directory.canonicalFile
+                    } catch (_: Exception) {
+                        failures += FolderScanFailure(directory.name, "Could not resolve directory path.")
+                        traversalLimitReached = true
+                        continue
+                    }
                     if (!canonical.path.startsWith(rootCanonical.path + File.separator) &&
                         canonical.path != rootCanonical.path
-                    ) continue
+                    ) {
+                        failures += FolderScanFailure(directory.name, "A path outside the selected storage root was skipped.")
+                        traversalLimitReached = true
+                        continue
+                    }
                     if (!visited.add(canonical.path)) continue
                     if (isProtectedDirectory(rootCanonical, canonical)) continue
+                    var listingFailure: String? = null
                     val children = try {
                         canonical.listFiles()
                     } catch (_: SecurityException) {
-                        failures += FolderScanFailure(canonical.name, "Access denied by Android.")
+                        listingFailure = "Access denied by Android."
                         null
                     }
-                    if (children == null) continue
+                    if (children == null) {
+                        failures += FolderScanFailure(
+                            canonical.name,
+                            listingFailure ?: "Android did not return a directory listing."
+                        )
+                        traversalLimitReached = true
+                        continue
+                    }
                     children.forEach { child ->
                         if (candidates.size >= maxFiles) return@forEach
                         if (child.isDirectory) {
@@ -134,11 +152,20 @@ object DeviceScanEngine {
             // and users do not keep downloads inside the standard named folders.
             for (root in roots) {
                 if (candidates.size >= maxFiles) break
-                runCatching { root.listFiles() }.getOrNull()
-                    ?.filter { it.isFile }
-                    ?.forEach { file ->
+                val rootChildren = try {
+                    root.listFiles()
+                } catch (_: SecurityException) {
+                    failures += FolderScanFailure(root.name, "Access to the storage root was denied.")
+                    null
+                }
+                if (rootChildren == null) {
+                    failures += FolderScanFailure(root.name, "The storage root could not be listed.")
+                    traversalLimitReached = true
+                } else {
+                    rootChildren.filter { it.isFile }.forEach { file ->
                         if (candidates.size < maxFiles) addCandidate(file, root)
                     }
+                }
             }
 
             for (root in roots) {
@@ -297,7 +324,13 @@ object DeviceScanEngine {
                 limitReached = true
                 continue
             }
-            val canonicalDirectory = runCatching { directory.canonicalFile }.getOrNull() ?: continue
+            val canonicalDirectory = try {
+                directory.canonicalFile
+            } catch (_: Exception) {
+                failures += FolderScanFailure(directory.name, "Could not resolve directory path.")
+                limitReached = true
+                continue
+            }
             val rootPath = root.canonicalPath
             if (canonicalDirectory.path != rootPath &&
                 !canonicalDirectory.path.startsWith(rootPath + File.separator)
@@ -308,17 +341,38 @@ object DeviceScanEngine {
             }
             if (isProtectedDirectory(root, canonicalDirectory)) continue
             if (!visited.add(canonicalDirectory.path)) continue
+            var listingFailure: String? = null
             val children = try {
                 canonicalDirectory.listFiles()
             } catch (_: SecurityException) {
-                failures += FolderScanFailure(canonicalDirectory.name, "Access denied by Android.")
+                listingFailure = "Access denied by Android."
                 null
-            } ?: continue
+            }
+            if (children == null) {
+                failures += FolderScanFailure(
+                    canonicalDirectory.name,
+                    listingFailure ?: "Android did not return a directory listing."
+                )
+                limitReached = true
+                continue
+            }
             children.forEach { child ->
                 if (output.size >= maxFiles) return@forEach
-                if (child.isDirectory) queue.add(child to depth + 1)
-                else if (child.isFile && child.canRead()) {
-                    val canonical = runCatching { child.canonicalFile }.getOrNull() ?: return@forEach
+                if (child.isDirectory) {
+                    queue.add(child to depth + 1)
+                } else if (child.isFile) {
+                    if (!child.canRead()) {
+                        failures += FolderScanFailure(child.name, "File is not readable by this app.")
+                        limitReached = true
+                        return@forEach
+                    }
+                    val canonical = try {
+                        child.canonicalFile
+                    } catch (_: Exception) {
+                        failures += FolderScanFailure(child.name, "Could not resolve file path.")
+                        limitReached = true
+                        return@forEach
+                    }
                     if (canonical.path != rootPath && !canonical.path.startsWith(rootPath + File.separator)) {
                         failures += FolderScanFailure(child.name, "A file path outside the selected storage root was skipped.")
                         limitReached = true
