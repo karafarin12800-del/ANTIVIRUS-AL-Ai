@@ -1067,18 +1067,7 @@ private fun HeroSecurityCard(
                     Modifier
                         .align(Alignment.Center)
                         .padding(top = 13.dp)
-                        .size(width = 220.dp, height = 238.dp)
-                )
-
-                Text(
-                    "AL  /  GUARDIAN",
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(bottom = 8.dp),
-                    color = Color(0xFFD9B9FF).copy(alpha = 0.72f),
-                    fontSize = 8.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    letterSpacing = 1.8.sp
+                        .size(width = 174.dp, height = 188.dp)
                 )
             }
 
@@ -1988,52 +1977,24 @@ private fun BatchScanSummaryCard(
     deep: Boolean,
     onSelect: (FolderScanItem) -> Unit
 ) {
-    Card(
-        shape = RoundedCornerShape(21.dp),
-        colors = CardDefaults.cardColors(containerColor = SurfaceBase)
-    ) {
+    var showAllResults by remember { mutableStateOf(false) }
+    val importantItems = report.items.filter { item ->
+        item.result.verdict in setOf(ScanVerdict.KNOWN_MALWARE, ScanVerdict.POTENTIALLY_UNWANTED, ScanVerdict.SUSPICIOUS)
+    }
+    val visibleItems = if (showAllResults) report.items.take(60) else importantItems.take(8)
+    Card(shape = RoundedCornerShape(21.dp), colors = CardDefaults.cardColors(containerColor = SurfaceBase)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
-            Text(
-                if (deep) tr(fa, "نتیجه اسکن عمیق", "Deep scan results")
-                else tr(fa, "نتیجه اسکن سریع", "Quick scan results"),
-                color = TextPrimary,
-                fontWeight = FontWeight.Bold,
-                fontSize = 16.sp
-            )
+            Text(if (deep) tr(fa, "نتیجه اسکن عمیق", "Deep scan results") else tr(fa, "نتیجه اسکن سریع", "Quick scan results"), color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 MetricMini(Modifier.weight(1f), tr(fa, "بررسی‌شده", "Scanned"), report.scannedCount.toString())
-                MetricMini(Modifier.weight(1f), tr(fa, "مشکوک", "Suspicious"), report.suspiciousCount.toString())
-                MetricMini(Modifier.weight(1f), tr(fa, "نامشخص", "Unknown"), report.unknownCount.toString())
+                MetricMini(Modifier.weight(1f), tr(fa, "تهدید مهم", "Priority threats"), importantItems.size.toString())
             }
-            Text(
-                tr(
-                    fa,
-                    "از ${report.discoveredFiles} مورد قابل بررسی، ${report.scannedCount} مورد اسکن شدند. برای دیدن شواهد هر نتیجه، روی همان مورد بزن.",
-                    "${report.scannedCount} of ${report.discoveredFiles} discovered items were scanned. Tap an item to inspect its evidence."
-                ),
-                color = TextSecondary,
-                fontSize = 11.sp
-            )
-            if (report.items.isEmpty()) {
-                Text(
-                    tr(
-                        fa,
-                        "در محدوده قابل‌دسترسی این حالت فایلی پیدا نشد. مجوز حافظه و پوشه‌های رایج را بررسی کن؛ برای پوشش گسترده‌تر اسکن عمیق را اجرا کن.",
-                        "No readable files were found in this scan scope. Check storage access and common folders, or run a deep scan for broader coverage."
-                    ),
-                    color = ColorWarning,
-                    fontSize = 12.sp
-                )
+            Text(tr(fa, "از " + report.discoveredFiles + " مورد قابل بررسی، " + report.scannedCount + " مورد اسکن شدند.", report.scannedCount.toString() + " of " + report.discoveredFiles + " discovered items were scanned."), color = TextSecondary, fontSize = 11.sp)
+            if (importantItems.isEmpty()) {
+                Text(tr(fa, "تهدید تأییدشده یا مورد مشکوک مهمی در نتایج این اسکن پیدا نشد. این نتیجه تضمین پاک‌بودن همه فایل‌ها نیست.", "No confirmed threat or high-priority suspicious item was found. This does not guarantee every file is clean."), color = ColorSuccess, fontSize = 12.sp)
             }
-            report.items.take(60).forEach { item ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onSelect(item) }
-                        .padding(vertical = 7.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+            visibleItems.forEach { item ->
+                Row(modifier = Modifier.fillMaxWidth().clickable { onSelect(item) }.padding(vertical = 7.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                     IconArt("file", tint = verdictColor(item.result.verdict), size = 19.dp)
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                         Text(item.result.displayName, color = TextPrimary, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -2042,35 +2003,32 @@ private fun BatchScanSummaryCard(
                     StatusBadge(verdictBadge(item.result.verdict, fa), verdictColor(item.result.verdict))
                 }
             }
-            if (report.scannedCount > report.items.size) {
-                Text(
-                    tr(fa, "۶۰ نتیجه اول نمایش داده شده‌اند؛ مجموعاً ${report.scannedCount} فایل اسکن شده است.", "Showing the first 60 of ${report.scannedCount} scanned files."),
-                    color = TextTertiary,
-                    fontSize = 10.sp
-                )
+            val secondaryCount = report.items.size - importantItems.size + report.failures.size
+            if (secondaryCount > 0) {
+                Text(text = if (showAllResults) tr(fa, "بستن جزئیات فایل‌ها و موارد بررسی‌نشده", "Hide file and skipped-item details") else tr(fa, "نمایش همه فایل‌ها و موارد نامشخص (" + secondaryCount + ")", "Show all files and unknown/skipped items (" + secondaryCount + ")"), modifier = Modifier.fillMaxWidth().clickable { showAllResults = !showAllResults }.padding(vertical = 9.dp), color = BrandTeal, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
             }
-            if (report.failures.isNotEmpty()) {
-                Text(
-                    tr(fa, "مواردی که بررسی نشدند: ${report.failures.size}", "Files or folders not scanned: ${report.failures.size}"),
-                    color = ColorWarning,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
-                report.failures.take(5).forEach { failure ->
-                    Text("${failure.name}: ${failure.reason}", color = TextSecondary, fontSize = 10.sp)
+            if (showAllResults) {
+                report.items.filter { item -> item !in importantItems }.take(60).forEach { item ->
+                    Row(modifier = Modifier.fillMaxWidth().clickable { onSelect(item) }.padding(vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                        IconArt("file", tint = verdictColor(item.result.verdict), size = 17.dp)
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text(item.result.displayName, color = TextSecondary, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(verdictTitle(item.result.verdict, fa), color = verdictColor(item.result.verdict), fontSize = 9.sp)
+                        }
+                        StatusBadge(verdictBadge(item.result.verdict, fa), verdictColor(item.result.verdict))
+                    }
+                }
+                if (report.failures.isNotEmpty()) {
+                    Text(tr(fa, "مواردی که اسکن نشدند: " + report.failures.size, "Items that could not be scanned: " + report.failures.size), color = ColorWarning, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                    report.failures.take(30).forEach { failure -> Text(failure.name + ": " + failure.reason, color = TextSecondary, fontSize = 10.sp) }
                 }
             }
             if (report.truncated || report.skippedFiles > 0) {
-                Text(
-                    tr(fa, "محدودیت ایمنی اسکن اعمال شد. موارد ردشده: ${report.skippedFiles}", "Safety scan limits were applied. Skipped: ${report.skippedFiles}"),
-                    color = ColorWarning,
-                    fontSize = 10.sp
-                )
+                Text(tr(fa, "محدودیت ایمنی اسکن اعمال شد. موارد ردشده: " + report.skippedFiles, "Safety scan limits were applied. Skipped: " + report.skippedFiles), color = ColorWarning, fontSize = 10.sp)
             }
         }
     }
 }
-
 @Composable
 private fun ScanModeCard(
     icon: String,
