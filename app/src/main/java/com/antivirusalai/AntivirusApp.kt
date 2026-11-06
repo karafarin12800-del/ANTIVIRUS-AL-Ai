@@ -78,7 +78,7 @@ import com.antivirusalai.engine.FolderScanReport
 import com.antivirusalai.engine.EvidenceSeverity
 import com.antivirusalai.engine.ScanResult
 import com.antivirusalai.engine.ScanVerdict
-import com.antivirusalai.remediation.QuarantineManager
+import com.antivirusalai.remediation.QuarantineVault
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -112,6 +112,7 @@ fun AntivirusApp() {
     var activeTab by rememberSaveable { mutableStateOf(MainTab.HOME.key) }
     var scanning by remember { mutableStateOf(false) }
     var quarantining by remember { mutableStateOf(false) }
+    var showQuarantineConfirmation by remember { mutableStateOf(false) }
     var selectedUri by rememberSaveable { mutableStateOf<Uri?>(null) }
     var scanResult by remember { mutableStateOf<ScanResult?>(null) }
     var batchReport by remember { mutableStateOf<FolderScanReport?>(null) }
@@ -229,6 +230,45 @@ fun AntivirusApp() {
 
     val launchFileScan: () -> Unit = { launchDeviceScan(false) }
     val launchApkScan: () -> Unit = { launchDeviceScan(true) }
+
+    val performQuarantine: () -> Unit = {
+        showQuarantineConfirmation = false
+        val uri = selectedUri
+        val result = scanResult
+        if (uri != null && result != null && !quarantining) {
+            quarantining = true
+            scope.launch {
+                try {
+                    val receipt = QuarantineVault.quarantineAndRemoveSource(
+                        context.applicationContext,
+                        uri,
+                        result.sha256
+                    )
+                    notice = if (receipt.sourceRemoved) {
+                        tr(
+                            fa,
+                            "نسخه رمزنگاری‌شده و تأییدشده در قرنطینه ذخیره شد و فایل مبدأ با موفقیت حذف شد.",
+                            "A verified encrypted copy was stored in quarantine and the original source was removed."
+                        )
+                    } else {
+                        tr(
+                            fa,
+                            "نسخه رمزنگاری‌شده با موفقیت در قرنطینه ذخیره شد؛ اما Android یا ارائه‌دهنده فایل اجازه حذف مبدأ را نداد. فایل اصلی هنوز ممکن است روی دستگاه باشد.",
+                            "The encrypted quarantine copy was saved, but Android or the file provider did not allow source deletion. The original may still be on the device."
+                        )
+                    }
+                    if (receipt.sourceRemoved) selectedUri = null
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (error: Exception) {
+                    notice = error.message
+                        ?: tr(fa, "عملیات قرنطینه انجام نشد.", "Quarantine operation failed.")
+                } finally {
+                    quarantining = false
+                }
+            }
+        }
+    }
 
     CompositionLocalProvider(
         LocalLayoutDirection provides if (fa) LayoutDirection.Rtl else LayoutDirection.Ltr
@@ -362,33 +402,7 @@ fun AntivirusApp() {
                                     selectedUri = item.uri
                                     scanResult = item.result
                                 },
-                                onQuarantine = {
-                                    val uri = selectedUri
-                                    val result = scanResult
-                                    if (uri != null && result != null && !quarantining) {
-                                        quarantining = true
-                                        scope.launch {
-                                            try {
-                                                val receipt = QuarantineManager.saveEncryptedCopy(
-                                                    context.applicationContext,
-                                                    uri,
-                                                    result.sha256
-                                                )
-                                                notice = tr(
-                                                    fa,
-                                                    "نسخه رمزنگاری‌شده در فضای خصوصی ذخیره شد. شناسه: ${receipt.id.take(8)}. فایل اصلی بدون تغییر باقی مانده است.",
-                                                    "An encrypted copy was saved in private storage. ID: ${receipt.id.take(8)}. The original file remains unchanged."
-                                                )
-                                            } catch (cancelled: CancellationException) {
-                                                throw cancelled
-                                            } catch (error: Exception) {
-                                                notice = error.message ?: tr(fa, "ذخیره نسخه قرنطینه انجام نشد.", "Quarantine copy failed.")
-                                            } finally {
-                                                quarantining = false
-                                            }
-                                        }
-                                    }
-                                },
+                                onQuarantine = { showQuarantineConfirmation = true },
                                 onClearReport = {
                                     scanResult = null
                                     selectedUri = null
@@ -563,8 +577,8 @@ fun AntivirusApp() {
                 Text(
                     tr(
                         fa,
-                        "نسخه ${BuildConfig.VERSION_NAME} • Android • اسکن محلی و گزارش مبتنی بر شواهد. بانک تهدید تولیدی، محافظت بلادرنگ، پرداخت و چند ابزار امنیتی هنوز در دست توسعه هستند.",
-                        "Version ${BuildConfig.VERSION_NAME} • Android • Local scanning and evidence-based reports. Production threat intelligence, real-time protection, billing and several security tools are still under development."
+                        "نسخه ${BuildConfig.VERSION_NAME} • Android • اسکن محلی و گزارش مبتنی بر شواهد. تطبیق feed امضاشده و به‌روزرسانی زمان‌بندی‌شده آماده است، اما انتشار بانک واقعی به تنظیم امن اعتبارنامه و مجوز منبع داده وابسته است. محافظت بلادرنگ و پرداخت هنوز فعال نیستند.",
+                        "Version ${BuildConfig.VERSION_NAME} • Android • Local scanning and evidence-based reports. Signed-feed matching and scheduled refresh are implemented, but a live database requires approved provider credentials and licensing. Real-time device monitoring and billing are not active."
                     ),
                     color = TextSecondary
                 )
@@ -572,6 +586,37 @@ fun AntivirusApp() {
             confirmButton = {
                 Button(onClick = { showAbout = false }) {
                     Text(tr(fa, "بستن", "Close"), color = AppBackground)
+                }
+            }
+        )
+    }
+
+    if (showQuarantineConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showQuarantineConfirmation = false },
+            containerColor = SurfaceRaised,
+            title = { Text(tr(fa, "تأیید قرنطینه و حذف", "Confirm quarantine and removal"), color = TextPrimary) },
+            text = {
+                Text(
+                    tr(
+                        fa,
+                        "ابتدا یک نسخه رمزنگاری‌شده AES-GCM ساخته و هش آن تأیید می‌شود؛ سپس برنامه فقط از Android یا ارائه‌دهنده فایل درخواست حذف فایل مبدأ را می‌کند. حذف ممکن است به‌دلیل محدودیت مجوز ناموفق باشد. این عملیات برنامه نصب‌شده را uninstall نمی‌کند و حذف امن فیزیکی روی حافظه فلش تضمین‌پذیر نیست.",
+                        "ANTIVIRUS AL AI first creates and verifies an AES-GCM encrypted copy, then asks Android or the file provider to remove the source. Deletion can fail because of permission restrictions. This does not uninstall installed apps, and physical secure erasure cannot be guaranteed on flash storage."
+                    ),
+                    color = TextSecondary
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = performQuarantine,
+                    colors = ButtonDefaults.buttonColors(containerColor = ColorDanger)
+                ) {
+                    Text(tr(fa, "قرنطینه و تلاش برای حذف", "Quarantine and attempt removal"), color = AppBackground)
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { showQuarantineConfirmation = false }) {
+                    Text(tr(fa, "انصراف", "Cancel"), color = TextPrimary)
                 }
             }
         )
