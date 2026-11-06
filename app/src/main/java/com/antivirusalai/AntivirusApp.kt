@@ -9,6 +9,7 @@ import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -63,7 +64,9 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -1063,11 +1066,14 @@ private fun HeroSecurityCard(
                     )
                 }
 
-                GuardianRobotArtwork(
-                    Modifier
+                Image(
+                    painter = painterResource(id = R.drawable.guardian_robot),
+                    contentDescription = tr(fa, "ربات دکتر هوش مصنوعی", "AI doctor robot"),
+                    modifier = Modifier
                         .align(Alignment.Center)
                         .padding(top = 13.dp)
-                        .size(width = 174.dp, height = 188.dp)
+                        .size(width = 174.dp, height = 188.dp),
+                    contentScale = ContentScale.Fit
                 )
             }
 
