@@ -50,11 +50,33 @@ object DeviceScanEngine {
         val maxFiles = if (deep) DEEP_FILE_LIMIT else QUICK_FILE_LIMIT
         var traversalLimitReached = false
         var dataLimitReached = false
+        var discoverySkipped = 0
 
-        fun addCandidate(file: File) {
-            if (candidates.size >= maxFiles || !file.isFile || !file.canRead()) return
-            val canonical = runCatching { file.canonicalFile }.getOrNull() ?: return
-            if (candidates.putIfAbsent(canonical.path, canonical) == null) Unit
+        fun addCandidate(file: File, allowedRoot: File) {
+            if (candidates.size >= maxFiles || !file.isFile) return
+            if (!file.canRead()) {
+                discoverySkipped++
+                failures += FolderScanFailure(file.name, "File is not readable by this app.")
+                return
+            }
+            val canonical = try {
+                file.canonicalFile
+            } catch (error: Exception) {
+                discoverySkipped++
+                traversalLimitReached = true
+                failures += FolderScanFailure(file.name, "Could not resolve the file's canonical path.")
+                return
+            }
+            val rootPath = allowedRoot.canonicalPath
+            if (canonical.path != rootPath &&
+                !canonical.path.startsWith(rootPath + File.separator)
+            ) {
+                discoverySkipped++
+                traversalLimitReached = true
+                failures += FolderScanFailure(file.name, "A file path outside the selected storage root was skipped.")
+                return
+            }
+            candidates.putIfAbsent(canonical.path, canonical)
         }
 
         if (deep) {
@@ -101,7 +123,7 @@ object DeviceScanEngine {
                                 queue.add(child to depth + 1)
                             }
                         } else {
-                            addCandidate(child)
+                            addCandidate(child, rootCanonical)
                         }
                     }
                 }
@@ -115,7 +137,7 @@ object DeviceScanEngine {
                 runCatching { root.listFiles() }.getOrNull()
                     ?.filter { it.isFile }
                     ?.forEach { file ->
-                        if (candidates.size < maxFiles) addCandidate(file)
+                        if (candidates.size < maxFiles) addCandidate(file, root)
                     }
             }
 
@@ -138,7 +160,7 @@ object DeviceScanEngine {
         }
 
         val items = mutableListOf<FolderScanItem>()
-        var skipped = 0
+        var skipped = discoverySkipped
         var totalBytes = 0L
         var scannedCount = 0
         var suspiciousCount = 0
@@ -256,6 +278,7 @@ object DeviceScanEngine {
     ): Boolean {
         val queue = ArrayDeque<Pair<File, Int>>()
         queue.add(start to 0)
+        val visited = mutableSetOf<String>()
         var directoryVisits = 0
         var limitReached = false
         while (queue.isNotEmpty() && output.size < maxFiles) {
@@ -284,6 +307,7 @@ object DeviceScanEngine {
                 continue
             }
             if (isProtectedDirectory(root, canonicalDirectory)) continue
+            if (!visited.add(canonicalDirectory.path)) continue
             val children = try {
                 canonicalDirectory.listFiles()
             } catch (_: SecurityException) {
