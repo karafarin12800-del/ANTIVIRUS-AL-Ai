@@ -554,8 +554,8 @@ fun AntivirusApp() {
                 Text(
                     tr(
                         fa,
-                        "برای اسکن خودکار، با اجازه صریح تو فایل‌های قابل‌دسترسی در حافظه اشتراکی دستگاه بررسی می‌شوند. Android همچنان دسترسی به پوشه‌های خصوصی برنامه‌های دیگر و بخش‌هایی مانند Android/data و Android/obb را مسدود می‌کند. محتوای فایل‌ها آپلود نمی‌شود. قرنطینه فقط نسخه رمزنگاری‌شده می‌سازد و فایل اصلی را حذف نمی‌کند.",
-                        "With your explicit permission, automatic scans inspect accessible files in shared device storage. Android still blocks other apps' private folders and protected areas such as Android/data and Android/obb. File contents are not uploaded. Quarantine creates an encrypted copy and does not delete the original."
+                        "برای اسکن خودکار، با اجازه صریح تو فایل‌های قابل‌دسترسی در حافظه اشتراکی دستگاه بررسی می‌شوند. Android همچنان دسترسی به پوشه‌های خصوصی برنامه‌های دیگر و بخش‌هایی مانند Android/data و Android/obb را مسدود می‌کند. محتوای فایل‌ها آپلود نمی‌شود. قرنطینه پس از تأیید کاربر نسخه رمزنگاری‌شده می‌سازد و فقط در صورت اجازه Android برای حذف فایل اصلی تلاش می‌کند.",
+                        "With your explicit permission, automatic scans inspect accessible files in shared device storage. Android still blocks other apps' private folders and protected areas such as Android/data and Android/obb. File contents are not uploaded. Quarantine verifies an encrypted copy first and attempts source deletion only after user confirmation and when Android permits it."
                     ),
                     color = TextSecondary
                 )
@@ -2190,16 +2190,16 @@ private fun ScanResultCard(
                 colors = ButtonDefaults.buttonColors(containerColor = BrandTeal, contentColor = AppBackground)
             ) {
                 Text(
-                    if (quarantining) tr(fa, "در حال ذخیره…", "Saving…")
-                    else tr(fa, "ذخیره نسخه رمزنگاری‌شده", "Save encrypted copy"),
+                    if (quarantining) tr(fa, "در حال قرنطینه…", "Quarantining…")
+                    else tr(fa, "قرنطینه و تلاش برای حذف فایل", "Quarantine and attempt source removal"),
                     fontWeight = FontWeight.Bold
                 )
             }
             Text(
                 tr(
                     fa,
-                    "این عملیات فایل اصلی را حذف یا غیرفعال نمی‌کند؛ فقط یک نسخه رمزنگاری‌شده در فضای خصوصی برنامه می‌سازد.",
-                    "This does not delete or disable the original. It creates an encrypted copy in private app storage."
+                    "پس از تأیید تو، نسخه رمزنگاری‌شده ابتدا ذخیره و بررسی می‌شود و سپس حذف فایل اصلی درخواست می‌شود؛ ممکن است Android یا ارائه‌دهنده فایل حذف را رد کند.",
+                    "After your confirmation, an encrypted copy is verified before Android is asked to remove the source. The provider may refuse deletion."
                 ),
                 color = TextTertiary,
                 fontSize = 10.sp,
