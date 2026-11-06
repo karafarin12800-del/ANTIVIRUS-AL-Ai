@@ -235,36 +235,51 @@ fun AntivirusApp() {
         showQuarantineConfirmation = false
         val uri = selectedUri
         val result = scanResult
+        val actionableVerdicts = setOf(
+            ScanVerdict.KNOWN_MALWARE,
+            ScanVerdict.POTENTIALLY_UNWANTED,
+            ScanVerdict.SUSPICIOUS
+        )
         if (uri != null && result != null && !quarantining) {
-            quarantining = true
-            scope.launch {
-                try {
-                    val receipt = QuarantineVault.quarantineAndRemoveSource(
-                        context.applicationContext,
-                        uri,
-                        result.sha256
-                    )
-                    notice = if (receipt.sourceRemoved) {
-                        tr(
-                            fa,
-                            "نسخه رمزنگاری‌شده و تأییدشده در قرنطینه ذخیره شد و فایل مبدأ با موفقیت حذف شد.",
-                            "A verified encrypted copy was stored in quarantine and the original source was removed."
+            if (result.verdict !in actionableVerdicts) {
+                // Defense in depth: never request source deletion for an unknown,
+                // unsupported, clean-labelled, or harmless test-marker result.
+                notice = tr(
+                    fa,
+                    "برای این نتیجه شواهد کافی جهت قرنطینه همراه با حذف فایل اصلی وجود ندارد؛ فایل مبدأ دست‌نخورده باقی ماند.",
+                    "This result does not contain enough evidence for quarantine with source removal. The original file was left untouched."
+                )
+            } else {
+                quarantining = true
+                scope.launch {
+                    try {
+                        val receipt = QuarantineVault.quarantineAndRemoveSource(
+                            context.applicationContext,
+                            uri,
+                            result.sha256
                         )
-                    } else {
-                        tr(
-                            fa,
-                            "نسخه رمزنگاری‌شده با موفقیت در قرنطینه ذخیره شد؛ اما Android یا ارائه‌دهنده فایل اجازه حذف مبدأ را نداد. فایل اصلی هنوز ممکن است روی دستگاه باشد.",
-                            "The encrypted quarantine copy was saved, but Android or the file provider did not allow source deletion. The original may still be on the device."
-                        )
+                        notice = if (receipt.sourceRemoved) {
+                            tr(
+                                fa,
+                                "نسخه رمزنگاری‌شده و تأییدشده در قرنطینه ذخیره شد و Android حذف فایل مبدأ را تأیید کرد.",
+                                "A verified encrypted copy was stored in quarantine and Android confirmed source removal."
+                            )
+                        } else {
+                            tr(
+                                fa,
+                                "نسخه رمزنگاری‌شده در قرنطینه ذخیره شد؛ اما Android یا ارائه‌دهنده فایل اجازه حذف مبدأ را نداد. فایل اصلی ممکن است هنوز روی دستگاه باشد.",
+                                "The encrypted quarantine copy was saved, but Android or the file provider did not allow source deletion. The original may still be on the device."
+                            )
+                        }
+                        if (receipt.sourceRemoved) selectedUri = null
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (error: Exception) {
+                        notice = error.message
+                            ?: tr(fa, "عملیات قرنطینه انجام نشد.", "Quarantine operation failed.")
+                    } finally {
+                        quarantining = false
                     }
-                    if (receipt.sourceRemoved) selectedUri = null
-                } catch (cancelled: CancellationException) {
-                    throw cancelled
-                } catch (error: Exception) {
-                    notice = error.message
-                        ?: tr(fa, "عملیات قرنطینه انجام نشد.", "Quarantine operation failed.")
-                } finally {
-                    quarantining = false
                 }
             }
         }
@@ -1818,7 +1833,7 @@ private fun ScanCenterScreen(
         ScanModeCard(
             icon = "file",
             title = tr(fa, "اسکن سریع", "Quick scan"),
-            description = tr(fa, "برنامه‌های نصب‌شده، فایل‌های ریشه حافظه و مسیرهای مهم مثل دانلودها و اسناد بررسی می‌شوند.", "Checks installed-app packages, loose storage-root files, and key folders such as Downloads and Documents."),
+            description = tr(fa, "برنامه‌های نصب‌شده و مسیرهای مهم حافظه بررسی می‌شوند؛ این حالت حداکثر ۳۵۰ فایل و ۱ گیگابایت داده را با سقف ۲۰۰ مگابایت برای هر فایل پوشش می‌دهد.", "Checks installed-app packages and key storage folders, up to 350 files and 1 GB total, with a 200 MB per-file limit."),
             tag = tr(fa, "قابل استفاده", "AVAILABLE"),
             enabled = !scanning,
             onClick = onFileScan
@@ -1826,7 +1841,7 @@ private fun ScanCenterScreen(
         ScanModeCard(
             icon = "apk",
             title = tr(fa, "اسکن عمیق", "Deep scan"),
-            description = tr(fa, "کل حافظه اشتراکیِ قابل‌دسترسی، فایل‌های پنهانِ قابل‌خواندن و APK برنامه‌های نصب‌شده بررسی می‌شوند.", "Checks accessible shared storage, readable hidden files and installed-app APK archives."),
+            description = tr(fa, "حافظه اشتراکیِ قابل‌دسترسی، فایل‌های پنهانِ قابل‌خواندن و APKهای نصب‌شده بررسی می‌شوند؛ سقف اسکن ۱۰٬۰۰۰ فایل، ۵ گیگابایت داده و ۲۰۰ مگابایت برای هر فایل است.", "Checks accessible shared storage, readable hidden files and installed-app APK archives, up to 10,000 files and 5 GB total, with a 200 MB per-file limit."),
             tag = tr(fa, "قابل استفاده", "AVAILABLE"),
             enabled = !scanning,
             onClick = onApkScan
@@ -2182,29 +2197,47 @@ private fun ScanResultCard(
                 }
             }
 
-            Button(
-                onClick = onQuarantine,
-                enabled = !quarantining,
-                modifier = Modifier.fillMaxWidth().height(49.dp),
-                shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = BrandTeal, contentColor = AppBackground)
+            if (result.verdict in setOf(
+                    ScanVerdict.KNOWN_MALWARE,
+                    ScanVerdict.POTENTIALLY_UNWANTED,
+                    ScanVerdict.SUSPICIOUS
+                )
             ) {
+                Button(
+                    onClick = onQuarantine,
+                    enabled = !quarantining,
+                    modifier = Modifier.fillMaxWidth().height(49.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = BrandTeal, contentColor = AppBackground)
+                ) {
+                    Text(
+                        if (quarantining) tr(fa, "در حال قرنطینه…", "Quarantining…")
+                        else tr(fa, "قرنطینه و درخواست حذف فایل", "Quarantine and request source removal"),
+                        fontWeight = FontWeight.Bold
+                    )
+                }
                 Text(
-                    if (quarantining) tr(fa, "در حال قرنطینه…", "Quarantining…")
-                    else tr(fa, "قرنطینه و تلاش برای حذف فایل", "Quarantine and attempt source removal"),
-                    fontWeight = FontWeight.Bold
+                    tr(
+                        fa,
+                        "پس از تأیید تو، نسخه رمزنگاری‌شده ابتدا ذخیره و هش آن بررسی می‌شود؛ سپس حذف فایل اصلی از Android درخواست می‌شود. ممکن است ارائه‌دهنده فایل حذف را رد کند.",
+                        "After confirmation, an encrypted copy is stored and hash-verified before Android is asked to remove the original. The provider may refuse deletion."
+                    ),
+                    color = TextTertiary,
+                    fontSize = 10.sp,
+                    lineHeight = 15.sp
+                )
+            } else {
+                Text(
+                    tr(
+                        fa,
+                        "برای این نتیجه، عملیات حذف از قرنطینه فعال نیست. فایل‌های ناشناخته، پشتیبانی‌نشده و نشانگر آزمایشی بی‌خطر به‌صورت خودکار حذف نمی‌شوند.",
+                        "Source-removal quarantine is disabled for this result. Unknown, unsupported and harmless test-marker files are never automatically removed."
+                    ),
+                    color = ColorWarning,
+                    fontSize = 10.sp,
+                    lineHeight = 15.sp
                 )
             }
-            Text(
-                tr(
-                    fa,
-                    "پس از تأیید تو، نسخه رمزنگاری‌شده ابتدا ذخیره و بررسی می‌شود و سپس حذف فایل اصلی درخواست می‌شود؛ ممکن است Android یا ارائه‌دهنده فایل حذف را رد کند.",
-                    "After your confirmation, an encrypted copy is verified before Android is asked to remove the source. The provider may refuse deletion."
-                ),
-                color = TextTertiary,
-                fontSize = 10.sp,
-                lineHeight = 15.sp
-            )
             OutlinedButton(onClick = onClear, modifier = Modifier.fillMaxWidth()) {
                 Text(tr(fa, "پاک کردن گزارش از صفحه", "Clear report from screen"))
             }
@@ -2257,7 +2290,7 @@ private fun SecurityToolsScreen(
         ToolModuleCard(
             icon = "lock",
             title = tr(fa, "قرنطینه رمزنگاری‌شده", "Encrypted quarantine"),
-            description = tr(fa, "ذخیره نسخه AES-GCM در فضای خصوصی برنامه و بررسی هش؛ فایل اصلی باقی می‌ماند.", "AES-GCM encrypted copy in private storage with hash verification; the original remains in place."),
+            description = tr(fa, "نسخه AES-GCM در فضای خصوصی ذخیره و هش آن تأیید می‌شود؛ درخواست حذف منبع فقط پس از تأیید کاربر و برای نتایج دارای شواهد خطر انجام می‌شود.", "An AES-GCM copy is stored privately and hash-verified; source removal is requested only after user confirmation and only for risk-evidence verdicts."),
             status = tr(fa, "پایه‌ای فعال", "BASIC"),
             tint = BrandTeal,
             onClick = { onFeature("quarantine") }
