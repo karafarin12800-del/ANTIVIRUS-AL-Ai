@@ -8,7 +8,7 @@ import java.io.ByteArrayInputStream
 
 class EicarTestDetectorTest {
     private val eicar =
-        "X5O!P%@AP[4\\\\PZX54(P^)7CC)7}\\$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!\\$H+H*"
+        "X5O!P%@AP[4\\PZX54(P^)7CC)7}\\$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!\\$H+H*"
 
     @Test
     fun detectsHarmlessEicarStringWhenSplitAcrossReadBoundaries() {
