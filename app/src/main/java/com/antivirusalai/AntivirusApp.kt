@@ -58,6 +58,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.FilterQuality
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.res.imageResource
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -1150,7 +1155,7 @@ private fun HeroSecurityCard(
                         pressedElevation = 0.dp
                     )
                 ) {
-                    IconArt("spark", tint = Color(0xFF49216E), size = 18.dp)
+                    IconArt("lightning", tint = Color(0xFF49216E), size = 18.dp)
                     Spacer(Modifier.width(10.dp))
                     Text(
                         if (scanning) tr(fa, "در حال اسکن…", "Scanning…")
@@ -1159,7 +1164,7 @@ private fun HeroSecurityCard(
                         fontWeight = FontWeight.ExtraBold
                     )
                     Spacer(Modifier.width(9.dp))
-                    IconArt("arrow", tint = Color(0xFF49216E), size = 18.dp)
+                    IconArt("search", tint = Color(0xFF49216E), size = 18.dp)
                 }
 
                 OutlinedButton(
@@ -1175,7 +1180,7 @@ private fun HeroSecurityCard(
                         contentColor = Color(0xFFE9D9FF)
                     )
                 ) {
-                    IconArt("apk", tint = Color(0xFFC69BFF), size = 17.dp)
+                    IconArt("apps", tint = Color(0xFFC69BFF), size = 17.dp)
                     Spacer(Modifier.width(9.dp))
                     Text(
                         tr(fa, "اسکن عمیق", "Deep scan"),
@@ -1537,7 +1542,7 @@ private fun RecentScanCard(
                 Modifier.size(42.dp).background(BrandBlue.copy(alpha = 0.12f), RoundedCornerShape(13.dp)),
                 contentAlignment = Alignment.Center
             ) {
-                IconArt("clock", tint = BrandBlue, size = 21.dp)
+                IconArt("scan_clock", tint = BrandBlue, size = 21.dp)
             }
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(tr(fa, "آخرین گزارش اسکن", "Latest scan report"), color = TextSecondary, fontSize = 10.sp)
@@ -1625,7 +1630,7 @@ private fun StorePromoCard(fa: Boolean, onClick: () -> Unit) {
                 Modifier.size(45.dp).background(BrandTeal.copy(alpha = 0.12f), RoundedCornerShape(14.dp)),
                 contentAlignment = Alignment.Center
             ) {
-                IconArt("store", tint = BrandTeal, size = 23.dp)
+                IconArt("crown", tint = BrandTeal, size = 23.dp)
             }
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(tr(fa, "طرح‌های اشتراک و فروشگاه", "Plans & membership"), color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
@@ -1711,7 +1716,7 @@ private fun HomeSafetyStatusCard(
                     .border(1.dp, accent.copy(alpha = 0.45f), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                IconArt(if (hasFindings) "alert" else "shield", tint = accent, size = 25.dp)
+                IconArt(if (hasFindings) "biohazard" else "status_shield", tint = accent, size = 25.dp)
             }
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
@@ -2257,7 +2262,7 @@ private fun SecurityToolsScreen(
                 Box(
                     Modifier.size(56.dp).background(Color(0xFF8B42E8).copy(alpha = 0.18f), RoundedCornerShape(17.dp)),
                     contentAlignment = Alignment.Center
-                ) { IconArt("scan", tint = Color(0xFFD9B8FF), size = 29.dp) }
+                ) { IconArt("scan_clock", tint = Color(0xFFD9B8FF), size = 29.dp) }
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                     Text(tr(fa, "شروع اسکن", "Start a scan"), color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                     Text(tr(fa, "اسکن سریع، عمیق و بررسی فایل انتخابی", "Quick, deep and selected-file scans"), color = TextSecondary, fontSize = 11.sp)
@@ -2292,7 +2297,7 @@ private fun SecurityToolsScreen(
                 colors = CardDefaults.cardColors(containerColor = SurfaceBase)
             ) {
                 Row(Modifier.padding(15.dp), horizontalArrangement = Arrangement.spacedBy(11.dp), verticalAlignment = Alignment.CenterVertically) {
-                    IconArt("scan", tint = BrandTeal, size = 21.dp)
+                    IconArt("search", tint = BrandTeal, size = 21.dp)
                     Text(tr(fa, "هنوز گزارشی ثبت نشده است. برای شروع، اسکن را اجرا کن.", "No scan report yet. Start a scan to create one."), color = TextSecondary, fontSize = 11.sp)
                 }
             }
@@ -2349,7 +2354,7 @@ private fun QuarantineVaultScreen(
 
         Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = SurfaceBase)) {
             Row(Modifier.fillMaxWidth().padding(15.dp), horizontalArrangement = Arrangement.spacedBy(11.dp), verticalAlignment = Alignment.CenterVertically) {
-                IconArt("lock", tint = BrandTeal, size = 23.dp)
+                IconArt("shield_location", tint = BrandTeal, size = 23.dp)
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     Text(tr(fa, "حفاظت از نسخه‌های قرنطینه", "Quarantine protection"), color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                     Text(tr(fa, "حذف نسخه قرنطینه فقط با تأیید شما انجام می‌شود.", "Deleting a quarantined copy always requires your confirmation."), color = TextSecondary, fontSize = 10.sp)
@@ -2360,7 +2365,7 @@ private fun QuarantineVaultScreen(
         if (entries.isEmpty()) {
             Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = SurfaceBase)) {
                 Column(Modifier.fillMaxWidth().padding(22.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                    IconArt("shield", tint = ColorSuccess, size = 34.dp)
+                    IconArt("status_shield", tint = ColorSuccess, size = 34.dp)
                     Text(tr(fa, "قرنطینه خالی است", "Quarantine is empty"), color = TextPrimary, fontWeight = FontWeight.Bold)
                     Text(tr(fa, "در صورت قرنطینه یک فایل، اطلاعات آن اینجا نمایش داده می‌شود.", "Quarantined items will appear here."), color = TextSecondary, fontSize = 11.sp, textAlign = TextAlign.Center)
                 }
@@ -2370,7 +2375,7 @@ private fun QuarantineVaultScreen(
                 Card(shape = RoundedCornerShape(17.dp), colors = CardDefaults.cardColors(containerColor = SurfaceBase)) {
                     Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-                            IconArt("lock", tint = BrandTeal, size = 19.dp)
+                            IconArt("folder", tint = BrandTeal, size = 19.dp)
                             Text(entry.id.take(8), color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                             Spacer(Modifier.weight(1f))
                             StatusBadge(tr(fa, "قرنطینه", "QUARANTINED"), ColorSuccess)
@@ -2542,7 +2547,7 @@ private fun PlanCard(
             Text(price, color = if (highlighted) BrandTeal else TextPrimary, fontSize = 19.sp, fontWeight = FontWeight.Bold)
             features.forEach { feature ->
                 Row(horizontalArrangement = Arrangement.spacedBy(9.dp), verticalAlignment = Alignment.Top) {
-                    IconArt("check", tint = if (highlighted) BrandTeal else BrandBlue, size = 15.dp)
+                    IconArt("status_check", tint = if (highlighted) BrandTeal else BrandBlue, size = 15.dp)
                     Text(feature, color = TextSecondary, fontSize = 11.sp, lineHeight = 16.sp)
                 }
             }
@@ -2673,11 +2678,50 @@ private fun InfoBanner(title: String, body: String, warning: Boolean) {
 }
 
 @Composable
+private fun AssetArt(index: Int, size: Dp) {
+    val atlas = remember { ImageBitmap.imageResource(R.drawable.security_artwork_sheet) }
+    Canvas(Modifier.size(size)) {
+        val cell = 32
+        val safeIndex = index.coerceIn(0, 15)
+        drawImage(
+            image = atlas,
+            srcOffset = IntOffset((safeIndex % 4) * cell, (safeIndex / 4) * cell),
+            srcSize = IntSize(cell, cell),
+            dstSize = IntSize(this.size.width.toInt().coerceAtLeast(1), this.size.height.toInt().coerceAtLeast(1)),
+            filterQuality = FilterQuality.Medium
+        )
+    }
+}
+
+@Composable
 private fun IconArt(
     name: String,
     tint: Color,
     size: Dp
 ) {
+    val artworkIndex = when (name) {
+        "apps", "apk" -> 0
+        "biohazard", "malware" -> 1
+        "crown", "store" -> 2
+        "folder", "file" -> 3
+        "lightning", "spark" -> 4
+        "pause" -> 5
+        "robot" -> 6
+        "scan", "scan_clock", "clock" -> 7
+        "search", "arrow" -> 8
+        "settings", "tools" -> 9
+        "shield", "shield_check" -> 10
+        "shield_lightning" -> 11
+        "shield_location", "lock" -> 12
+        "check", "status_check" -> 13
+        "status_shield" -> 14
+        "alert", "warning" -> 15
+        else -> null
+    }
+    if (artworkIndex != null) {
+        AssetArt(artworkIndex, size)
+        return
+    }
     Canvas(Modifier.size(size)) {
         val sx = this.size.width / 24f
         val sy = this.size.height / 24f
