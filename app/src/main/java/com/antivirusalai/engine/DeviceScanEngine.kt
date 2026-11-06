@@ -80,6 +80,8 @@ object DeviceScanEngine {
         }
 
         if (deep) {
+            // Prioritize installed APKs before traversing large shared-storage trees.
+            addInstalledApplicationPackages(context, candidates, failures, maxFiles)
             roots.forEach { root ->
                 val rootCanonical = runCatching { root.canonicalFile }.getOrNull() ?: return@forEach
                 val queue = ArrayDeque<Pair<File, Int>>()
@@ -146,8 +148,10 @@ object DeviceScanEngine {
                     }
                 }
             }
-            addInstalledApplicationPackages(context, candidates, failures, maxFiles)
         } else {
+            // Installed APKs are a high-value quick-scan target, so place them before
+            // loose files and common folders in the bounded quick-scan candidate list.
+            addInstalledApplicationPackages(context, candidates, failures, maxFiles)
             // Include loose files placed directly in shared-storage roots. Some devices
             // and users do not keep downloads inside the standard named folders.
             for (root in roots) {
@@ -181,9 +185,6 @@ object DeviceScanEngine {
                 }
             }
 
-            // Installed application packages are a high-value quick-scan target,
-            // not something users should have to wait for a deep scan to inspect.
-            addInstalledApplicationPackages(context, candidates, failures, maxFiles)
         }
 
         val items = mutableListOf<FolderScanItem>()
