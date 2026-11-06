@@ -100,6 +100,8 @@ object PermissionRiskAnalyzer {
             )
         }
 
-        return PermissionAssessment(score, score >= 4, evidence)
+        // A single sensitive permission cluster is a review lead, not a suspicious verdict.
+        // Require multiple independent high-risk capability clusters to reduce false positives.
+        return PermissionAssessment(score, score >= 8, evidence)
     }
 }
