@@ -82,6 +82,7 @@ import com.antivirusalai.engine.EvidenceSeverity
 import com.antivirusalai.engine.ScanResult
 import com.antivirusalai.engine.ScanVerdict
 import com.antivirusalai.remediation.QuarantineVault
+import com.antivirusalai.remediation.VaultEntry
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -104,7 +105,8 @@ private enum class MainTab(val key: String) {
     SCAN("scan"),
     TOOLS("tools"),
     STORE("store"),
-    SETTINGS("settings")
+    SETTINGS("settings"),
+    VAULT("vault")
 }
 
 @Composable
@@ -134,6 +136,7 @@ fun AntivirusApp() {
     var showPrivacy by remember { mutableStateOf(false) }
     var showStoragePermissionRationale by remember { mutableStateOf(false) }
     var showAbout by remember { mutableStateOf(false) }
+    var vaultRefresh by remember { mutableStateOf(0) }
     val fa = language == "fa"
 
     LaunchedEffect(scanning, scanStartedAtMs) {
@@ -433,8 +436,18 @@ fun AntivirusApp() {
                             MainTab.TOOLS.key -> SecurityToolsScreen(
                                 fa = fa,
                                 result = scanResult,
-                                onFeature = { featureInfo = it },
-                                onOpenScan = { activeTab = MainTab.SCAN.key }
+                                onOpenScan = { activeTab = MainTab.SCAN.key },
+                                onOpenVault = { activeTab = MainTab.VAULT.key }
+                            )
+
+                            MainTab.VAULT.key -> QuarantineVaultScreen(
+                                fa = fa,
+                                refreshKey = vaultRefresh,
+                                onDelete = { id ->
+                                    if (QuarantineVault.delete(context.applicationContext, id)) {
+                                        vaultRefresh++
+                                    }
+                                }
                             )
 
                             MainTab.STORE.key -> StoreScreen(
@@ -1044,26 +1057,6 @@ private fun HeroSecurityCard(
                     drawPath(haloShield, Color(0xFFD7B5FF).copy(alpha = 0.055f))
                     drawPath(haloShield, Color(0xFFE5CEFF).copy(alpha = 0.20f),
                         style = Stroke(width = 1.1f))
-                }
-
-                Row(
-                    modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .padding(top = 15.dp)
-                        .background(Color(0xFF130A24).copy(alpha = 0.70f), RoundedCornerShape(50))
-                        .border(1.dp, Color(0xFFD7B4FF).copy(alpha = 0.22f), RoundedCornerShape(50))
-                        .padding(horizontal = 13.dp, vertical = 7.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Box(Modifier.size(7.dp).background(Color(0xFF73E1AE), CircleShape))
-                    Text(
-                        tr(fa, "موتور محلی آماده تحلیل", "ON-DEVICE ENGINE READY"),
-                        color = Color(0xFFE7D5FF),
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 0.35.sp
-                    )
                 }
 
                 Image(
@@ -2241,103 +2234,173 @@ private fun DetailLine(label: String, value: String) {
 private fun SecurityToolsScreen(
     fa: Boolean,
     result: ScanResult?,
-    onFeature: (String) -> Unit,
-    onOpenScan: () -> Unit
+    onOpenScan: () -> Unit,
+    onOpenVault: () -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(15.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(17.dp)) {
         Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            EyebrowLabel(tr(fa, "ماژول‌های امنیتی", "SECURITY MODULES"))
+            EyebrowLabel(tr(fa, "محافظت دستگاه", "DEVICE PROTECTION"))
             Text(tr(fa, "جعبه‌ابزار امنیتی", "Security toolkit"), color = TextPrimary, fontSize = 25.sp, fontWeight = FontWeight.Bold)
-            Text(tr(fa, "وضعیت هر قابلیت به‌صورت شفاف مشخص شده است.", "Every module is labelled by its actual implementation status."), color = TextSecondary, fontSize = 12.sp)
+            Text(tr(fa, "ابزارهای اصلی در یک‌جا", "Your essential security tools"), color = TextSecondary, fontSize = 12.sp)
         }
 
-        ToolModuleCard(
-            icon = "lock",
-            title = tr(fa, "قرنطینه رمزنگاری‌شده", "Encrypted quarantine"),
-            description = tr(fa, "نسخه AES-GCM در فضای خصوصی ذخیره و هش آن تأیید می‌شود؛ درخواست حذف منبع فقط پس از تأیید کاربر و برای نتایج دارای شواهد خطر انجام می‌شود.", "An AES-GCM copy is stored privately and hash-verified; source removal is requested only after user confirmation and only for risk-evidence verdicts."),
-            status = tr(fa, "پایه‌ای فعال", "BASIC"),
-            tint = BrandTeal,
-            onClick = { onFeature("quarantine") }
-        )
-        ToolModuleCard(
-            icon = "shield",
-            title = tr(fa, "تحلیل آسیب‌پذیری APK", "APK vulnerability intelligence"),
-            description = tr(fa, "نقشه‌برداری SDK و کتابخانه‌ها و تطبیق با پایگاه‌های CVE معتبر؛ هنوز پیاده‌سازی نشده است.", "SDK and library inventory with trusted CVE mapping; not implemented yet."),
-            status = tr(fa, "در حال توسعه", "IN DEVELOPMENT"),
-            tint = ColorWarning,
-            onClick = { onFeature("vulnerability") }
-        )
-        ToolModuleCard(
-            icon = "link",
-            title = tr(fa, "محافظ فیشینگ و لینک", "Phishing & link shield"),
-            description = tr(fa, "بررسی URL انتخاب‌شده توسط کاربر؛ پایگاه اعتبار و تحلیل دامنه هنوز متصل نشده است.", "User-submitted URL checks; reputation and domain analysis are not connected yet."),
-            status = tr(fa, "برنامه‌ریزی‌شده", "PLANNED"),
-            tint = TextTertiary,
-            onClick = { onFeature("phishing") }
-        )
-        ToolModuleCard(
-            icon = "activity",
-            title = tr(fa, "محافظ شبکه", "Network guard"),
-            description = tr(fa, "محافظت DNS/VPN محلی پس از بررسی حریم خصوصی و سیاست‌های Android و فروشگاه.", "Local DNS/VPN protection after privacy and Android/store policy review."),
-            status = tr(fa, "برنامه‌ریزی‌شده", "PLANNED"),
-            tint = TextTertiary,
-            onClick = { onFeature("network") }
-        )
-        ToolModuleCard(
-            icon = "brain",
-            title = tr(fa, "مغز امنیتی AL AI", "AL AI security brain"),
-            description = tr(fa, "تجمیع شواهد و امتیازدهی قابل توضیح؛ فعلاً قواعد محدود اسکنر استفاده می‌شوند.", "Explainable evidence aggregation; current scans still use a limited rule set."),
-            status = tr(fa, "هسته اولیه", "FOUNDATION"),
-            tint = BrandBlue,
-            onClick = { onFeature("brain") }
-        )
-        ToolModuleCard(
-            icon = "shield",
-            title = tr(fa, "دفاع از خود برنامه", "Self-defense engine"),
-            description = tr(fa, "تنظیمات پایه امن اعمال شده‌اند؛ پایش یکپارچگی زمان اجرا هنوز در دست توسعه است.", "Baseline hardening is present; runtime integrity monitoring is still in development."),
-            status = tr(fa, "پایه‌ای", "BASELINE"),
-            tint = BrandBlue,
-            onClick = { onFeature("selfdefense") }
-        )
+        Card(
+            modifier = Modifier.fillMaxWidth().clickable(onClick = onOpenScan),
+            shape = RoundedCornerShape(23.dp),
+            colors = CardDefaults.cardColors(containerColor = SurfaceRaised)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(17.dp),
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    Modifier.size(56.dp).background(Color(0xFF8B42E8).copy(alpha = 0.18f), RoundedCornerShape(17.dp)),
+                    contentAlignment = Alignment.Center
+                ) { IconArt("scan", tint = Color(0xFFD9B8FF), size = 29.dp) }
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Text(tr(fa, "شروع اسکن", "Start a scan"), color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    Text(tr(fa, "اسکن سریع، عمیق و بررسی فایل انتخابی", "Quick, deep and selected-file scans"), color = TextSecondary, fontSize = 11.sp)
+                }
+                IconArt("chevron", tint = BrandTeal, size = 19.dp)
+            }
+        }
+
+        Row(horizontalArrangement = Arrangement.spacedBy(11.dp)) {
+            ToolActionTile(
+                modifier = Modifier.weight(1f),
+                icon = "lock",
+                title = tr(fa, "قرنطینه", "Quarantine"),
+                subtitle = tr(fa, "مدیریت موارد ذخیره‌شده", "Manage stored items"),
+                onClick = onOpenVault
+            )
+            ToolActionTile(
+                modifier = Modifier.weight(1f),
+                icon = "shield",
+                title = tr(fa, "گزارش اخیر", "Latest report"),
+                subtitle = tr(fa, "مشاهده نتیجه اسکن", "Review scan result"),
+                onClick = onOpenScan
+            )
+        }
 
         if (result != null) {
             RecentScanCard(fa = fa, result = result, onClick = onOpenScan)
+        } else {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(containerColor = SurfaceBase)
+            ) {
+                Row(Modifier.padding(15.dp), horizontalArrangement = Arrangement.spacedBy(11.dp), verticalAlignment = Alignment.CenterVertically) {
+                    IconArt("scan", tint = BrandTeal, size = 21.dp)
+                    Text(tr(fa, "هنوز گزارشی ثبت نشده است. برای شروع، اسکن را اجرا کن.", "No scan report yet. Start a scan to create one."), color = TextSecondary, fontSize = 11.sp)
+                }
+            }
         }
     }
 }
 
 @Composable
-private fun ToolModuleCard(
+private fun ToolActionTile(
+    modifier: Modifier = Modifier,
     icon: String,
     title: String,
-    description: String,
-    status: String,
-    tint: Color,
+    subtitle: String,
     onClick: () -> Unit
 ) {
     Card(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
-        shape = RoundedCornerShape(18.dp),
+        modifier = modifier.clickable(onClick = onClick),
+        shape = RoundedCornerShape(19.dp),
         colors = CardDefaults.cardColors(containerColor = SurfaceBase)
     ) {
-        Row(
-            modifier = Modifier.padding(15.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.Top
+        Column(
+            Modifier.fillMaxWidth().padding(15.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Box(
-                Modifier.size(43.dp).background(tint.copy(alpha = 0.11f), RoundedCornerShape(13.dp)),
+                Modifier.size(42.dp).background(BrandTeal.copy(alpha = 0.12f), RoundedCornerShape(13.dp)),
                 contentAlignment = Alignment.Center
-            ) {
-                IconArt(icon, tint = tint, size = 21.dp)
+            ) { IconArt(icon, tint = BrandTeal, size = 22.dp) }
+            Text(title, color = TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            Text(subtitle, color = TextSecondary, fontSize = 10.sp, lineHeight = 14.sp)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                IconArt("chevron", tint = TextTertiary, size = 15.dp)
             }
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(title, color = TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                Text(description, color = TextSecondary, fontSize = 10.sp, lineHeight = 15.sp)
-                StatusBadge(status, tint)
-            }
-            IconArt("chevron", tint = TextTertiary, size = 16.dp)
         }
+    }
+}
+
+@Composable
+private fun QuarantineVaultScreen(
+    fa: Boolean,
+    refreshKey: Int,
+    onDelete: (String) -> Unit
+) {
+    val context = LocalContext.current
+    val entries = remember(refreshKey) { QuarantineVault.list(context.applicationContext) }
+    var pendingDelete by remember { mutableStateOf<VaultEntry?>(null) }
+
+    Column(verticalArrangement = Arrangement.spacedBy(15.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            EyebrowLabel(tr(fa, "فضای ایمن", "SECURE STORAGE"))
+            Text(tr(fa, "قرنطینه", "Quarantine"), color = TextPrimary, fontSize = 25.sp, fontWeight = FontWeight.Bold)
+            Text(tr(fa, "فایل‌های قرنطینه‌شده جدا از فایل‌های اصلی نگهداری می‌شوند.", "Quarantined copies are kept separate from their original files."), color = TextSecondary, fontSize = 11.sp)
+        }
+
+        Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = SurfaceBase)) {
+            Row(Modifier.fillMaxWidth().padding(15.dp), horizontalArrangement = Arrangement.spacedBy(11.dp), verticalAlignment = Alignment.CenterVertically) {
+                IconArt("lock", tint = BrandTeal, size = 23.dp)
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text(tr(fa, "حفاظت از نسخه‌های قرنطینه", "Quarantine protection"), color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    Text(tr(fa, "بازیابی یا حذف فقط با انتخاب صریح شما انجام می‌شود.", "Restore or deletion requires an explicit choice."), color = TextSecondary, fontSize = 10.sp)
+                }
+            }
+        }
+
+        if (entries.isEmpty()) {
+            Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = SurfaceBase)) {
+                Column(Modifier.fillMaxWidth().padding(22.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                    IconArt("shield", tint = ColorSuccess, size = 34.dp)
+                    Text(tr(fa, "قرنطینه خالی است", "Quarantine is empty"), color = TextPrimary, fontWeight = FontWeight.Bold)
+                    Text(tr(fa, "در صورت قرنطینه یک فایل، اطلاعات آن اینجا نمایش داده می‌شود.", "Quarantined items will appear here."), color = TextSecondary, fontSize = 11.sp, textAlign = TextAlign.Center)
+                }
+            }
+        } else {
+            entries.forEach { entry ->
+                Card(shape = RoundedCornerShape(17.dp), colors = CardDefaults.cardColors(containerColor = SurfaceBase)) {
+                    Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                            IconArt("lock", tint = BrandTeal, size = 19.dp)
+                            Text(entry.id.take(8), color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            Spacer(Modifier.weight(1f))
+                            StatusBadge(tr(fa, "قرنطینه", "QUARANTINED"), ColorSuccess)
+                        }
+                        Text(tr(fa, "حجم: " + formatBytes(entry.sizeBytes), "Size: " + formatBytes(entry.sizeBytes)), color = TextSecondary, fontSize = 10.sp)
+                        Text("SHA-256  " + entry.sha256.take(20) + "…", color = TextTertiary, fontSize = 9.sp)
+                        OutlinedButton(onClick = { pendingDelete = entry }, modifier = Modifier.align(Alignment.End)) {
+                            Text(tr(fa, "حذف نسخه قرنطینه", "Delete quarantined copy"), color = ColorDanger, fontSize = 10.sp)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    pendingDelete?.let { entry ->
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            containerColor = SurfaceRaised,
+            title = { Text(tr(fa, "حذف نسخه قرنطینه؟", "Delete quarantined copy?"), color = TextPrimary) },
+            text = { Text(tr(fa, "این کار نسخه رمزنگاری‌شده ذخیره‌شده در قرنطینه را برای همیشه حذف می‌کند. فایل اصلی را بازیابی نمی‌کند.", "This permanently deletes the encrypted quarantine copy. It does not restore or change the original file."), color = TextSecondary) },
+            confirmButton = {
+                Button(onClick = { onDelete(entry.id); pendingDelete = null }, colors = ButtonDefaults.buttonColors(containerColor = ColorDanger)) {
+                    Text(tr(fa, "حذف دائمی", "Delete permanently"), color = AppBackground)
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { pendingDelete = null }) { Text(tr(fa, "انصراف", "Cancel"), color = TextPrimary) }
+            }
+        )
     }
 }
 
