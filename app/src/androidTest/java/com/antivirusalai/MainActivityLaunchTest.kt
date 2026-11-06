@@ -14,12 +14,13 @@ class MainActivityLaunchTest {
     fun guardianArtworkResourceDecodesToBitmap() {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             scenario.onActivity { activity ->
-                val bitmap = BitmapFactory.decodeResource(
-                    activity.resources,
-                    R.drawable.guardian_robot
-                )
-                assertNotNull("Guardian robot resource must decode on Android", bitmap)
-                assertTrue("Guardian robot bitmap must have a valid width", bitmap!!.width > 0)
+                val bitmap = requireNotNull(
+                    BitmapFactory.decodeResource(
+                        activity.resources,
+                        R.drawable.guardian_robot
+                    )
+                ) { "Guardian robot drawable did not decode to a Bitmap on Android" }
+                assertTrue("Guardian robot bitmap must have a valid width", bitmap.width > 0)
                 assertTrue("Guardian robot bitmap must have a valid height", bitmap.height > 0)
             }
         }
