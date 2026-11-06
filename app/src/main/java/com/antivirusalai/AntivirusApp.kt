@@ -174,7 +174,7 @@ fun AntivirusApp(inPictureInPicture: Boolean = false) {
     }
     DisposableEffect(scanWorkInfoLiveData, context, fa) {
         val observer = Observer<List<WorkInfo>> { infos ->
-            val info = infos.firstOrNull()
+            val info = infos.maxByOrNull { it.inputData.getLong(DeviceScanWorker.KEY_STARTED_AT_MS, 0L) }
             if (info != null) {
                 val active = info.state == WorkInfo.State.ENQUEUED ||
                     info.state == WorkInfo.State.RUNNING ||
