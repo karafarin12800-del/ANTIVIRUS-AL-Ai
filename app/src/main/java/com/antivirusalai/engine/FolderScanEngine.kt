@@ -26,7 +26,7 @@ data class FolderScanReport(
     val matchedCountOverride: Int? = null
 ) {
     val scannedCount: Int get() = scannedCountOverride ?: items.size
-    val suspiciousCount: Int get() = suspiciousCountOverride ?: items.count { it.result.verdict == ScanVerdict.SUSPICIOUS }
+    val suspiciousCount: Int get() = suspiciousCountOverride ?: items.count { it.result.verdict in setOf(ScanVerdict.KNOWN_MALWARE, ScanVerdict.POTENTIALLY_UNWANTED, ScanVerdict.SUSPICIOUS) }
     val unknownCount: Int get() = unknownCountOverride ?: items.count {
         it.result.verdict == ScanVerdict.UNKNOWN_APK ||
             it.result.verdict == ScanVerdict.UNSUPPORTED_FILE
