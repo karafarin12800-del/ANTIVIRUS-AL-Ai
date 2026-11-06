@@ -6,7 +6,7 @@ The Android client accepts only feeds signed by a pinned ECDSA P-256 public key.
 
 The parser authenticates the exact UTF-8 bytes before interpreting indicator entries. It rejects malformed UTF-8, CRLF, missing final newline, unknown key IDs, invalid signatures, duplicate or unsorted hashes, expired feeds, feeds issued too far in the future, excessive validity windows, oversized feeds, and version rollback.
 
-The current implementation is a verified parser and private-storage component. It is **not yet connected to a production publisher, a production public key, a feed-import screen, or the scan verdict pipeline**. No real malware indicators are bundled by this change. The only entries used by tests are synthetic fixtures.
+The Android runtime now pins a release ECDSA P-256 public key, loads the current feed from the security-feed branch over HTTPS, verifies and caches the accepted feed, and applies exact SHA-256 matches to scan verdicts. The publisher script and scheduled workflow query MalwareBazaar recent family-labelled detections and sign only hash/family metadata. The live database remains inactive until provider credentials, commercial-use entitlement/terms, and the matching signing-key secret are configured and the first publisher run succeeds. No malware sample bytes are downloaded or bundled.
 
 ## Canonical file layout
 
@@ -14,7 +14,7 @@ The file is UTF-8, uses LF line endings, and ends with a newline:
 
 ```text
 ALAI-THREAT-FEED/1
-key_id=release-2026
+key_id=alai-release-2026
 version=42
 issued_at=1799999940
 expires_at=1800086400
@@ -44,4 +44,6 @@ The version floor is stored in ordinary app-private storage, not backed by hardw
 3. Embed only its X.509 public key in a reviewed app release and define a key ID.
 4. Build a feed publisher that canonicalizes entries, signs the exact payload bytes, and maintains a monotonic version.
 5. Add signed-feed import/update UX, freshness status, key-rotation procedure, revocation handling, and scan-engine integration.
-6. Validate against a lawful, independently curated benchmark and measure false positives before making detection claims.
+6. Configure the provider and signing-key secrets; confirm the selected plan allows commercial use.
+7. Run the publisher workflow and verify its signed feed with the Android parser before enabling release claims.
+8. Validate against a lawful, independently curated benchmark and measure false positives before making detection claims.
