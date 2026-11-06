@@ -2831,6 +2831,8 @@ private fun IconArt(
 }
 
 private fun verdictBadge(verdict: ScanVerdict, fa: Boolean): String = when (verdict) {
+    ScanVerdict.KNOWN_MALWARE -> tr(fa, "بدافزار شناخته‌شده", "KNOWN MALWARE")
+    ScanVerdict.POTENTIALLY_UNWANTED -> tr(fa, "برنامه ناخواسته", "POTENTIALLY UNWANTED")
     ScanVerdict.TEST_MARKER_MATCH -> tr(fa, "آزمایشی", "TEST")
     ScanVerdict.SUSPICIOUS -> tr(fa, "نیازمند بررسی", "REVIEW")
     ScanVerdict.NO_KNOWN_INDICATOR -> tr(fa, "بدون تطبیق", "NO MATCH")
@@ -2839,6 +2841,8 @@ private fun verdictBadge(verdict: ScanVerdict, fa: Boolean): String = when (verd
 }
 
 private fun verdictTitle(verdict: ScanVerdict, fa: Boolean): String = when (verdict) {
+    ScanVerdict.KNOWN_MALWARE -> tr(fa, "هش با بانک تهدید معتبر تطبیق دارد", "Known malware hash match")
+    ScanVerdict.POTENTIALLY_UNWANTED -> tr(fa, "فایل احتمالاً ناخواسته است", "Potentially unwanted file")
     ScanVerdict.TEST_MARKER_MATCH -> tr(fa, "نشانگر آزمایشی بی‌خطر شناسایی شد", "Benign test marker matched")
     ScanVerdict.SUSPICIOUS -> tr(fa, "نیازمند بررسی بیشتر", "Needs further review")
     ScanVerdict.NO_KNOWN_INDICATOR -> tr(fa, "نشانگر شناخته‌شده‌ای پیدا نشد", "No known indicator found")
@@ -2847,6 +2851,8 @@ private fun verdictTitle(verdict: ScanVerdict, fa: Boolean): String = when (verd
 }
 
 private fun verdictDescription(verdict: ScanVerdict, fa: Boolean): String = when (verdict) {
+    ScanVerdict.KNOWN_MALWARE -> tr(fa, "هش دقیق فایل در feed امضاشده و تأییدشده تطبیق دارد. این نتیجه بر پایه اعتبار هش است، نه تحلیل رفتاری.", "The exact file hash matched the authenticated signed feed. This is a hash-reputation result, not behavioral analysis.")
+    ScanVerdict.POTENTIALLY_UNWANTED -> tr(fa, "هش فایل در دسته PUA بانک تهدید تطبیق دارد؛ پیش از اقدام، ناشر و کاربرد فایل را بررسی کن.", "The file hash matched a PUA entry in the threat feed; review its publisher and purpose before acting.")
     ScanVerdict.TEST_MARKER_MATCH -> tr(fa, "این فقط فایل آزمایشی بی‌خطر پروژه است؛ بدافزار نیست.", "This is the harmless project test fixture, not malware.")
     ScanVerdict.SUSPICIOUS -> tr(fa, "چند نشانه ایستا دیده شده است. این نتیجه اثبات بدافزار بودن نیست.", "Static indicators were found. This is not proof of malware.")
     ScanVerdict.NO_KNOWN_INDICATOR -> tr(fa, "هیچ نشانگر موجود در نسخه فعلی با فایل تطبیق نکرد. این نتیجه تضمین پاک بودن نیست.", "No indicator in this MVP matched. This does not guarantee that the file is safe.")
@@ -2855,6 +2861,8 @@ private fun verdictDescription(verdict: ScanVerdict, fa: Boolean): String = when
 }
 
 private fun verdictColor(verdict: ScanVerdict): Color = when (verdict) {
+    ScanVerdict.KNOWN_MALWARE -> ColorDanger
+    ScanVerdict.POTENTIALLY_UNWANTED -> ColorWarning
     ScanVerdict.TEST_MARKER_MATCH -> BrandBlue
     ScanVerdict.SUSPICIOUS -> ColorWarning
     ScanVerdict.NO_KNOWN_INDICATOR -> ColorSuccess
