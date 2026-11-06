@@ -48,11 +48,11 @@ jobs:
           test -s "$APK"
           unzip -t "$APK" >/dev/null
           mkdir -p artifacts
-          cp "$APK" artifacts/ANTIVIRUS-AL-AI-v0.2.0-debug.apk
+          cp "$APK" artifacts/ANTIVIRUS-AL-AI-v0.3.0-debug.apk
           {
             echo "app=ANTIVIRUS AL AI"
-            echo "version=0.2.0"
-            echo "version_code=2"
+            echo "version=0.3.0"
+            echo "version_code=3"
             echo "commit=${GITHUB_SHA}"
             echo "workflow_run=${GITHUB_RUN_ID}"
             echo "sha256=$(sha256sum "$APK" | cut -d ' ' -f 1)"
@@ -60,7 +60,7 @@ jobs:
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: antivirus-al-ai-v0.2.0-debug
+          name: antivirus-al-ai-v0.3.0-debug
           path: artifacts/*
           if-no-files-found: error
           retention-days: 14
