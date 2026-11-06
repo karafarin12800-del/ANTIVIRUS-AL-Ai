@@ -9,7 +9,7 @@ import java.io.InputStream
  */
 object EicarTestDetector {
     private val pattern =
-        "X5O!P%@AP[4\\\\PZX54(P^)7CC)7\\$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!\\$H+H*"
+        "X5O!P%@AP[4\\PZX54(P^)7CC)7\\$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!\\$H+H*"
             .toByteArray(Charsets.US_ASCII)
 
     private val prefix = IntArray(pattern.size).also { table ->
