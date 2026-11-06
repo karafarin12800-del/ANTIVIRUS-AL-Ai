@@ -7,12 +7,18 @@ import org.junit.Test
 import java.io.ByteArrayInputStream
 
 class EicarTestDetectorTest {
-    private val eicar =
-        "X5O!P%@AP[4\\PZX54(P^)7CC)7}\\$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!\\$H+H*"
+    private val eicar = buildString {
+        append("X5O!P%@AP[4\\PZX54(P^)7}")
+        append('$')
+        append("EICAR-STANDARD-ANTIVIRUS-TEST-FILE!")
+        append('$')
+        append("H+H*")
+    }
 
     @Test
     fun detectsHarmlessEicarStringWhenSplitAcrossReadBoundaries() {
-        val bytes = ("x".repeat(9000) + eicar + "tail").toByteArray(Charsets.US_ASCII)
+        val prefixLength = 8192 - 17
+        val bytes = ("x".repeat(prefixLength) + eicar + "tail").toByteArray(Charsets.US_ASCII)
         assertTrue(EicarTestDetector.contains(ByteArrayInputStream(bytes)))
     }
 
