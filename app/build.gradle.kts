@@ -39,6 +39,8 @@ kotlin {
 dependencies {
     implementation(libs.androidx.activity.compose)
     implementation("androidx.work:work-runtime-ktx:2.12.0")
+    implementation(libs.androidx.compose.animation.core)
+    implementation("androidx.lifecycle:lifecycle-livedata-ktx:2.9.4")
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)

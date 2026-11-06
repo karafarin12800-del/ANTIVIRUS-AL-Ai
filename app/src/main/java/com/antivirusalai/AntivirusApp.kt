@@ -4,7 +4,22 @@ import android.Manifest
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
-import android.os.SystemClock
+import android.util.Rational
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.lifecycle.Observer
+import androidx.work.ExistingWorkPolicy
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
+import androidx.work.workDataOf
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -86,6 +101,7 @@ import com.antivirusalai.engine.FolderScanReport
 import com.antivirusalai.engine.EvidenceSeverity
 import com.antivirusalai.engine.ScanResult
 import com.antivirusalai.engine.ScanVerdict
+import com.antivirusalai.engine.ScanReportStore
 import com.antivirusalai.remediation.QuarantineVault
 import com.antivirusalai.remediation.VaultEntry
 import kotlinx.coroutines.CancellationException
@@ -115,9 +131,11 @@ private enum class MainTab(val key: String) {
 }
 
 @Composable
-fun AntivirusApp() {
+fun AntivirusApp(inPictureInPicture: Boolean = false) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val workManager = remember(context) { WorkManager.getInstance(context.applicationContext) }
+    val restoredScan = remember(context) { ScanReportStore.load(context.applicationContext) }
     var language by rememberSaveable { mutableStateOf("fa") }
     var activeTab by rememberSaveable { mutableStateOf(MainTab.HOME.key) }
     var scanning by remember { mutableStateOf(false) }
@@ -125,7 +143,7 @@ fun AntivirusApp() {
     var showQuarantineConfirmation by remember { mutableStateOf(false) }
     var selectedUri by rememberSaveable { mutableStateOf<Uri?>(null) }
     var scanResult by remember { mutableStateOf<ScanResult?>(null) }
-    var batchReport by remember { mutableStateOf<FolderScanReport?>(null) }
+    var batchReport by remember { mutableStateOf<FolderScanReport?>(restoredScan?.report) }
     var batchProgress by remember { mutableStateOf<String?>(null) }
     var scanProgress by remember { mutableStateOf(0f) }
     var scanCurrent by remember { mutableStateOf(0) }
@@ -133,7 +151,7 @@ fun AntivirusApp() {
     var scanStartedAtMs by remember { mutableStateOf(0L) }
     var scanElapsedMs by remember { mutableStateOf(0L) }
     var pendingDeepScan by remember { mutableStateOf(false) }
-    var deviceScanDeep by remember { mutableStateOf(false) }
+    var deviceScanDeep by remember { mutableStateOf(restoredScan?.deep ?: false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var notice by remember { mutableStateOf<String?>(null) }
     var selectedPlan by remember { mutableStateOf<String?>(null) }
@@ -146,21 +164,81 @@ fun AntivirusApp() {
 
     LaunchedEffect(scanning, scanStartedAtMs) {
         while (scanning) {
-            scanElapsedMs = (SystemClock.elapsedRealtime() - scanStartedAtMs).coerceAtLeast(0L)
+            scanElapsedMs = (System.currentTimeMillis() - scanStartedAtMs).coerceAtLeast(0L)
             delay(1000L)
         }
     }
 
+    val scanWorkInfoLiveData = remember(workManager) {
+        workManager.getWorkInfosForUniqueWorkLiveData(DeviceScanWorker.WORK_NAME)
+    }
+    DisposableEffect(scanWorkInfoLiveData, context, fa) {
+        val observer = Observer<List<WorkInfo>> { infos ->
+            val info = infos.firstOrNull()
+            if (info != null) {
+                val active = info.state == WorkInfo.State.ENQUEUED ||
+                    info.state == WorkInfo.State.RUNNING ||
+                    info.state == WorkInfo.State.BLOCKED
+                scanning = active
+                ScanRuntime.isActive = active
+                deviceScanDeep = info.inputData.getBoolean(DeviceScanWorker.KEY_DEEP, deviceScanDeep)
+                val startedAt = info.inputData.getLong(DeviceScanWorker.KEY_STARTED_AT_MS, scanStartedAtMs)
+                if (startedAt > 0L) scanStartedAtMs = startedAt
+
+                val progressData = if (active) info.progress else info.outputData
+                scanCurrent = progressData.getInt(DeviceScanWorker.KEY_CURRENT, scanCurrent)
+                scanTotal = progressData.getInt(DeviceScanWorker.KEY_TOTAL, scanTotal)
+                scanProgress = if (scanTotal > 0) {
+                    (scanCurrent.toFloat() / scanTotal.toFloat()).coerceIn(0f, 1f)
+                } else if (info.state == WorkInfo.State.SUCCEEDED) 1f else 0f
+
+                when (info.state) {
+                    WorkInfo.State.ENQUEUED, WorkInfo.State.RUNNING, WorkInfo.State.BLOCKED -> {
+                        batchProgress = progressData.getString(DeviceScanWorker.KEY_CURRENT_NAME)
+                            ?: tr(fa, "در حال آماده‌سازی فهرست فایل‌ها…", "Preparing the file inventory…")
+                    }
+                    WorkInfo.State.SUCCEEDED -> {
+                        val saved = ScanReportStore.load(context.applicationContext)
+                        if (saved != null) {
+                            batchReport = saved.report
+                            deviceScanDeep = saved.deep
+                        }
+                        scanning = false
+                        ScanRuntime.isActive = false
+                        batchProgress = null
+                    }
+                    WorkInfo.State.FAILED -> {
+                        errorMessage = info.outputData.getString(DeviceScanWorker.KEY_ERROR)
+                            ?: tr(fa, "اسکن در پس‌زمینه کامل نشد.", "The background scan did not complete.")
+                        scanning = false
+                        ScanRuntime.isActive = false
+                        batchProgress = null
+                    }
+                    WorkInfo.State.CANCELLED -> {
+                        scanning = false
+                        ScanRuntime.isActive = false
+                        batchProgress = null
+                    }
+                }
+            }
+        }
+        scanWorkInfoLiveData.observeForever(observer)
+        onDispose { scanWorkInfoLiveData.removeObserver(observer) }
+    }
+
     val executeDeviceScan: (Boolean) -> Unit = { deep ->
-        scanStartedAtMs = SystemClock.elapsedRealtime()
+        val startedAt = System.currentTimeMillis()
+        scanStartedAtMs = startedAt
         scanElapsedMs = 0L
         scanCurrent = 0
         scanTotal = 0
         scanning = true
+        ScanRuntime.isActive = true
         deviceScanDeep = deep
         selectedUri = null
         scanResult = null
         batchReport = null
+        ScanReportStore.clear(context.applicationContext)
         scanProgress = 0f
         batchProgress = tr(
             fa,
@@ -170,28 +248,24 @@ fun AntivirusApp() {
         errorMessage = null
         notice = null
         activeTab = MainTab.SCAN.key
-        scope.launch {
-            try {
-                batchReport = DeviceScanEngine.scanDevice(
-                    context.applicationContext,
-                    deep
-                ) { current, total, name ->
-                    scanCurrent = current
-                    scanTotal = total
-                    scanElapsedMs = (SystemClock.elapsedRealtime() - scanStartedAtMs).coerceAtLeast(0L)
-                    scanProgress = if (total > 0) (current.toFloat() / total.toFloat()).coerceIn(0f, 1f) else 0f
-                    batchProgress = "$current / $total  •  $name"
-                }
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (error: Exception) {
-                errorMessage = error.message
-                    ?: tr(fa, "اسکن حافظه دستگاه انجام نشد.", "Device scan could not be completed.")
-            } finally {
-                scanElapsedMs = (SystemClock.elapsedRealtime() - scanStartedAtMs).coerceAtLeast(0L)
-                scanning = false
-                batchProgress = null
-            }
+        try {
+            val request = OneTimeWorkRequestBuilder<DeviceScanWorker>()
+                .setInputData(workDataOf(
+                    DeviceScanWorker.KEY_DEEP to deep,
+                    DeviceScanWorker.KEY_STARTED_AT_MS to startedAt
+                ))
+                .build()
+            workManager.enqueueUniqueWork(
+                DeviceScanWorker.WORK_NAME,
+                ExistingWorkPolicy.REPLACE,
+                request
+            )
+        } catch (error: Exception) {
+            ScanRuntime.isActive = false
+            scanning = false
+            batchProgress = null
+            errorMessage = error.message
+                ?: tr(fa, "کار پس‌زمینهٔ اسکن شروع نشد.", "The background scan could not be started.")
         }
     }
 
@@ -313,11 +387,13 @@ fun AntivirusApp() {
             Scaffold(
                 containerColor = AppBackground,
                 bottomBar = {
-                    MainNavigationBar(
-                        activeTab = activeTab,
-                        fa = fa,
-                        onSelect = { activeTab = it.key }
-                    )
+                    if (!inPictureInPicture) {
+                        MainNavigationBar(
+                            activeTab = activeTab,
+                            fa = fa,
+                            onSelect = { activeTab = it.key }
+                        )
+                    }
                 }
             ) { insets ->
                 Box(
@@ -381,6 +457,15 @@ fun AntivirusApp() {
                             )
                         }
                     }
+                    if (inPictureInPicture) {
+                        ScanPictureInPicturePreview(
+                            fa = fa,
+                            progress = scanProgress,
+                            current = scanCurrent,
+                            total = scanTotal,
+                            scanning = scanning
+                        )
+                    } else {
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
@@ -480,6 +565,7 @@ fun AntivirusApp() {
                             textAlign = TextAlign.Center,
                             modifier = Modifier.fillMaxWidth().padding(bottom = 7.dp)
                         )
+                    }
                     }
                 }
             }
@@ -1949,6 +2035,112 @@ private fun ScanCenterScreen(
 }
 
 @Composable
+private fun ScanPictureInPicturePreview(
+    fa: Boolean,
+    progress: Float,
+    current: Int,
+    total: Int,
+    scanning: Boolean
+) {
+    val transition = rememberInfiniteTransition(label = "scan-pip-beam")
+    val beamPosition by transition.animateFloat(
+        initialValue = if (scanning) -0.08f else 0.5f,
+        targetValue = if (scanning) 1.08f else 0.5f,
+        animationSpec = if (scanning) infiniteRepeatable(
+            animation = tween(durationMillis = 1550, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ) else tween(durationMillis = 0),
+        label = "scan-pip-beam-position"
+    )
+    val percent = (progress.coerceIn(0f, 1f) * 100f).toInt()
+    Box(
+        modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(19.dp))
+            .background(Brush.horizontalGradient(
+                listOf(Color(0xFF170D2A), Color(0xFF2B1745), Color(0xFF120B20))
+            ))
+    ) {
+        Canvas(Modifier.fillMaxSize()) {
+            val w = size.width
+            val h = size.height
+            drawCircle(
+                brush = Brush.radialGradient(
+                    listOf(Color(0xFFB777FF).copy(alpha = 0.30f), Color.Transparent),
+                    center = Offset(w * 0.82f, h * 0.48f), radius = h * 0.92f
+                ),
+                radius = h * 0.92f, center = Offset(w * 0.82f, h * 0.48f)
+            )
+            drawRoundRect(
+                color = Color(0xFFE7C9FF).copy(alpha = 0.08f),
+                topLeft = Offset(w * 0.04f, h * 0.10f),
+                size = Size(w * 0.92f, h * 0.80f),
+                cornerRadius = CornerRadius(18.dp.toPx())
+            )
+        }
+        Image(
+            painter = painterResource(id = R.drawable.guardian_robot),
+            contentDescription = tr(fa, "دکتر هوش مصنوعی در حال اسکن", "AI doctor scanning"),
+            contentScale = ContentScale.Fit,
+            modifier = Modifier.align(Alignment.CenterEnd)
+                .fillMaxHeight(0.94f).width(116.dp).alpha(0.96f)
+        )
+        if (scanning) {
+            Canvas(Modifier.fillMaxSize()) {
+                val beamY = size.height * beamPosition
+                val beamHalfHeight = 13.dp.toPx()
+                val imageZoneLeft = size.width * 0.58f
+                drawRect(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            Color.Transparent,
+                            Color(0xFFC99AFF).copy(alpha = 0.08f),
+                            Color(0xFFF0DFFF).copy(alpha = 0.62f),
+                            Color(0xFFB66CFF).copy(alpha = 0.18f),
+                            Color.Transparent
+                        ),
+                        startY = beamY - beamHalfHeight, endY = beamY + beamHalfHeight
+                    ),
+                    topLeft = Offset(imageZoneLeft, beamY - beamHalfHeight),
+                    size = Size(size.width - imageZoneLeft, beamHalfHeight * 2f)
+                )
+                drawLine(
+                    color = Color(0xFFEBD7FF).copy(alpha = 0.74f),
+                    start = Offset(imageZoneLeft, beamY), end = Offset(size.width, beamY),
+                    strokeWidth = 1.2.dp.toPx()
+                )
+            }
+        }
+        Column(
+            modifier = Modifier.align(Alignment.CenterStart).fillMaxWidth(0.68f)
+                .padding(start = 13.dp, end = 5.dp, top = 9.dp, bottom = 9.dp),
+            verticalArrangement = Arrangement.spacedBy(5.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                Box(Modifier.size(7.dp).background(if (scanning) BrandTeal else ColorSuccess, CircleShape))
+                Text(
+                    tr(fa, if (scanning) "اسکن زنده" else "اسکن تکمیل شد", if (scanning) "LIVE SCAN" else "SCAN COMPLETE"),
+                    color = if (scanning) BrandTeal else ColorSuccess,
+                    fontSize = 9.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 0.8.sp
+                )
+            }
+            Text(
+                tr(fa, if (scanning) "دکتر در حال بررسی است" else "بررسی به پایان رسید",
+                    if (scanning) "Doctor is scanning" else "Scan is complete"),
+                color = TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                maxLines = 1, overflow = TextOverflow.Ellipsis
+            )
+            Text("$percent%", color = Color(0xFFE7CCFF), fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
+            Text(if (total > 0) "$current / $total" else tr(fa, "آماده‌سازی…", "Preparing…"),
+                color = TextSecondary, fontSize = 9.sp, fontWeight = FontWeight.Medium)
+            LinearProgressIndicator(
+                progress = { progress.coerceIn(0f, 1f) },
+                modifier = Modifier.fillMaxWidth().height(4.dp).clip(CircleShape),
+                color = BrandTeal, trackColor = Color(0xFF593B76)
+            )
+        }
+    }
+}
+
+@Composable
 private fun LiveScanMetric(modifier: Modifier = Modifier, label: String, value: String) {
     Column(
         modifier = modifier
@@ -2679,7 +2871,7 @@ private fun InfoBanner(title: String, body: String, warning: Boolean) {
 
 @Composable
 private fun AssetArt(index: Int, size: Dp) {
-    val atlas = remember { ImageBitmap.imageResource(R.drawable.security_artwork_sheet) }
+    val atlas = ImageBitmap.imageResource(R.drawable.security_artwork_sheet)
     Canvas(Modifier.size(size)) {
         val cell = 32
         val safeIndex = index.coerceIn(0, 15)
