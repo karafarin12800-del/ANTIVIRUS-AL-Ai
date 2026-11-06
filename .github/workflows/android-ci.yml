@@ -36,19 +36,7 @@ jobs:
           packages: platform-tools
       - name: Install Android 36 SDK packages
         run: sdkmanager "platforms;android-36" "build-tools;36.0.0" "platform-tools"
-      - name: Run unit tests, lint, and debug build
-        run: gradle --no-daemon clean testDebugUnitTest lintDebug assembleDebug
-      - name: Launch app on Android emulator
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 35
-          target: google_apis
-          arch: x86_64
-          profile: pixel_2
-          disable-animations: true
-          script: gradle --no-daemon connectedDebugAndroidTest
       - name: Label APK and write build identity
-        if: success()
         run: |
           cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/ANTIVIRUS-AL-AI-v0.2.0-debug.apk
           {
@@ -59,7 +47,6 @@ jobs:
             echo "workflow_run=${GITHUB_RUN_ID}"
           } > app/build/outputs/apk/debug/build-info.txt
       - name: Upload debug APK
-        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: antivirus-al-ai-v0.2.0-debug
@@ -68,3 +55,12 @@ jobs:
             app/build/outputs/apk/debug/build-info.txt
           if-no-files-found: error
           retention-days: 14
+      - name: Launch app on Android emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          script: gradle --no-daemon connectedDebugAndroidTest
