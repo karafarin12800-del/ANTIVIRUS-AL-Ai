@@ -2046,10 +2046,10 @@ private fun ScanPictureInPicturePreview(
     val beamPosition by transition.animateFloat(
         initialValue = if (scanning) -0.08f else 0.5f,
         targetValue = if (scanning) 1.08f else 0.5f,
-        animationSpec = if (scanning) infiniteRepeatable(
+        animationSpec = infiniteRepeatable(
             animation = tween(durationMillis = 1550, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
-        ) else tween(durationMillis = 0),
+        ),
         label = "scan-pip-beam-position"
     )
     val percent = (progress.coerceIn(0f, 1f) * 100f).toInt()
