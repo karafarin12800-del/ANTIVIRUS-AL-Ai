@@ -594,14 +594,15 @@ private fun BrandHeader(
         ) {
             Box(
                 modifier = Modifier
-                    .size(45.dp)
+                    .size(52.dp)
                     .background(
-                        Brush.linearGradient(listOf(BrandTeal, BrandBlue)),
-                        RoundedCornerShape(15.dp)
-                    ),
+                        Brush.linearGradient(listOf(Color(0xFFE4C2FF), Color(0xFF8B42E8), Color(0xFF4D1B91))),
+                        RoundedCornerShape(18.dp)
+                    )
+                    .border(1.dp, Color(0xFFE8D4FF).copy(alpha = 0.35f), RoundedCornerShape(18.dp)),
                 contentAlignment = Alignment.Center
             ) {
-                EnergyShieldMark(Modifier.size(29.dp))
+                EnergyShieldMark(Modifier.size(35.dp))
             }
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(
@@ -612,7 +613,7 @@ private fun BrandHeader(
                     letterSpacing = 0.25.sp
                 )
                 Text(
-                    tr(fa, "امنیت دیجیتال با شفافیت", "DIGITAL SECURITY, CLEARLY"),
+                    tr(fa, "امنیت هوشمند • همیشه همراه شما", "Smart Security • Always With You"),
                     color = TextTertiary,
                     fontSize = 9.sp,
                     letterSpacing = 0.65.sp
@@ -1073,7 +1074,7 @@ private fun HeroSecurityCard(
                     Spacer(Modifier.width(10.dp))
                     Text(
                         if (scanning) tr(fa, "در حال اسکن…", "Scanning…")
-                        else tr(fa, "شروع اسکن سریع", "Start quick scan"),
+                        else tr(fa, "اسکن سریع", "Quick scan"),
                         fontSize = 14.sp,
                         fontWeight = FontWeight.ExtraBold
                     )
@@ -1097,7 +1098,7 @@ private fun HeroSecurityCard(
                     IconArt("apk", tint = Color(0xFFC69BFF), size = 17.dp)
                     Spacer(Modifier.width(9.dp))
                     Text(
-                        tr(fa, "اسکن عمیق دستگاه", "Deep device scan"),
+                        tr(fa, "اسکن عمیق", "Deep scan"),
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold
                     )
