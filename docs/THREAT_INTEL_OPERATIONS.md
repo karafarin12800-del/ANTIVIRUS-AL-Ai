@@ -21,7 +21,8 @@ Configure these secrets in the repository settings after reviewing the current p
 
 | Secret | Purpose |
 |---|---|
-| \`MALWAREBAZAAR_AUTH_KEY\` | API Auth-Key for feed metadata queries |
+| \`MALWAREBAZAAR_AUTH_KEY\` | Required API Auth-Key for MalwareBazaar metadata queries |
+| \`THREATFOX_AUTH_KEY\` | Optional ThreatFox API Auth-Key; when configured, a failed query stops feed publication |
 | \`ALAI_FEED_SIGNING_KEY_PEM\` | Unencrypted PEM for the matching ECDSA P-256 private key |
 | \`ALAI_ABUSECH_COMMERCIAL_USE_APPROVED\` | Literal \`true\` only after commercial-use entitlement/terms are confirmed |
 
@@ -32,11 +33,12 @@ Never put the private key or API key in a workflow file, commit, APK, log, or is
 \`.github/workflows/publish-threat-feed.yml\` can be started manually and is scheduled every 12 hours after the workflow is available on the default branch. It:
 
 1. Fails closed if any credential or the explicit commercial-use attestation is missing.
-2. Queries up to 72 hours of recent family-labelled detections.
-3. Canonicalizes, sorts, and deduplicates SHA-256 entries.
-4. Generates a monotonic version and a seven-day expiry.
-5. Signs the exact UTF-8 payload with ECDSA P-256 / SHA-256.
-6. Publishes only \`threat-feed/latest.alfeed\` and its version marker to the \`security-feed\` branch.
+2. Queries up to 168 hours of recent family-labelled MalwareBazaar detections.
+3. When \\`THREATFOX_AUTH_KEY\\` is configured, queries up to seven days of recent ThreatFox IOCs and imports only their associated sample SHA-256 metadata.
+4. Canonicalizes, sorts, and deduplicates SHA-256 entries.
+5. Generates a monotonic version and a seven-day expiry.
+6. Signs the exact UTF-8 payload with ECDSA P-256 / SHA-256.
+7. Publishes only \\`threat-feed/latest.alfeed\\` and its version marker to the \\`security-feed\\` branch.
 
 The Android app downloads this public file over HTTPS. It rejects an unknown key ID, invalid signature, malformed/unsorted/duplicate entries, expired/future feeds, oversized input, excessive validity windows, and rollback.
 
