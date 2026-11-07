@@ -194,8 +194,9 @@ class SignedThreatFeedTest {
             update(payload)
             sign()
         }
-        return payload + "signature=" + Base64.getEncoder().encodeToString(signature) + "\n"
-            .toByteArray(StandardCharsets.UTF_8)
+        return payload + (
+            "signature=" + Base64.getEncoder().encodeToString(signature) + "\n"
+        ).toByteArray(StandardCharsets.UTF_8)
     }
 
     @Test
