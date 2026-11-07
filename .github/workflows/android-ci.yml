@@ -149,5 +149,73 @@ jobs:
           profile: pixel_2
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot -wipe-data
-          emulator-boot-timeout: 900
-          script: gradle --no-daemon connectedDebugAndroidTest --stacktrace
+          emulator-boot-timeout: 1200
+          script: |
+            set -euo pipefail
+
+            wait_for_package_manager() {
+              local attempt state boot
+              adb wait-for-device
+              for attempt in $(seq 1 90); do
+                state="$(adb get-state 2>/dev/null || true)"
+                boot="$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)"
+                if [[ "$state" == "device" && "$boot" == "1" ]] && \
+                   adb shell cmd package list packages >/dev/null 2>&1; then
+                  echo "Android PackageManager is responsive."
+                  return 0
+                fi
+                sleep 5
+              done
+              echo "Android PackageManager did not become responsive within the readiness window." >&2
+              return 1
+            }
+
+            wait_for_package_manager
+
+            TEST_LOG="$RUNNER_TEMP/android-instrumentation-attempt-1.log"
+            set +e
+            gradle --no-daemon connectedDebugAndroidTest --stacktrace 2>&1 | tee "$TEST_LOG"
+            test_status=${PIPESTATUS[0]}
+            set -e
+
+            if [[ "$test_status" -ne 0 ]]; then
+              if grep -Eqi 'Broken pipe|Failed to install split APK|Failure calling service package' "$TEST_LOG"; then
+                echo "Transient emulator install/PackageManager failure detected; rebooting and retrying once."
+                adb reboot || true
+                adb kill-server || true
+                adb start-server
+                wait_for_package_manager
+                gradle --no-daemon connectedDebugAndroidTest --stacktrace
+              else
+                exit "$test_status"
+              fi
+            fi
+
+            python3 - <<'PY'
+            import glob
+            import xml.etree.ElementTree as ET
+
+            reports = glob.glob(
+                "app/build/outputs/androidTest-results/connected/debug/**/*.xml",
+                recursive=True,
+            )
+            total = failures = errors = 0
+            for report in reports:
+                root = ET.parse(report).getroot()
+                if root.tag == "testsuite":
+                    suites = [root]
+                else:
+                    suites = list(root.iter("testsuite"))
+                for suite in suites:
+                    total += int(suite.attrib.get("tests", "0"))
+                    failures += int(suite.attrib.get("failures", "0"))
+                    errors += int(suite.attrib.get("errors", "0"))
+
+            if total < 1:
+                raise SystemExit("Instrumentation produced zero executed tests; refusing a false-green CI result.")
+            if failures or errors:
+                raise SystemExit(
+                    f"Instrumentation failed: {total} tests, {failures} failures, {errors} errors."
+                )
+            print(f"Instrumentation verified: {total} tests executed with no failures.")
+            PY
