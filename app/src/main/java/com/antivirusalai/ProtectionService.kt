@@ -324,7 +324,9 @@ class ProtectionService : Service() {
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .build()
-        manager.notify((name.hashCode() and 0x7fffffff).coerceAtLeast(1), notification)
+        runCatching {
+            manager.notify((name.hashCode() and 0x7fffffff).coerceAtLeast(1), notification)
+        }
     }
 
     private fun postUnverifiedAlert(name: String, reason: String) {
@@ -341,7 +343,9 @@ class ProtectionService : Service() {
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .build()
-        manager.notify(((name.hashCode() xor 0x13579BDF) and 0x7fffffff).coerceAtLeast(1), notification)
+        runCatching {
+            manager.notify(((name.hashCode() xor 0x13579BDF) and 0x7fffffff).coerceAtLeast(1), notification)
+        }
     }
 
     private fun packageNameForSelf(): String = applicationContext.packageName
