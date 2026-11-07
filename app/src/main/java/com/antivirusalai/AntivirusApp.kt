@@ -174,18 +174,23 @@ fun AntivirusApp(inPictureInPicture: Boolean = false) {
     }
     DisposableEffect(scanWorkInfoLiveData, context, fa) {
         val observer = Observer<List<WorkInfo>> { infos ->
-            val info = infos.maxByOrNull { it.inputData.getLong(DeviceScanWorker.KEY_STARTED_AT_MS, 0L) }
+            val info = infos.maxByOrNull { workInfo ->
+            maxOf(
+                workInfo.progress.getLong(DeviceScanWorker.KEY_STARTED_AT_MS, 0L),
+                workInfo.outputData.getLong(DeviceScanWorker.KEY_STARTED_AT_MS, 0L)
+            )
+        }
             if (info != null) {
                 val active = info.state == WorkInfo.State.ENQUEUED ||
                     info.state == WorkInfo.State.RUNNING ||
                     info.state == WorkInfo.State.BLOCKED
+                val progressData = if (active) info.progress else info.outputData
                 scanning = active
                 ScanRuntime.isActive = active
-                deviceScanDeep = info.inputData.getBoolean(DeviceScanWorker.KEY_DEEP, deviceScanDeep)
-                val startedAt = info.inputData.getLong(DeviceScanWorker.KEY_STARTED_AT_MS, scanStartedAtMs)
+                deviceScanDeep = progressData.getBoolean(DeviceScanWorker.KEY_DEEP, deviceScanDeep)
+                val startedAt = progressData.getLong(DeviceScanWorker.KEY_STARTED_AT_MS, scanStartedAtMs)
                 if (startedAt > 0L) scanStartedAtMs = startedAt
 
-                val progressData = if (active) info.progress else info.outputData
                 scanCurrent = progressData.getInt(DeviceScanWorker.KEY_CURRENT, scanCurrent)
                 scanTotal = progressData.getInt(DeviceScanWorker.KEY_TOTAL, scanTotal)
                 scanProgress = if (scanTotal > 0) {
