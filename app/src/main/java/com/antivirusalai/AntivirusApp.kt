@@ -2617,14 +2617,15 @@ private fun SecurityToolsScreen(
             }
         }
 
+        val feedForDisplay = currentFeed
         Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = SurfaceBase)) {
             Column(Modifier.fillMaxWidth().padding(15.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-                    IconArt("database", tint = if (currentFeed != null) ColorSuccess else ColorWarning, size = 24.dp)
+                    IconArt("database", tint = if (feedForDisplay != null) ColorSuccess else ColorWarning, size = 24.dp)
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                         Text(tr(fa, "بانک اطلاعات تهدید", "Threat intelligence database"), color = TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                         Text(
-                            if (currentFeed != null) tr(fa, "${currentFeed.indicators.size} شاخص معتبر · نسخه ${currentFeed.version}", "${currentFeed.indicators.size} verified indicators · v${currentFeed.version}")
+                            if (feedForDisplay != null) tr(fa, "${feedForDisplay.indicators.size} شاخص معتبر · نسخه ${feedForDisplay.version}", "${feedForDisplay.indicators.size} verified indicators · v${feedForDisplay.version}")
                             else tr(fa, "هنوز بانک امضاشده معتبری روی دستگاه نیست", "No verified signed feed is installed yet"),
                             color = TextSecondary,
                             fontSize = 10.sp
