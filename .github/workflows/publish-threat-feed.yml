@@ -21,7 +21,7 @@ jobs:
       - name: Checkout publisher source
         uses: actions/checkout@v4
         with:
-          ref: main
+          ref: \${{ github.sha }}
           fetch-depth: 0
 
       - name: Set up Python
@@ -34,10 +34,10 @@ jobs:
 
       - name: Generate and publish authenticated feed
         env:
-          MALWAREBAZAAR_AUTH_KEY: \${{ secrets.MALWAREBAZAAR_AUTH_KEY }}
-          THREATFOX_AUTH_KEY: \${{ secrets.THREATFOX_AUTH_KEY }}
-          ALAI_FEED_SIGNING_KEY_PEM: \${{ secrets.ALAI_FEED_SIGNING_KEY_PEM }}
-          ALAI_ABUSECH_COMMERCIAL_USE_APPROVED: \${{ secrets.ALAI_ABUSECH_COMMERCIAL_USE_APPROVED }}
+          MALWAREBAZAAR_AUTH_KEY: ${{ secrets.MALWAREBAZAAR_AUTH_KEY }}
+          THREATFOX_AUTH_KEY: ${{ secrets.THREATFOX_AUTH_KEY }}
+          ALAI_FEED_SIGNING_KEY_PEM: ${{ secrets.ALAI_FEED_SIGNING_KEY_PEM }}
+          ALAI_ABUSECH_COMMERCIAL_USE_APPROVED: ${{ secrets.ALAI_ABUSECH_COMMERCIAL_USE_APPROVED }}
         shell: bash
         run: |
           set -euo pipefail
