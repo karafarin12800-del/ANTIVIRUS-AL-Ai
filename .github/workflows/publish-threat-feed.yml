@@ -35,6 +35,7 @@ jobs:
       - name: Generate and publish authenticated feed
         env:
           MALWAREBAZAAR_AUTH_KEY: \${{ secrets.MALWAREBAZAAR_AUTH_KEY }}
+          THREATFOX_AUTH_KEY: \${{ secrets.THREATFOX_AUTH_KEY }}
           ALAI_FEED_SIGNING_KEY_PEM: \${{ secrets.ALAI_FEED_SIGNING_KEY_PEM }}
           ALAI_ABUSECH_COMMERCIAL_USE_APPROVED: \${{ secrets.ALAI_ABUSECH_COMMERCIAL_USE_APPROVED }}
         shell: bash
