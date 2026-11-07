@@ -1775,9 +1775,14 @@ private fun HomeSafetyStatusCard(
 ) {
     val hasFindings = (report?.suspiciousCount ?: 0) > 0
     val hasUnknown = (report?.unknownCount ?: 0) > 0
+    // Unknown, skipped or truncated work must never be presented as a fully clean scan.
+    val hasIncompleteResults = hasUnknown ||
+        report?.failures?.isNotEmpty() == true ||
+        report?.truncated == true ||
+        (report?.skippedFiles ?: 0) > 0
     val accent = when {
-        report == null -> BrandTeal
-        hasFindings || hasUnknown -> ColorWarning
+        hasFindings -> ColorDanger
+        scanning || report == null || hasIncompleteResults -> ColorWarning
         else -> ColorSuccess
     }
     Card(
@@ -1802,21 +1807,22 @@ private fun HomeSafetyStatusCard(
         ) {
             Box(
                 modifier = Modifier
-                    .size(48.dp)
+                    .size(76.dp)
                     .background(accent.copy(alpha = 0.13f), CircleShape)
-                    .border(1.dp, accent.copy(alpha = 0.45f), CircleShape),
+                    .border(1.5.dp, accent.copy(alpha = 0.55f), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                IconArt(if (hasFindings) "biohazard" else "status_shield", tint = accent, size = 25.dp)
+                // Keep the full shield/biohazard mark inside a larger, uncropped status medallion.
+                IconArt(if (hasFindings) "biohazard" else "status_shield", tint = accent, size = 28.dp)
             }
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
                     when {
                         scanning -> tr(fa, "اسکن دستگاه در حال اجراست", "Device scan is running")
                         report == null -> tr(fa, "هنوز اسکن دستگاه انجام نشده", "No device scan yet")
-                        hasFindings -> tr(fa, "مواردی نیازمند بررسی هستند", "Items need your review")
-                        hasUnknown -> tr(fa, "بعضی فایل‌ها نتیجه قطعی ندارند", "Some files have no definitive verdict")
-                        else -> tr(fa, "در محدوده اسکن مورد مشکوکی نبود", "No suspicious items in scanned scope")
+                        hasFindings -> tr(fa, "تهدید یا مورد مشکوک پیدا شد", "Threat or suspicious item found")
+                        hasIncompleteResults -> tr(fa, "بعضی فایل‌ها نتیجه قطعی ندارند یا کامل اسکن نشدند", "Some files have no definitive verdict or were not fully scanned")
+                        else -> tr(fa, "در محدوده اسکن‌شده مورد مشکوکی پیدا نشد", "No suspicious item found in the scanned scope")
                     },
                     color = accent,
                     fontSize = 14.sp,
@@ -2896,6 +2902,9 @@ private fun IconArt(
     tint: Color,
     size: Dp
 ) {
+    // The current 16-tile artwork atlas is readable but undersized throughout the UI.
+    // Render every IconArt asset and fallback glyph at 2x its former dimensions.
+    val displaySize = size * 2f
     val artworkIndex = when (name) {
         "apps", "apk" -> 0
         "biohazard", "malware" -> 1
@@ -2916,10 +2925,10 @@ private fun IconArt(
         else -> null
     }
     if (artworkIndex != null) {
-        AssetArt(artworkIndex, size)
+        AssetArt(artworkIndex, displaySize)
         return
     }
-    Canvas(Modifier.size(size)) {
+    Canvas(Modifier.size(displaySize)) {
         val sx = this.size.width / 24f
         val sy = this.size.height / 24f
         val sw = maxOf(1.45f, this.size.minDimension * 0.075f)
