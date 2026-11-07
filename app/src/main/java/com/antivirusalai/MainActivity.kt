@@ -1,6 +1,7 @@
 package com.antivirusalai
 
 import android.app.PictureInPictureParams
+import android.content.Intent
 import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
@@ -31,6 +32,19 @@ class MainActivity : ComponentActivity() {
                 startForegroundService(Intent(applicationContext, ProtectionService::class.java))
             } catch (error: Exception) {
                 Log.w(TAG, "Previously enabled protection could not be restored.", error)
+            }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Re-establish the user-enabled monitor when the activity returns after
+        // Android has reclaimed the process. Never start it if the user turned it off.
+        if (ProtectionRuntime.isEnabled(applicationContext)) {
+            runCatching {
+                startForegroundService(Intent(this, ProtectionService::class.java))
+            }.onFailure { error ->
+                Log.w(TAG, "The previously enabled protection service could not be resumed.", error)
             }
         }
     }
