@@ -311,10 +311,13 @@ fun AntivirusApp(inPictureInPicture: Boolean = false) {
         if (DeviceScanEngine.hasBroadStorageAccess()) {
             executeDeviceScan(pendingDeepScan)
         } else {
-            errorMessage = tr(
+            // The user declined broad shared-storage access. Still scan readable
+            // installed APK components and explicitly label the report as partial.
+            executeDeviceScan(pendingDeepScan)
+            notice = tr(
                 fa,
-                "دسترسی حافظه فعال نشد؛ برای شروع اسکن باید اجازه مدیریت فایل‌ها را در تنظیمات بدهی.",
-                "Storage access was not granted. Allow all-files access in Android settings to start scanning."
+                "دسترسی کامل حافظه فعال نشد؛ اسکن برنامه‌های نصب‌شده و APKهای قابل‌خواندن ادامه پیدا می‌کند. فایل‌های حافظه مشترک در این نوبت بررسی نمی‌شوند.",
+                "All-files access was not granted. The scan will continue with readable installed-app APKs; shared-storage files are not included."
             )
         }
     }
@@ -671,8 +674,8 @@ fun AntivirusApp(inPictureInPicture: Boolean = false) {
                 Text(
                     tr(
                         fa,
-                        "برای اسکن خودکار فایل‌ها، Android باید اجازه «مدیریت همه فایل‌ها» را بدهد. هنگام اسکنِ آغازشده توسط کاربر، برنامه همچنین فهرست برنامه‌های نصب‌شده را فقط برای بررسی امنیتی محلی می‌خواند. فایل‌ها و فهرست برنامه‌ها آپلود یا برای تبلیغات استفاده نمی‌شوند. Android همچنان پوشه‌های خصوصی برنامه‌های دیگر و Android/data و Android/obb را مسدود می‌کند؛ با رد دسترسی گسترده، اسکن خودکار دستگاه اجرا نمی‌شود.",
-                        "Automatic file scanning needs Android’s All files access. When a user starts a scan, the app also reads the installed-app inventory for local security review. Files and app inventory are not uploaded or used for advertising. Android still blocks other apps’ private folders and Android/data and Android/obb. Device-wide automatic scanning is unavailable when broad access is declined."
+                        "برای اسکن گسترده فایل‌های حافظه، Android مسیر رسمی «مدیریت همه فایل‌ها» را دارد. همچنین فهرست برنامه‌های نصب‌شده برای بررسی امنیتی محلی استفاده می‌شود. فایل‌ها و فهرست برنامه‌ها آپلود یا برای تبلیغات استفاده نمی‌شوند. با رد مجوز حافظه، برنامه همچنان APKهای نصب‌شده‌ای را که مسیر خواندنشان در دسترس باشد بررسی می‌کند؛ اما فایل‌های حافظه مشترک در این نوبت اسکن نمی‌شوند. پوشه‌های خصوصی برنامه‌های دیگر و Android/data و Android/obb همچنان خارج از دسترس هستند.",
+                        "Android provides the official All files access setting for broad shared-storage scanning. The installed-app inventory is also used for local security review. Files and app inventory are not uploaded or used for advertising. If broad storage access is declined, the app still checks installed APK components whose paths are readable, but shared-storage files are not scanned in that run. Other apps’ private folders and Android/data and Android/obb remain excluded."
                     ),
                     color = TextSecondary
                 )
@@ -699,8 +702,23 @@ fun AntivirusApp(inPictureInPicture: Boolean = false) {
                 }
             },
             dismissButton = {
-                OutlinedButton(onClick = { showStoragePermissionRationale = false }) {
-                    Text(tr(fa, "انصراف", "Cancel"), color = TextPrimary)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        onClick = {
+                            showStoragePermissionRationale = false
+                            executeDeviceScan(pendingDeepScan)
+                            notice = tr(
+                                fa,
+                                "اسکن محدود برنامه‌های نصب‌شده شروع شد؛ حافظه مشترک بررسی نمی‌شود.",
+                                "Installed-app-only scan started; shared storage is not included."
+                            )
+                        }
+                    ) {
+                        Text(tr(fa, "فقط اسکن برنامه‌ها", "Scan apps only"), color = TextPrimary)
+                    }
+                    OutlinedButton(onClick = { showStoragePermissionRationale = false }) {
+                        Text(tr(fa, "انصراف", "Cancel"), color = TextPrimary)
+                    }
                 }
             }
         )
