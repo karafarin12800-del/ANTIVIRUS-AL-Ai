@@ -3179,22 +3179,11 @@ private fun IconArt(
         return
     }
     val artworkIndex = when (name) {
-        "apps", "apk" -> 0
         "biohazard", "malware" -> 1
-        "crown" -> 2
-        "folder", "file" -> 3
-        "lightning", "spark" -> 4
-        "pause" -> 5
         "robot" -> 6
-        "scan", "scan_clock", "clock" -> 7
-        "search", "arrow" -> 8
-        "settings", "tools" -> 9
-        "shield", "shield_check" -> 10
+        "scan_clock" -> 7
         "shield_lightning" -> 11
-        "shield_location", "lock" -> 12
-        "check", "status_check" -> 13
-        "status_shield" -> 14
-        "alert", "warning" -> 15
+        "shield_location" -> 12
         else -> null
     }
     if (artworkIndex != null) {
@@ -3217,6 +3206,67 @@ private fun IconArt(
             drawCircle(tint, radius = r * sx, center = point(x, y), style = Stroke(width = sw))
         }
         when (name) {
+            "apps" -> {
+                // Four crisp app tiles; drawn as vectors rather than a 32px atlas.
+                path {
+                    moveTo(4f * sx, 4f * sy); lineTo(10f * sx, 4f * sy)
+                    lineTo(10f * sx, 10f * sy); lineTo(4f * sx, 10f * sy); close()
+                    moveTo(14f * sx, 4f * sy); lineTo(20f * sx, 4f * sy)
+                    lineTo(20f * sx, 10f * sy); lineTo(14f * sx, 10f * sy); close()
+                    moveTo(4f * sx, 14f * sy); lineTo(10f * sx, 14f * sy)
+                    lineTo(10f * sx, 20f * sy); lineTo(4f * sx, 20f * sy); close()
+                    moveTo(14f * sx, 14f * sy); lineTo(20f * sx, 14f * sy)
+                    lineTo(20f * sx, 20f * sy); lineTo(14f * sx, 20f * sy); close()
+                }
+            }
+            "crown" -> {
+                path {
+                    moveTo(3f * sx, 7f * sy)
+                    lineTo(7f * sx, 11f * sy)
+                    lineTo(10f * sx, 4f * sy)
+                    lineTo(13f * sx, 11f * sy)
+                    lineTo(18f * sx, 5f * sy)
+                    lineTo(21f * sx, 7f * sy)
+                    lineTo(19f * sx, 18f * sy)
+                    lineTo(5f * sx, 18f * sy)
+                    close()
+                }
+                line(6f, 21f, 18f, 21f)
+            }
+            "folder" -> {
+                path {
+                    moveTo(2.5f * sx, 6f * sy)
+                    lineTo(9f * sx, 6f * sy)
+                    lineTo(11f * sx, 8.5f * sy)
+                    lineTo(21.5f * sx, 8.5f * sy)
+                    lineTo(20f * sx, 19.5f * sy)
+                    lineTo(4f * sx, 19.5f * sy)
+                    close()
+                }
+            }
+            "lightning" -> {
+                path {
+                    moveTo(13.5f * sx, 2.5f * sy)
+                    lineTo(6.5f * sx, 13f * sy)
+                    lineTo(11.5f * sx, 13f * sy)
+                    lineTo(10f * sx, 21.5f * sy)
+                    lineTo(18f * sx, 10f * sy)
+                    lineTo(13f * sx, 10f * sy)
+                    close()
+                }
+            }
+            "pause" -> {
+                path {
+                    moveTo(6f * sx, 4f * sy); lineTo(10f * sx, 4f * sy)
+                    lineTo(10f * sx, 20f * sy); lineTo(6f * sx, 20f * sy); close()
+                    moveTo(14f * sx, 4f * sy); lineTo(18f * sx, 4f * sy)
+                    lineTo(18f * sx, 20f * sy); lineTo(14f * sx, 20f * sy); close()
+                }
+            }
+            "search" -> {
+                circle(10f, 10f, 6.5f)
+                line(15f, 15f, 21f, 21f)
+            }
             "shield" -> {
                 path {
                     moveTo(12f * sx, 2.2f * sy)
