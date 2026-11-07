@@ -202,7 +202,7 @@ class ProtectionService : Service() {
                 override fun onEvent(event: Int, path: String?) {
                     val relative = path ?: return
                     val target = File(canonical, relative)
-                    val isDirectory = (event and FileObserver.ISDIR) != 0
+                    val isDirectory = target.isDirectory
                     if (isDirectory && (event and FileObserver.CREATE) != 0) {
                         serviceScope.launch { watchTree(target, depth + 1, visited) }
                     } else if (!isDirectory &&
