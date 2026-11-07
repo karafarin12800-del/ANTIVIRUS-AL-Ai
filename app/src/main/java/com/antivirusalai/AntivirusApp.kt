@@ -1861,7 +1861,7 @@ private fun HomeSafetyStatusCard(
                 if (hasFindings) {
                     IconArt("biohazard", tint = accent, size = 28.dp)
                 } else {
-                    HighQualityShieldIcon(tint = accent, size = 48.dp)
+                    HighQualityShieldIcon(tint = accent, size = 56.dp)
                 }
             }
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -2535,7 +2535,7 @@ private fun SecurityToolsScreen(
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     HighQualityShieldIcon(
                         tint = if (protectionEnabled) ColorSuccess else ColorWarning,
-                        size = 42.dp
+                        size = 50.dp
                     )
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(tr(fa, "محافظت بلادرنگ", "Real-time protection"), color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Bold)
@@ -3071,38 +3071,59 @@ private fun HighQualityShieldIcon(tint: Color, size: Dp) {
         val w = this.size.width
         val h = this.size.height
         val shield = Path().apply {
-            moveTo(w * 0.5f, h * 0.055f)
-            cubicTo(w * 0.68f, h * 0.14f, w * 0.82f, h * 0.19f, w * 0.93f, h * 0.22f)
-            lineTo(w * 0.89f, h * 0.57f)
-            cubicTo(w * 0.86f, h * 0.78f, w * 0.70f, h * 0.91f, w * 0.5f, h * 0.965f)
-            cubicTo(w * 0.30f, h * 0.91f, w * 0.14f, h * 0.78f, w * 0.11f, h * 0.57f)
-            lineTo(w * 0.07f, h * 0.22f)
-            cubicTo(w * 0.18f, h * 0.19f, w * 0.32f, h * 0.14f, w * 0.5f, h * 0.055f)
+            moveTo(w * 0.5f, h * 0.045f)
+            cubicTo(w * 0.67f, h * 0.13f, w * 0.83f, h * 0.19f, w * 0.94f, h * 0.22f)
+            lineTo(w * 0.895f, h * 0.57f)
+            cubicTo(w * 0.86f, h * 0.78f, w * 0.70f, h * 0.92f, w * 0.5f, h * 0.965f)
+            cubicTo(w * 0.30f, h * 0.92f, w * 0.14f, h * 0.78f, w * 0.105f, h * 0.57f)
+            lineTo(w * 0.06f, h * 0.22f)
+            cubicTo(w * 0.17f, h * 0.19f, w * 0.33f, h * 0.13f, w * 0.5f, h * 0.045f)
             close()
         }
-        drawPath(shield, tint.copy(alpha = 0.16f))
+        // Vector glow + gradient fill + crisp outline: no 32px atlas upscaling.
         drawPath(
             shield,
-            tint,
-            style = Stroke(width = w * 0.065f, cap = StrokeCap.Round, join = StrokeJoin.Round)
+            tint.copy(alpha = 0.14f),
+            style = Stroke(width = w * 0.18f, cap = StrokeCap.Round, join = StrokeJoin.Round)
+        )
+        drawPath(
+            shield,
+            Brush.linearGradient(
+                colors = listOf(tint.copy(alpha = 0.98f), tint.copy(alpha = 0.62f)),
+                start = Offset(w * 0.2f, h * 0.05f),
+                end = Offset(w * 0.8f, h)
+            )
+        )
+        drawPath(
+            shield,
+            Color.White.copy(alpha = 0.82f),
+            style = Stroke(width = w * 0.035f, cap = StrokeCap.Round, join = StrokeJoin.Round)
+        )
+        val highlight = Path().apply {
+            moveTo(w * 0.22f, h * 0.27f)
+            cubicTo(w * 0.34f, h * 0.23f, w * 0.41f, h * 0.19f, w * 0.5f, h * 0.145f)
+        }
+        drawPath(
+            highlight,
+            Color.White.copy(alpha = 0.28f),
+            style = Stroke(width = w * 0.035f, cap = StrokeCap.Round)
         )
         drawLine(
-            tint,
-            Offset(w * 0.30f, h * 0.51f),
+            Color.White,
+            Offset(w * 0.29f, h * 0.51f),
             Offset(w * 0.44f, h * 0.65f),
-            strokeWidth = w * 0.075f,
+            strokeWidth = w * 0.09f,
             cap = StrokeCap.Round
         )
         drawLine(
-            tint,
+            Color.White,
             Offset(w * 0.44f, h * 0.65f),
-            Offset(w * 0.72f, h * 0.36f),
-            strokeWidth = w * 0.075f,
+            Offset(w * 0.73f, h * 0.35f),
+            strokeWidth = w * 0.09f,
             cap = StrokeCap.Round
         )
     }
 }
-
 @Composable
 private fun AssetArt(index: Int, size: Dp) {
     val atlas = ImageBitmap.imageResource(R.drawable.security_artwork_sheet)
