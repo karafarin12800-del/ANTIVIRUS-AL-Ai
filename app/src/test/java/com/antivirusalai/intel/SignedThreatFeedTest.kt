@@ -163,6 +163,62 @@ class SignedThreatFeedTest {
         }
     }
 
+    private fun signedMultiSourceFeed(pair: KeyPair, version: Long, invalidDomain: Boolean = false): ByteArray {
+        val rows = listOf(
+            listOf("DOMAIN", if (invalidDomain) "bad..example" else "bad.example", "THREATFOX.TEST", "SUSPICIOUS", "THREATFOX", "80"),
+            listOf("IPV4", "203.0.113.9", "FEODO_TRACKER.TEST", "SUSPICIOUS", "FEODO_TRACKER", "95"),
+            listOf("SHA256", "a".repeat(64), "MALWAREBAZAAR.TEST", "MALWARE", "MALWAREBAZAAR", "100"),
+            listOf("URL", "https://download.example/payload.apk", "URLHAUS.TEST", "MALWARE", "URLHAUS", "95")
+        ).sortedBy { it[0] + "|" + it[1] }
+        val counts = rows.groupingBy { it[4] }.eachCount()
+        val payload = buildString {
+            append(SignedThreatFeedParser.MULTI_SOURCE_FORMAT_HEADER).append('\n')
+            append("key_id=").append(keyId).append('\n')
+            append("version=").append(version).append('\n')
+            append("issued_at=").append(now - 60).append('\n')
+            append("expires_at=").append(now + 86400).append('\n')
+            listOf("FEODO_TRACKER", "MALWAREBAZAAR", "THREATFOX", "URLHAUS").forEach { source ->
+                append("source_count=").append(source).append('|').append(counts[source] ?: 0).append('\n')
+            }
+            append("feed_truncated=0\n")
+            rows.forEach { row ->
+                val encoded = Base64.getUrlEncoder().withoutPadding()
+                    .encodeToString(row[1].toByteArray(StandardCharsets.UTF_8))
+                append("entry=").append(row[0]).append('|').append(encoded).append('|')
+                    .append(row[2]).append('|').append(row[3]).append('|').append(row[4]).append('|')
+                    .append(row[5]).append('|').append(now - 30).append('|').append(now + 43200).append('\n')
+            }
+        }.toByteArray(StandardCharsets.UTF_8)
+        val signature = Signature.getInstance("SHA256withECDSA").run {
+            initSign(pair.private)
+            update(payload)
+            sign()
+        }
+        return payload + "signature=" + Base64.getEncoder().encodeToString(signature) + "\n"
+            .toByteArray(StandardCharsets.UTF_8)
+    }
+
+    @Test
+    fun acceptsTypedIocsAndValidatesSourceCoverage() {
+        val pair = keyPair()
+        val feed = SignedThreatFeedParser.parse(signedMultiSourceFeed(pair, 1), verifier(pair), now)
+        assertEquals(1, feed.indicators.size)
+        assertEquals(3, feed.networkIndicators.size)
+        assertEquals(1, feed.sourceCounts["MALWAREBAZAAR"])
+        assertEquals(1, feed.sourceCounts["THREATFOX"])
+        assertEquals(1, feed.sourceCounts["URLHAUS"])
+        assertEquals(1, feed.sourceCounts["FEODO_TRACKER"])
+        assertEquals(false, feed.truncated)
+    }
+
+    @Test
+    fun rejectsInvalidDomainInSignedTypedFeed() {
+        val pair = keyPair()
+        expectCode(FeedValidationCode.INVALID_INDICATOR) {
+            SignedThreatFeedParser.parse(signedMultiSourceFeed(pair, 1, true), verifier(pair), now)
+        }
+    }
+
     @Test
     fun storePersistsFeedAndRejectsReplayAfterRecreation() {
         val pair = keyPair()

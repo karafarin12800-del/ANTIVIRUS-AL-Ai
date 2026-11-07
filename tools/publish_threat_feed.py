@@ -1,36 +1,40 @@
 #!/usr/bin/env python3
-"""Build a hash-only, publisher-signed MalwareBazaar feed.
-
-No malware samples are downloaded. The script refuses to run until both
-credentials are supplied and an operator explicitly attests that commercial
-use is permitted under the selected abuse.ch plan/terms.
-"""
+"""Build a bounded, signed, typed threat-intelligence feed. Metadata only."""
 from __future__ import annotations
 
 import argparse
 import base64
-import json
+import csv
 import hashlib
+import ipaddress
+import json
 import os
 import re
 import sys
 import time
 import urllib.parse
 import urllib.request
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import urlsplit, urlunsplit
 
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
-
 
 PUBLIC_KEY_B64 = (
     "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEM1szM5WLCBP0KDTXsrVfBdPxErB4sVo4mhY+duhjfDP5MwASTx0pLor3mSL7dLRwX/gZpi6odLquz/BfIGSafg=="
 )
 KEY_ID = "alai-release-2026"
-API_URL = "https://mb-api.abuse.ch/api/v1/"
-FEED_HEADER = "ALAI-THREAT-FEED/1"
-MAX_ENTRIES = 20_000
-VALIDITY_SECONDS = 7 * 24 * 60 * 60
+MB_API = "https://mb-api.abuse.ch/api/v1/"
+TF_API = "https://threatfox-api.abuse.ch/api/v1/"
+URLHAUS_EXPORT = "https://urlhaus-api.abuse.ch/v2/files/exports/{}/recent.csv"
+FEODO_URL = "https://feodotracker.abuse.ch/downloads/ipblocklist_recommended.json"
+SOURCES = ("FEODO_TRACKER", "MALWAREBAZAAR", "THREATFOX", "URLHAUS")
+TYPE_LIMITS = {"SHA256": 16000, "URL": 2000, "DOMAIN": 1000, "IPV4": 500, "IP_PORT": 500}
+MAX_ENTRIES = 20000
+MAX_FEED_BYTES = 4 * 1024 * 1024
+VALIDITY = 7 * 24 * 60 * 60
 
 
 def fail(message: str) -> "NoReturn":
@@ -38,215 +42,393 @@ def fail(message: str) -> "NoReturn":
     raise SystemExit(2)
 
 
-def previous_version(path: str | None) -> int:
-    if not path:
-        return 0
+def get_bytes(url: str, headers: dict[str, str], limit: int, method: str = "GET", body: bytes | None = None) -> bytes:
+    request = urllib.request.Request(url, data=body, headers=headers, method=method)
     try:
-        raw = Path(path).read_text(encoding="ascii").strip()
-        return int(raw) if raw else 0
-    except FileNotFoundError:
-        return 0
+        with urllib.request.urlopen(request, timeout=35) as response:
+            raw = response.read(limit + 1)
     except Exception as exc:
-        fail("Could not read previous feed version: " + str(exc))
+        fail("Provider request failed: " + str(exc))
+    if len(raw) > limit:
+        fail("Provider response exceeded its safety size limit.")
+    return raw
 
 
-def fetch_recent_detections(auth_key: str) -> list[dict]:
+def parse_time(value: object, fallback: int) -> int:
+    if not isinstance(value, str) or not value.strip():
+        return fallback
+    raw = value.strip()
+    for fmt in ("%Y-%m-%d %H:%M:%S UTC", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+        try:
+            return int(datetime.strptime(raw, fmt).replace(tzinfo=timezone.utc).timestamp())
+        except ValueError:
+            pass
+    try:
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        return int((parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)).timestamp())
+    except ValueError:
+        return fallback
+
+
+def normalize_domain(raw: str) -> str | None:
+    value = raw.strip().rstrip(".").lower()
+    if not value or len(value) > 253 or "*" in value or "/" in value:
+        return None
+    try:
+        value = value.encode("idna").decode("ascii")
+    except UnicodeError:
+        return None
+    try:
+        ipaddress.ip_address(value)
+        return None
+    except ValueError:
+        pass
+    labels = value.split(".")
+    if len(labels) < 2 or any(
+        not label or len(label) > 63 or
+        not re.fullmatch(r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?", label)
+        for label in labels
+    ):
+        return None
+    return value
+
+
+def normalize_url(raw: str) -> str | None:
+    if not raw or len(raw) > 2048 or any(ch.isspace() or ord(ch) < 0x20 for ch in raw):
+        return None
+    try:
+        part = urlsplit(raw.strip())
+        if part.scheme.lower() not in ("http", "https") or not part.hostname:
+            return None
+        if part.username is not None or part.password is not None or part.fragment:
+            return None
+        host = part.hostname.encode("idna").decode("ascii").lower()
+        if ":" in host:
+            host = "[" + host + "]"
+        port = part.port
+        netloc = host + ((":" + str(port)) if port else "")
+        result = urlunsplit((part.scheme.lower(), netloc, part.path or "/", part.query, ""))
+        return result if len(result) <= 2048 else None
+    except (ValueError, UnicodeError):
+        return None
+
+
+def normalize_ipv4(raw: str) -> str | None:
+    try:
+        value = ipaddress.ip_address(raw.strip())
+    except ValueError:
+        return None
+    return value.compressed if isinstance(value, ipaddress.IPv4Address) else None
+
+
+def normalize_ip_port(raw: str) -> str | None:
+    if raw.count(":") != 1 or raw.startswith("["):
+        return None
+    host, raw_port = raw.rsplit(":", 1)
+    address = normalize_ipv4(host)
+    if address is None or not raw_port.isdigit():
+        return None
+    port = int(raw_port)
+    return address + ":" + str(port) if 1 <= port <= 65535 else None
+
+
+def normalize(kind: str, raw: object) -> str | None:
+    value = str(raw or "").strip()
+    if kind == "SHA256":
+        return value.lower() if re.fullmatch(r"[0-9a-fA-F]{64}", value) else None
+    if kind == "URL":
+        return normalize_url(value)
+    if kind == "DOMAIN":
+        return normalize_domain(value)
+    if kind == "IPV4":
+        return normalize_ipv4(value)
+    if kind == "IP_PORT":
+        return normalize_ip_port(value)
+    return None
+
+
+def family_id(source: str, family: object) -> str:
+    cleaned = re.sub(r"[^A-Z0-9._-]+", "_", str(family or "UNCLASSIFIED").upper()).strip("._-")
+    return (source + "." + (cleaned[:60] or "UNCLASSIFIED"))[:80]
+
+
+@dataclass
+class Indicator:
+    kind: str
+    value: str
+    family: str
+    classification: str
+    sources: set[str] = field(default_factory=set)
+    confidence: int = 0
+    first_seen: int = 0
+    expires_at: int = 0
+
+
+def add(entries: dict, kind: str, raw: object, family: object, classification: str,
+        source: str, confidence: int, first_seen: int, expires_at: int) -> None:
+    value = normalize(kind, raw)
+    if value is None or source not in SOURCES or classification not in {"MALWARE", "PUA", "SUSPICIOUS"}:
+        return
+    if not 0 <= confidence <= 100 or first_seen <= 0 or expires_at <= first_seen:
+        return
+    key = (kind, value)
+    label = family_id(source, family)
+    existing = entries.get(key)
+    if existing is None:
+        entries[key] = Indicator(kind, value, label, classification, {source}, confidence, first_seen, expires_at)
+        return
+    existing.sources.add(source)
+    if existing.family.endswith(".UNCLASSIFIED") and not label.endswith(".UNCLASSIFIED"):
+        existing.family = label
+    priority = {"SUSPICIOUS": 1, "PUA": 2, "MALWARE": 3}
+    if priority[classification] > priority[existing.classification]:
+        existing.classification = classification
+    existing.confidence = max(existing.confidence, confidence)
+    existing.first_seen = min(existing.first_seen, first_seen)
+    existing.expires_at = max(existing.expires_at, expires_at)
+
+
+def fetch_malwarebazaar(key: str) -> list[dict]:
     body = urllib.parse.urlencode({"query": "recent_detections", "hours": "168"}).encode()
-    request = urllib.request.Request(
-        API_URL,
-        data=body,
-        headers={
-            "Auth-Key": auth_key,
-            "Content-Type": "application/x-www-form-urlencoded",
-            "Accept": "application/json",
-            "User-Agent": "ANTIVIRUS-AL-AI-threat-feed-publisher/1.0",
-        },
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=35) as response:
-            raw = response.read(4 * 1024 * 1024 + 1)
-    except Exception as exc:
-        fail("MalwareBazaar API request failed: " + str(exc))
-
-    if len(raw) > 4 * 1024 * 1024:
-        fail("MalwareBazaar response exceeded the 4 MiB safety limit.")
+    raw = get_bytes(MB_API, {
+        "Auth-Key": key, "Content-Type": "application/x-www-form-urlencoded",
+        "Accept": "application/json", "User-Agent": "ANTIVIRUS-AL-AI/2.0",
+    }, 4 * 1024 * 1024, "POST", body)
     try:
         payload = json.loads(raw.decode("utf-8"))
     except Exception as exc:
-        fail("Malformed JSON from MalwareBazaar: " + str(exc))
-
-    if payload.get("query_status") != "ok":
-        fail("MalwareBazaar did not return query_status=ok: " + str(payload.get("query_status")))
-    data = payload.get("data")
-    if not isinstance(data, list) or not data:
-        fail("No family-labelled recent detections were returned; refusing to publish an empty feed.")
-    return data
+        fail("Malformed MalwareBazaar JSON: " + str(exc))
+    if payload.get("query_status") == "no_results":
+        return []
+    if payload.get("query_status") != "ok" or not isinstance(payload.get("data"), list):
+        fail("MalwareBazaar returned an unexpected response.")
+    return payload["data"]
 
 
-def clean_family(raw: str, source: str) -> str:
-    value = re.sub(r"[^A-Z0-9._-]+", "_", raw.upper()).strip("._-")
-    value = value[:60] or "UNCLASSIFIED"
-    return source + "." + value
-
-
-def fetch_threatfox_recent_samples(auth_key: str) -> list[dict]:
-    """Return metadata for hashes attached to recent, active ThreatFox IOCs."""
-    body = json.dumps({"query": "get_iocs", "days": 7}).encode("utf-8")
-    request = urllib.request.Request(
-        "https://threatfox-api.abuse.ch/api/v1/",
-        data=body,
-        headers={
-            "Auth-Key": auth_key,
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-            "User-Agent": "ANTIVIRUS-AL-AI-threat-feed-publisher/1.0",
-        },
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=35) as response:
-            raw = response.read(4 * 1024 * 1024 + 1)
-    except Exception as exc:
-        fail("ThreatFox API request failed: " + str(exc))
-
-    if len(raw) > 4 * 1024 * 1024:
-        fail("ThreatFox response exceeded the 4 MiB safety limit.")
+def fetch_threatfox(key: str) -> list[dict]:
+    if not key:
+        return []
+    body = json.dumps({"query": "get_iocs", "days": 7}).encode()
+    raw = get_bytes(TF_API, {
+        "Auth-Key": key, "Content-Type": "application/json",
+        "Accept": "application/json", "User-Agent": "ANTIVIRUS-AL-AI/2.0",
+    }, 4 * 1024 * 1024, "POST", body)
     try:
         payload = json.loads(raw.decode("utf-8"))
     except Exception as exc:
-        fail("Malformed JSON from ThreatFox: " + str(exc))
+        fail("Malformed ThreatFox JSON: " + str(exc))
+    if payload.get("query_status") == "no_result":
+        return []
+    if payload.get("query_status") != "ok" or not isinstance(payload.get("data"), list):
+        fail("ThreatFox returned an unexpected response.")
+    return payload["data"]
 
-    if payload.get("query_status") != "ok":
-        fail("ThreatFox did not return query_status=ok: " + str(payload.get("query_status")))
-    data = payload.get("data")
-    if not isinstance(data, list) or not data:
-        fail("ThreatFox returned no recent IOC metadata.")
+
+def fetch_urlhaus(key: str) -> list[dict]:
+    if not key:
+        return []
+    url = URLHAUS_EXPORT.format(urllib.parse.quote(key, safe=""))
+    raw = get_bytes(url, {"Accept": "text/csv", "User-Agent": "ANTIVIRUS-AL-AI/2.0"}, 6 * 1024 * 1024)
+    try:
+        text = raw.decode("utf-8-sig")
+    except UnicodeDecodeError as exc:
+        fail("URLhaus export is not UTF-8: " + str(exc))
+    lines = [line for line in text.splitlines() if line.strip()]
+    header_at = next((i for i, line in enumerate(lines) if "url_status" in line.lower() and "url" in line.lower()), None)
+    if header_at is None:
+        fail("URLhaus export has no expected URL/status header.")
+    lines = lines[header_at:]
+    lines[0] = lines[0].lstrip().removeprefix("#").lstrip()
+    return [{
+        str(k).strip().lstrip("#").strip().lower(): (v or "").strip()
+        for k, v in row.items()
+    } for row in csv.DictReader(lines)]
+
+
+def fetch_feodo() -> list[dict]:
+    raw = get_bytes(FEODO_URL, {"Accept": "application/json", "User-Agent": "ANTIVIRUS-AL-AI/2.0"}, 2 * 1024 * 1024)
+    try:
+        data = json.loads(raw.decode("utf-8"))
+    except Exception as exc:
+        fail("Malformed Feodo Tracker JSON: " + str(exc))
+    if not isinstance(data, list):
+        fail("Feodo Tracker response must be a JSON array.")
     return data
 
 
-def make_entries(
-    data: list[dict],
-    threatfox_data: list[dict] | None = None,
-) -> list[tuple[str, str, str]]:
-    entries: dict[str, tuple[str, str, str]] = {}
-    for item in data:
-        if not isinstance(item, dict):
-            continue
-        sha = str(item.get("sha256_hash", "")).lower()
-        signature = str(item.get("signature", "")).strip()
-        if not re.fullmatch(r"[0-9a-f]{64}", sha) or not signature:
-            continue
-        entries[sha] = (sha, clean_family(signature, "MALWAREBAZAAR"), "MALWARE")
+def make_entries(mb: list[dict], tf: list[dict] | None = None,
+                 urlhaus: list[dict] | None = None, feodo: list[dict] | None = None,
+                 now: int | None = None) -> list[Indicator]:
+    now = int(now if now is not None else time.time())
+    entries: dict[tuple[str, str], Indicator] = {}
+    for row in mb:
+        if isinstance(row, dict) and row.get("signature"):
+            seen = parse_time(row.get("first_seen"), now)
+            add(entries, "SHA256", row.get("sha256_hash"), row.get("signature"),
+                "MALWARE", "MALWAREBAZAAR", 100, seen, now + VALIDITY)
 
-    # ThreatFox supplies malware_samples attached to recent IOCs. Import only
-    # their SHA-256 metadata and family label; never retrieve sample content.
-    for ioc in threatfox_data or []:
-        if not isinstance(ioc, dict):
+    type_map = {
+        "sha256_hash": "SHA256", "url": "URL", "domain": "DOMAIN",
+        "ip": "IPV4", "ipv4": "IPV4", "ip:port": "IP_PORT",
+    }
+    for row in tf or []:
+        if not isinstance(row, dict):
             continue
-        raw_family = str(ioc.get("malware") or ioc.get("malware_printable") or "").strip()
-        if not raw_family:
-            continue
-        samples = ioc.get("malware_samples")
-        if not isinstance(samples, list):
-            continue
-        for sample in samples:
-            if not isinstance(sample, dict):
-                continue
-            sha = str(sample.get("sha256_hash", "")).lower()
-            if not re.fullmatch(r"[0-9a-f]{64}", sha):
-                continue
-            # Prefer MalwareBazaar's family label when the same hash occurs
-            # in both feeds.
-            entries.setdefault(
-                sha,
-                (sha, clean_family(raw_family, "THREATFOX"), "MALWARE"),
-            )
+        source_type = str(row.get("ioc_type", "")).lower()
+        kind = type_map.get(source_type)
+        seen = parse_time(row.get("first_seen"), now)
+        try:
+            confidence = max(0, min(100, int(row.get("confidence_level", 50))))
+        except (TypeError, ValueError):
+            confidence = 50
+        malware = row.get("malware_printable") or row.get("malware") or "UNCLASSIFIED"
+        if kind:
+            add(entries, kind, row.get("ioc"), malware,
+                "MALWARE" if kind == "SHA256" else "SUSPICIOUS",
+                "THREATFOX", confidence, seen, now + VALIDITY)
+        for sample in row.get("malware_samples") or []:
+            if isinstance(sample, dict):
+                add(entries, "SHA256", sample.get("sha256_hash"), malware, "MALWARE",
+                    "THREATFOX", confidence, seen, now + VALIDITY)
 
-    if not entries:
-        fail("The threat sources returned no valid SHA-256 malware indicators.")
-    return [entries[key] for key in sorted(entries)[:MAX_ENTRIES]]
+    for row in urlhaus or []:
+        if isinstance(row, dict) and str(row.get("url_status", "")).lower() in {"online", "active"}:
+            seen = parse_time(row.get("dateadded"), now)
+            add(entries, "URL", row.get("url"), row.get("threat") or "MALWARE_DOWNLOAD",
+                "MALWARE", "URLHAUS", 95, seen, now + 24 * 60 * 60)
+
+    for row in feodo or []:
+        if isinstance(row, dict) and str(row.get("status", "")).lower() == "online":
+            seen = parse_time(row.get("first_seen"), now)
+            add(entries, "IPV4", row.get("ip_address"), row.get("malware") or "UNCLASSIFIED",
+                "SUSPICIOUS", "FEODO_TRACKER", 95, seen, now + 24 * 60 * 60)
+    return list(entries.values())
 
 
-def load_private_key(raw_pem: str):
+def select_entries(entries: list[Indicator]) -> tuple[list[Indicator], bool]:
+    output: list[Indicator] = []
+    truncated = False
+    for kind, limit in TYPE_LIMITS.items():
+        group = [entry for entry in entries if entry.kind == kind]
+        group.sort(key=lambda e: (-e.confidence, -e.expires_at, e.value))
+        truncated = truncated or len(group) > limit
+        output.extend(group[:limit])
+    output.sort(key=lambda e: (e.kind, e.value))
+    if len(output) > MAX_ENTRIES:
+        output = output[:MAX_ENTRIES]
+        truncated = True
+    return output, truncated
+
+
+def encode_value(value: str) -> str:
+    return base64.urlsafe_b64encode(value.encode()).decode("ascii").rstrip("=")
+
+
+def serialize_feed(entries: list[Indicator], key, version: int, now: int, truncated: bool) -> bytes:
+    expires = now + VALIDITY
+    counts = {source: 0 for source in SOURCES}
+    for entry in entries:
+        for source in entry.sources:
+            counts[source] += 1
+    lines = [
+        "ALAI-THREAT-FEED/2", "key_id=" + KEY_ID, "version=" + str(version),
+        "issued_at=" + str(now), "expires_at=" + str(expires),
+    ]
+    for source in sorted(counts):
+        lines.append("source_count=" + source + "|" + str(counts[source]))
+    lines.append("feed_truncated=" + ("1" if truncated else "0"))
+    for entry in sorted(entries, key=lambda e: (e.kind, e.value)):
+        lines.append("entry=" + "|".join((
+            entry.kind, encode_value(entry.value), entry.family, entry.classification,
+            ",".join(sorted(entry.sources)), str(entry.confidence),
+            str(min(entry.first_seen, now)), str(min(entry.expires_at, expires)),
+        )))
+    payload = ("\n".join(lines) + "\n").encode()
+    signature = key.sign(payload, ec.ECDSA(hashes.SHA256()))
+    result = payload + ("signature=" + base64.b64encode(signature).decode() + "\n").encode()
+    if len(result) > MAX_FEED_BYTES:
+        fail("Generated feed exceeds Android's 4 MiB limit.")
+    return result
+
+
+def load_private_key(raw: str):
     try:
-        key = serialization.load_pem_private_key(raw_pem.encode("utf-8"), password=None)
+        key = serialization.load_pem_private_key(raw.encode(), password=None)
     except Exception as exc:
-        fail("ALAI_FEED_SIGNING_KEY_PEM is not a valid unencrypted PEM private key: " + str(exc))
+        fail("ALAI_FEED_SIGNING_KEY_PEM is invalid: " + str(exc))
     if not isinstance(key, ec.EllipticCurvePrivateKey) or not isinstance(key.curve, ec.SECP256R1):
-        fail("Feed signing key must be an ECDSA P-256 private key.")
+        fail("Feed signing key must be ECDSA P-256.")
     derived = key.public_key().public_bytes(
-        serialization.Encoding.DER,
-        serialization.PublicFormat.SubjectPublicKeyInfo,
+        serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo
     )
-    derived_b64 = base64.b64encode(derived).decode("ascii")
-    if derived_b64 != PUBLIC_KEY_B64:
-        actual_fp = hashlib.sha256(derived).hexdigest()
-        expected_der = base64.b64decode(PUBLIC_KEY_B64, validate=True)
-        expected_fp = hashlib.sha256(expected_der).hexdigest()
-        print("Configured key public fingerprint (SHA-256): " + actual_fp, file=sys.stderr)
-        print("App-pinned public fingerprint (SHA-256): " + expected_fp, file=sys.stderr)
-        fail("Private key does not match the public key pinned in the Android app.")
+    actual = base64.b64encode(derived).decode()
+    if actual != PUBLIC_KEY_B64:
+        print("Configured public-key SHA-256: " + hashlib.sha256(derived).hexdigest(), file=sys.stderr)
+        fail("Private signing key does not match Android's pinned public key.")
     return key
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", required=True)
-    parser.add_argument(
-        "--check-key-only",
-        action="store_true",
-        help="Validate that the configured signing private key matches the app-pinned public key; do not contact providers or publish a feed.",
-    )
     parser.add_argument("--previous-version")
+    parser.add_argument("--check-key-only", action="store_true")
     args = parser.parse_args()
 
-    auth_key = os.environ.get("MALWAREBAZAAR_AUTH_KEY", "").strip()
-    threatfox_auth_key = os.environ.get("THREATFOX_AUTH_KEY", "").strip()
-    private_pem = os.environ.get("ALAI_FEED_SIGNING_KEY_PEM", "")
-    commercial_ok = os.environ.get("ALAI_ABUSECH_COMMERCIAL_USE_APPROVED", "").strip().lower()
-
-    if not private_pem:
-        fail("Missing ALAI_FEED_SIGNING_KEY_PEM GitHub Actions secret.")
-    key = load_private_key(private_pem)
+    raw_key = os.environ.get("ALAI_FEED_SIGNING_KEY_PEM", "")
+    if not raw_key:
+        fail("Missing ALAI_FEED_SIGNING_KEY_PEM secret.")
+    key = load_private_key(raw_key)
     if args.check_key_only:
-        print("Signing-key check: MATCH. The configured private key corresponds to the public key pinned in Android.")
-        print("No provider API was contacted and no threat feed was generated or published.")
+        print("Signing key matches. No provider was contacted; no feed generated.")
         return
 
-    if not auth_key:
-        fail("Missing MALWAREBAZAAR_AUTH_KEY GitHub Actions secret.")
-    if commercial_ok != "true":
-        fail("Set ALAI_ABUSECH_COMMERCIAL_USE_APPROVED=true only after confirming the current commercial-use terms.")
+    abusech_ok = os.environ.get("ALAI_ABUSECH_COMMERCIAL_USE_APPROVED", "").lower() == "true"
+    mb_key = os.environ.get("MALWAREBAZAAR_AUTH_KEY", "").strip()
+    tf_key = os.environ.get("THREATFOX_AUTH_KEY", "").strip()
+    urlhaus_key = os.environ.get("URLHAUS_AUTH_KEY", "").strip()
+    urlhaus_ok = os.environ.get("ALAI_URLHAUS_COMMERCIAL_USE_APPROVED", "").lower() == "true"
+    feodo_enabled = os.environ.get("ALAI_ENABLE_FEODO_TRACKER", "true").lower() == "true"
 
-    malwarebazaar_data = fetch_recent_detections(auth_key)
-    threatfox_data = fetch_threatfox_recent_samples(threatfox_auth_key) if threatfox_auth_key else []
-    entries = make_entries(malwarebazaar_data, threatfox_data)
+    if not abusech_ok:
+        fail("MalwareBazaar/ThreatFox require verified commercial-use entitlement before publishing.")
+    if not mb_key:
+        fail("Missing MALWAREBAZAAR_AUTH_KEY.")
+    if urlhaus_key and not (abusech_ok and urlhaus_ok):
+        fail("URLhaus key is configured but separate URLhaus commercial approval is missing.")
+    if urlhaus_ok and not urlhaus_key:
+        fail("URLhaus approval is set but URLHAUS_AUTH_KEY is missing.")
+
     now = int(time.time())
-    version = max(now, previous_version(args.previous_version) + 1)
+    mb = fetch_malwarebazaar(mb_key)
+    tf = fetch_threatfox(tf_key)
+    uh = fetch_urlhaus(urlhaus_key)
+    feodo = fetch_feodo() if feodo_enabled else []
+    entries, truncated = select_entries(make_entries(mb, tf, uh, feodo, now))
+    if not entries:
+        fail("No valid indicators from the configured sources; refusing to publish an empty feed.")
 
-    signed_payload = FEED_HEADER + "\n"
-    signed_payload += "key_id=" + KEY_ID + "\n"
-    signed_payload += "version=" + str(version) + "\n"
-    signed_payload += "issued_at=" + str(now) + "\n"
-    signed_payload += "expires_at=" + str(now + VALIDITY_SECONDS) + "\n"
-    for sha, family, classification in entries:
-        signed_payload += "entry=" + sha + "|" + family + "|" + classification + "\n"
-
-    payload_bytes = signed_payload.encode("utf-8")
-    signature = key.sign(payload_bytes, ec.ECDSA(hashes.SHA256()))
-    final_bytes = payload_bytes + (
-        "signature=" + base64.b64encode(signature).decode("ascii") + "\n"
-    ).encode("ascii")
-
+    previous = 0
+    if args.previous_version:
+        try:
+            previous = int(Path(args.previous_version).read_text().strip() or "0")
+        except FileNotFoundError:
+            previous = 0
+        except Exception as exc:
+            fail("Could not read prior feed version: " + str(exc))
+    version = max(now, previous + 1)
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_bytes(final_bytes)
-    print("Published-feed candidate: version=" + str(version) + " indicators=" + str(len(entries)))
-    sources = "MalwareBazaar recent_detections"
-    if threatfox_auth_key:
-        sources += " + ThreatFox recent IOC-linked malware_samples"
-    print("Sources: " + sources + "; SHA-256/family metadata only; no samples downloaded.")
+    output.write_bytes(serialize_feed(entries, key, version, now, truncated))
+
+    counts = {source: 0 for source in SOURCES}
+    for entry in entries:
+        for source in entry.sources:
+            counts[source] += 1
+    print("Signed feed candidate: version=" + str(version) + " indicators=" + str(len(entries))
+          + " truncated=" + str(truncated).lower())
+    print("Source coverage: " + json.dumps(counts, sort_keys=True))
+    print("Metadata only; no malware samples or payloads downloaded.")
 
 
 if __name__ == "__main__":

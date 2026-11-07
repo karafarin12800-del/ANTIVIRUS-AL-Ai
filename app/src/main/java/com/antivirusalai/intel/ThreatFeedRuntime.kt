@@ -13,6 +13,10 @@ import javax.net.ssl.HttpsURLConnection
  * Loads only feeds authenticated by the app-pinned release public key.
  * No file contents, samples, or private data are sent to the feed publisher.
  */
+enum class ThreatFeedFreshness { UP_TO_DATE, STALE, UNAVAILABLE }
+
+data class ThreatFeedStatus(val freshness: ThreatFeedFreshness, val detailCode: String? = null)
+
 object ThreatFeedRuntime {
     const val RELEASE_KEY_ID = "alai-release-2026"
     const val FEED_URL =
@@ -47,6 +51,26 @@ object ThreatFeedRuntime {
         )
 
     /** Null means no valid, current signed feed is available; it never means clean. */
+    /**
+     * Freshness of the intelligence snapshot is separate from a scan verdict.
+     * An absent, invalid or expired feed must never be interpreted as clean.
+     */
+    fun status(context: Context): ThreatFeedStatus {
+        val file = File(context.applicationContext.filesDir, "threat-intelligence/current.alfeed")
+        if (!file.isFile) return ThreatFeedStatus(ThreatFeedFreshness.UNAVAILABLE, "NO_CACHED_FEED")
+        val result = runCatching { store(context).loadCurrent() }
+        if (result.getOrNull() != null) return ThreatFeedStatus(ThreatFeedFreshness.UP_TO_DATE)
+        val validation = result.exceptionOrNull() as? FeedValidationException
+        return if (validation?.code == FeedValidationCode.FEED_EXPIRED) {
+            ThreatFeedStatus(ThreatFeedFreshness.STALE, validation.code.name)
+        } else {
+            ThreatFeedStatus(
+                ThreatFeedFreshness.UNAVAILABLE,
+                validation?.code?.name ?: "FEED_VALIDATION_FAILED"
+            )
+        }
+    }
+
     fun lookup(context: Context, sha256: String): ThreatIndicator? {
         if (!hashPattern.matches(sha256)) return null
         return currentFeed(context)?.indicators?.get(sha256.lowercase())

@@ -17,10 +17,27 @@ import java.util.Base64
 
 enum class ThreatClassification { MALWARE, PUA, SUSPICIOUS }
 
+enum class ThreatIndicatorType { URL, DOMAIN, IPV4, IP_PORT }
+
 data class ThreatIndicator(
     val sha256: String,
     val familyId: String,
-    val classification: ThreatClassification
+    val classification: ThreatClassification,
+    val sources: Set<String> = setOf("LEGACY"),
+    val confidence: Int = 0,
+    val firstSeenAtEpochSeconds: Long = 0L,
+    val expiresAtEpochSeconds: Long = 0L
+)
+
+data class ThreatNetworkIndicator(
+    val type: ThreatIndicatorType,
+    val value: String,
+    val familyId: String,
+    val classification: ThreatClassification,
+    val sources: Set<String>,
+    val confidence: Int,
+    val firstSeenAtEpochSeconds: Long,
+    val expiresAtEpochSeconds: Long
 )
 
 data class SignedThreatFeed(
@@ -28,7 +45,10 @@ data class SignedThreatFeed(
     val version: Long,
     val issuedAtEpochSeconds: Long,
     val expiresAtEpochSeconds: Long,
-    val indicators: Map<String, ThreatIndicator>
+    val indicators: Map<String, ThreatIndicator>,
+    val networkIndicators: Map<String, ThreatNetworkIndicator> = emptyMap(),
+    val sourceCounts: Map<String, Int> = emptyMap(),
+    val truncated: Boolean = false
 )
 
 enum class FeedValidationCode {
@@ -104,19 +124,19 @@ class EcdsaP256KeyringVerifier(keys: Map<String, PublicKey>) : FeedSignatureVeri
 
 object SignedThreatFeedParser {
     const val FORMAT_HEADER = "ALAI-THREAT-FEED/1"
-    const val MAX_FEED_BYTES = 2 * 1024 * 1024
+    const val MULTI_SOURCE_FORMAT_HEADER = "ALAI-THREAT-FEED/2"
+    const val MAX_FEED_BYTES = 4 * 1024 * 1024
     const val MAX_INDICATORS = 20_000
     const val MAX_VALIDITY_SECONDS = 30L * 24L * 60L * 60L
     private const val ALLOWED_CLOCK_SKEW_SECONDS = 5L * 60L
     private val KEY_ID_PATTERN = Regex("[A-Za-z0-9._-]{1,40}")
     private val HASH_PATTERN = Regex("[0-9a-f]{64}")
     private val FAMILY_PATTERN = Regex("[A-Z0-9][A-Z0-9._-]{0,79}")
+    private val SOURCE_PATTERN = Regex("[A-Z0-9][A-Z0-9._-]{0,39}")
     private val POSITIVE_LONG_PATTERN = Regex("[1-9][0-9]{0,18}")
+    private val CONFIDENCE_PATTERN = Regex("(?:0|[1-9][0-9]{0,2})")
+    private val DOMAIN_PATTERN = Regex("(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?")
 
-    /**
-     * Feed layout is strict and canonical. The signature covers every byte up to,
-     * but not including, the final signature= line.
-     */
     fun parse(
         bytes: ByteArray,
         verifier: FeedSignatureVerifier,
@@ -124,138 +144,210 @@ object SignedThreatFeedParser {
         minimumVersionExclusive: Long = 0L
     ): SignedThreatFeed {
         if (bytes.isEmpty() || bytes.size > MAX_FEED_BYTES) {
-            fail(FeedValidationCode.FEED_TOO_LARGE, "The threat feed is empty or exceeds 2 MiB.")
+            fail(FeedValidationCode.FEED_TOO_LARGE, "Threat feed is empty or exceeds 4 MiB.")
         }
-
         val text = try {
             StandardCharsets.UTF_8.newDecoder()
                 .onMalformedInput(CodingErrorAction.REPORT)
                 .onUnmappableCharacter(CodingErrorAction.REPORT)
-                .decode(java.nio.ByteBuffer.wrap(bytes))
-                .toString()
+                .decode(java.nio.ByteBuffer.wrap(bytes)).toString()
         } catch (error: CharacterCodingException) {
-            throw FeedValidationException(
-                FeedValidationCode.INVALID_UTF8,
-                "The threat feed is not valid UTF-8.",
-                error
-            )
+            throw FeedValidationException(FeedValidationCode.INVALID_UTF8, "Feed is not valid UTF-8.", error)
         }
-
         if (text.contains('\r') || !text.endsWith('\n')) {
-            fail(FeedValidationCode.INVALID_STRUCTURE, "The feed must use LF line endings and end with a newline.")
+            fail(FeedValidationCode.INVALID_STRUCTURE, "Feed must use LF line endings and end with a newline.")
         }
-
         val lines = text.dropLast(1).split('\n')
-        if (lines.size < 5) {
-            fail(FeedValidationCode.INVALID_STRUCTURE, "The feed is missing required fields.")
-        }
+        if (lines.size < 5) fail(FeedValidationCode.INVALID_STRUCTURE, "Feed is missing required fields.")
+        val legacy = lines[0] == FORMAT_HEADER
+        val multi = lines[0] == MULTI_SOURCE_FORMAT_HEADER
+        if (!legacy && !multi) fail(FeedValidationCode.INVALID_STRUCTURE, "Unsupported threat-feed format.")
 
         val signatureLine = lines.last()
-        if (!signatureLine.startsWith("signature=")) {
-            fail(FeedValidationCode.INVALID_STRUCTURE, "The signature must be the final feed line.")
-        }
-        val signatureText = signatureLine.removePrefix("signature=")
-        if (signatureText.isEmpty()) {
-            fail(FeedValidationCode.INVALID_STRUCTURE, "The feed signature is missing.")
-        }
+        if (!signatureLine.startsWith("signature=")) fail(FeedValidationCode.INVALID_STRUCTURE, "Signature must be final line.")
         val signatureBytes = try {
-            Base64.getDecoder().decode(signatureText)
+            Base64.getDecoder().decode(signatureLine.removePrefix("signature="))
         } catch (error: IllegalArgumentException) {
-            throw FeedValidationException(
-                FeedValidationCode.INVALID_STRUCTURE,
-                "The feed signature is not valid Base64.",
-                error
-            )
+            throw FeedValidationException(FeedValidationCode.INVALID_STRUCTURE, "Signature is not valid Base64.", error)
         }
-
-        val signedPayload = lines.dropLast(1).joinToString(separator = "\n", postfix = "\n")
-            .toByteArray(StandardCharsets.UTF_8)
-
-        // Read only the key id needed to choose a trusted key; all fields are authenticated below.
-        if (lines[0] != FORMAT_HEADER || !lines[1].startsWith("key_id=")) {
-            fail(FeedValidationCode.INVALID_STRUCTURE, "Unsupported feed format or missing key identifier.")
-        }
+        val signedPayload = lines.dropLast(1).joinToString("\n", postfix = "\n").toByteArray(StandardCharsets.UTF_8)
+        if (!lines[1].startsWith("key_id=")) fail(FeedValidationCode.INVALID_STRUCTURE, "Missing key identifier.")
         val keyId = lines[1].removePrefix("key_id=")
-        if (!KEY_ID_PATTERN.matches(keyId)) {
-            fail(FeedValidationCode.INVALID_FIELD, "The signing key identifier is invalid.")
-        }
+        if (!KEY_ID_PATTERN.matches(keyId)) fail(FeedValidationCode.INVALID_FIELD, "Invalid key identifier.")
         if (!verifier.verify(keyId, signedPayload, signatureBytes)) {
-            fail(
-                FeedValidationCode.INVALID_SIGNATURE,
-                "The feed signature is invalid or the signing key is not trusted."
-            )
+            fail(FeedValidationCode.INVALID_SIGNATURE, "Signature invalid or key untrusted.")
         }
 
-        if (lines.size < 5 || lines[0] != FORMAT_HEADER) {
-            fail(FeedValidationCode.INVALID_STRUCTURE, "The feed header is invalid.")
-        }
         val version = parsePositiveLong(lines[2], "version=")
-        val issuedAt = parsePositiveLong(lines[3], "issued_at=")
-        val expiresAt = parsePositiveLong(lines[4], "expires_at=")
-
-        if (version <= minimumVersionExclusive) {
-            fail(FeedValidationCode.VERSION_ROLLBACK, "The feed version is not newer than the stored version.")
+        val issued = parsePositiveLong(lines[3], "issued_at=")
+        val expires = parsePositiveLong(lines[4], "expires_at=")
+        if (version <= minimumVersionExclusive) fail(FeedValidationCode.VERSION_ROLLBACK, "Feed version rollback.")
+        if (issued > nowEpochSeconds + ALLOWED_CLOCK_SKEW_SECONDS) {
+            fail(FeedValidationCode.FEED_ISSUED_IN_FUTURE, "Feed issue time is in the future.")
         }
-        if (issuedAt > nowEpochSeconds + ALLOWED_CLOCK_SKEW_SECONDS) {
-            fail(FeedValidationCode.FEED_ISSUED_IN_FUTURE, "The feed issue time is too far in the future.")
-        }
-        if (expiresAt <= nowEpochSeconds) {
-            fail(FeedValidationCode.FEED_EXPIRED, "The signed threat feed has expired.")
-        }
-        if (expiresAt <= issuedAt || expiresAt - issuedAt > MAX_VALIDITY_SECONDS) {
-            fail(FeedValidationCode.INVALID_FEED_LIFETIME, "The feed validity period is invalid.")
+        if (expires <= nowEpochSeconds) fail(FeedValidationCode.FEED_EXPIRED, "Feed has expired.")
+        if (expires <= issued || expires - issued > MAX_VALIDITY_SECONDS) {
+            fail(FeedValidationCode.INVALID_FEED_LIFETIME, "Feed lifetime is invalid.")
         }
 
-        val indicators = LinkedHashMap<String, ThreatIndicator>()
-        var previousHash: String? = null
-        val entryLines = lines.subList(5, lines.lastIndex)
-        if (entryLines.size > MAX_INDICATORS) {
-            fail(FeedValidationCode.TOO_MANY_INDICATORS, "The feed contains too many indicators.")
+        var cursor = 5
+        val sourceCounts = linkedMapOf<String, Int>()
+        var truncated = false
+        if (multi) {
+            var previousSource: String? = null
+            while (cursor < lines.lastIndex && lines[cursor].startsWith("source_count=")) {
+                val fields = lines[cursor].removePrefix("source_count=").split('|')
+                if (fields.size != 2) fail(FeedValidationCode.INVALID_STRUCTURE, "Invalid source-count field.")
+                val source = fields[0]
+                if (!SOURCE_PATTERN.matches(source) || (previousSource != null && source <= previousSource)) {
+                    fail(FeedValidationCode.INVALID_FIELD, "Source identifiers must be sorted and unique.")
+                }
+                val count = fields[1].toIntOrNull()
+                if (count == null || count !in 0..MAX_INDICATORS) {
+                    fail(FeedValidationCode.INVALID_FIELD, "Invalid source count.")
+                }
+                sourceCounts[source] = count
+                previousSource = source
+                cursor++
+            }
+            if (sourceCounts.isEmpty() || cursor >= lines.lastIndex || !lines[cursor].startsWith("feed_truncated=")) {
+                fail(FeedValidationCode.INVALID_STRUCTURE, "Incomplete multi-source metadata.")
+            }
+            truncated = when (lines[cursor].removePrefix("feed_truncated=")) {
+                "0" -> false
+                "1" -> true
+                else -> fail(FeedValidationCode.INVALID_FIELD, "Invalid truncation marker.")
+            }
+            cursor++
         }
+
+        val hashes = LinkedHashMap<String, ThreatIndicator>()
+        val network = LinkedHashMap<String, ThreatNetworkIndicator>()
+        val observedCounts = sourceCounts.keys.associateWith { 0 }.toMutableMap()
+        var previousKey: String? = null
+        val entryLines = lines.subList(cursor, lines.lastIndex)
+        if (entryLines.size > MAX_INDICATORS) fail(FeedValidationCode.TOO_MANY_INDICATORS, "Too many indicators.")
 
         for (line in entryLines) {
-            if (!line.startsWith("entry=")) {
-                fail(FeedValidationCode.INVALID_STRUCTURE, "Unexpected data in the indicator section.")
-            }
+            if (!line.startsWith("entry=")) fail(FeedValidationCode.INVALID_STRUCTURE, "Unexpected entry data.")
             val fields = line.removePrefix("entry=").split('|')
-            if (fields.size != 3) {
-                fail(FeedValidationCode.INVALID_INDICATOR, "An indicator entry has an invalid field count.")
+            val kind: String
+            val value: String
+            val family: String
+            val classification: ThreatClassification
+            val sources: Set<String>
+            val confidence: Int
+            val firstSeen: Long
+            val itemExpires: Long
+            if (legacy) {
+                if (fields.size != 3) fail(FeedValidationCode.INVALID_INDICATOR, "Invalid legacy entry.")
+                kind = "SHA256"
+                value = fields[0]
+                family = fields[1]
+                classification = ThreatClassification.entries.firstOrNull { it.name == fields[2] }
+                    ?: fail(FeedValidationCode.INVALID_INDICATOR, "Invalid classification.")
+                sources = setOf("LEGACY")
+                confidence = 0
+                firstSeen = issued
+                itemExpires = expires
+            } else {
+                if (fields.size != 8) fail(FeedValidationCode.INVALID_INDICATOR, "Invalid typed entry.")
+                kind = fields[0]
+                val encoded = fields[1]
+                val decoded = try {
+                    Base64.getUrlDecoder().decode(encoded)
+                } catch (error: IllegalArgumentException) {
+                    throw FeedValidationException(FeedValidationCode.INVALID_INDICATOR, "IOC value is not Base64URL.", error)
+                }
+                if (Base64.getUrlEncoder().withoutPadding().encodeToString(decoded) != encoded) {
+                    fail(FeedValidationCode.INVALID_INDICATOR, "IOC value encoding is not canonical.")
+                }
+                value = try {
+                    StandardCharsets.UTF_8.newDecoder()
+                        .onMalformedInput(CodingErrorAction.REPORT)
+                        .onUnmappableCharacter(CodingErrorAction.REPORT)
+                        .decode(java.nio.ByteBuffer.wrap(decoded)).toString()
+                } catch (error: CharacterCodingException) {
+                    throw FeedValidationException(FeedValidationCode.INVALID_INDICATOR, "IOC value is not UTF-8.", error)
+                }
+                family = fields[2]
+                classification = ThreatClassification.entries.firstOrNull { it.name == fields[3] }
+                    ?: fail(FeedValidationCode.INVALID_INDICATOR, "Invalid IOC classification.")
+                val sourceParts = fields[4].split(',')
+                if (sourceParts.isEmpty() || sourceParts.any { !SOURCE_PATTERN.matches(it) } ||
+                    sourceParts.distinct().size != sourceParts.size || sourceParts != sourceParts.sorted()
+                ) fail(FeedValidationCode.INVALID_FIELD, "Invalid IOC provenance.")
+                sources = sourceParts.toSet()
+                if (sources.any { it !in sourceCounts }) fail(FeedValidationCode.INVALID_FIELD, "Undeclared IOC source.")
+                if (!CONFIDENCE_PATTERN.matches(fields[5])) fail(FeedValidationCode.INVALID_FIELD, "Invalid confidence.")
+                confidence = fields[5].toIntOrNull() ?: fail(FeedValidationCode.INVALID_FIELD, "Invalid confidence.")
+                if (confidence > 100) fail(FeedValidationCode.INVALID_FIELD, "Confidence must be 0..100.")
+                firstSeen = parsePositiveLong("first_seen=" + fields[6], "first_seen=")
+                itemExpires = parsePositiveLong("expires_at=" + fields[7], "expires_at=")
+                if (firstSeen > nowEpochSeconds + ALLOWED_CLOCK_SKEW_SECONDS ||
+                    itemExpires <= nowEpochSeconds || itemExpires <= firstSeen || itemExpires > expires
+                ) fail(FeedValidationCode.INVALID_FIELD, "Invalid IOC timestamps.")
             }
-            val hash = fields[0]
-            val familyId = fields[1]
-            val classification = ThreatClassification.entries.firstOrNull { it.name == fields[2] }
-            if (!HASH_PATTERN.matches(hash) || !FAMILY_PATTERN.matches(familyId) || classification == null) {
-                fail(FeedValidationCode.INVALID_INDICATOR, "An indicator contains an invalid hash, family, or class.")
+            if (!FAMILY_PATTERN.matches(family)) fail(FeedValidationCode.INVALID_INDICATOR, "Invalid family identifier.")
+            val key = kind + "|" + value
+            if (previousKey != null && key <= previousKey) {
+                fail(FeedValidationCode.DUPLICATE_OR_UNSORTED_INDICATOR, "Entries must be uniquely sorted by type and value.")
             }
-            if (previousHash != null && hash <= previousHash) {
-                fail(
-                    FeedValidationCode.DUPLICATE_OR_UNSORTED_INDICATOR,
-                    "Indicator hashes must be unique and sorted in ascending order."
+            previousKey = key
+
+            if (kind == "SHA256") {
+                if (!HASH_PATTERN.matches(value)) fail(FeedValidationCode.INVALID_INDICATOR, "Invalid SHA-256.")
+                hashes[value] = ThreatIndicator(value, family, classification, sources, confidence, firstSeen, itemExpires)
+            } else {
+                val type = ThreatIndicatorType.entries.firstOrNull { it.name == kind }
+                    ?: fail(FeedValidationCode.INVALID_INDICATOR, "Unsupported IOC type.")
+                if (!validNetworkValue(type, value)) fail(FeedValidationCode.INVALID_INDICATOR, "Invalid network IOC value.")
+                network[type.name + "|" + value] = ThreatNetworkIndicator(
+                    type, value, family, classification, sources, confidence, firstSeen, itemExpires
                 )
             }
-            previousHash = hash
-            indicators[hash] = ThreatIndicator(hash, familyId, classification)
+            if (multi) sources.forEach { observedCounts[it] = (observedCounts[it] ?: 0) + 1 }
         }
-
+        if (multi && observedCounts != sourceCounts) {
+            fail(FeedValidationCode.INVALID_STRUCTURE, "Source counts do not match signed indicators.")
+        }
         return SignedThreatFeed(
-            keyId = keyId,
-            version = version,
-            issuedAtEpochSeconds = issuedAt,
-            expiresAtEpochSeconds = expiresAt,
-            indicators = indicators
+            keyId, version, issued, expires, hashes, network, sourceCounts, truncated
         )
     }
 
+    private fun validNetworkValue(type: ThreatIndicatorType, value: String): Boolean = when (type) {
+        ThreatIndicatorType.URL -> runCatching {
+            val uri = java.net.URI(value)
+            uri.isAbsolute && (uri.scheme.equals("http", true) || uri.scheme.equals("https", true)) &&
+                !uri.host.isNullOrBlank() && uri.rawUserInfo == null && uri.rawFragment == null &&
+                value.length <= 2048 && value.none { it.isWhitespace() || it.code < 0x20 }
+        }.getOrDefault(false)
+        ThreatIndicatorType.DOMAIN -> DOMAIN_PATTERN.matches(value) && !value.contains("..")
+        ThreatIndicatorType.IPV4 -> validIpv4(value)
+        ThreatIndicatorType.IP_PORT -> {
+            val split = value.lastIndexOf(':')
+            if (split <= 0 || split == value.lastIndex) false else {
+                val port = value.substring(split + 1).toIntOrNull()
+                validIpv4(value.substring(0, split)) && port != null && port in 1..65535
+            }
+        }
+    }
+
+    private fun validIpv4(value: String): Boolean {
+        val parts = value.split('.')
+        if (parts.size != 4) return false
+        return parts.all { part ->
+            part.isNotEmpty() && (part == "0" || !part.startsWith('0')) &&
+                part.all { it in '0'..'9' } && part.toIntOrNull()?.let { it in 0..255 } == true
+        }
+    }
+
     private fun parsePositiveLong(line: String, prefix: String): Long {
-        if (!line.startsWith(prefix)) {
-            fail(FeedValidationCode.INVALID_STRUCTURE, "A required numeric field is missing.")
-        }
+        if (!line.startsWith(prefix)) fail(FeedValidationCode.INVALID_STRUCTURE, "Required numeric field missing.")
         val raw = line.removePrefix(prefix)
-        if (!POSITIVE_LONG_PATTERN.matches(raw)) {
-            fail(FeedValidationCode.INVALID_FIELD, "A numeric feed field is invalid.")
-        }
-        return raw.toLongOrNull()
-            ?: fail(FeedValidationCode.INVALID_FIELD, "A numeric feed field is out of range.")
+        if (!POSITIVE_LONG_PATTERN.matches(raw)) fail(FeedValidationCode.INVALID_FIELD, "Invalid numeric field.")
+        return raw.toLongOrNull() ?: fail(FeedValidationCode.INVALID_FIELD, "Numeric field out of range.")
     }
 
     private fun fail(code: FeedValidationCode, message: String): Nothing =
