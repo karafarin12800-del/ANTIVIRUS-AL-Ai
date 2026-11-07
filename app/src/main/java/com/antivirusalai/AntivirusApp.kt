@@ -3178,18 +3178,6 @@ private fun IconArt(
         HighQualityShieldIcon(tint = tint, size = displaySize)
         return
     }
-    val artworkIndex = when (name) {
-        "biohazard", "malware" -> 1
-        "robot" -> 6
-        "scan_clock" -> 7
-        "shield_lightning" -> 11
-        "shield_location" -> 12
-        else -> null
-    }
-    if (artworkIndex != null) {
-        AssetArt(artworkIndex, displaySize)
-        return
-    }
     Canvas(Modifier.size(displaySize)) {
         val sx = this.size.width / 24f
         val sy = this.size.height / 24f
@@ -3206,6 +3194,78 @@ private fun IconArt(
             drawCircle(tint, radius = r * sx, center = point(x, y), style = Stroke(width = sw))
         }
         when (name) {
+            "biohazard", "malware" -> {
+                // Generic microbial threat mark: vector body, core and radial spikes.
+                circle(12f, 12f, 5.8f)
+                circle(12f, 12f, 1.8f)
+                line(12f, 1.8f, 12f, 5.5f); line(12f, 18.5f, 12f, 22.2f)
+                line(1.8f, 12f, 5.5f, 12f); line(18.5f, 12f, 22.2f, 12f)
+                line(4.3f, 4.3f, 7f, 7f); line(17f, 17f, 19.7f, 19.7f)
+                line(19.7f, 4.3f, 17f, 7f); line(7f, 17f, 4.3f, 19.7f)
+                circle(12f, 7.3f, 0.75f); circle(7.7f, 14.5f, 0.75f); circle(16.3f, 14.5f, 0.75f)
+            }
+            "robot" -> {
+                line(12f, 2f, 12f, 4.5f)
+                circle(12f, 2f, 1f)
+                path {
+                    moveTo(5f * sx, 6f * sy)
+                    lineTo(19f * sx, 6f * sy)
+                    quadraticTo(21f * sx, 6f * sy, 21f * sx, 8f * sy)
+                    lineTo(21f * sx, 17f * sy)
+                    quadraticTo(21f * sx, 19f * sy, 19f * sx, 19f * sy)
+                    lineTo(5f * sx, 19f * sy)
+                    quadraticTo(3f * sx, 19f * sy, 3f * sx, 17f * sy)
+                    lineTo(3f * sx, 8f * sy)
+                    quadraticTo(3f * sx, 6f * sy, 5f * sx, 6f * sy)
+                }
+                circle(8f, 11f, 1.1f); circle(16f, 11f, 1.1f)
+                line(8f, 15f, 16f, 15f)
+            }
+            "scan_clock" -> {
+                line(4f, 8f, 4f, 4f); line(4f, 4f, 8f, 4f)
+                line(16f, 4f, 20f, 4f); line(20f, 4f, 20f, 8f)
+                line(4f, 16f, 4f, 20f); line(4f, 20f, 8f, 20f)
+                line(16f, 20f, 20f, 20f); line(20f, 20f, 20f, 16f)
+                circle(12f, 12f, 5.2f)
+                line(12f, 8.5f, 12f, 12f); line(12f, 12f, 15f, 13.5f)
+            }
+            "shield_location" -> {
+                path {
+                    moveTo(12f * sx, 2f * sy)
+                    cubicTo(15f * sx, 3.8f * sy, 18f * sx, 4.6f * sy, 21f * sx, 5.2f * sy)
+                    lineTo(20f * sx, 13f * sy)
+                    cubicTo(19f * sx, 17.5f * sy, 16f * sx, 20.5f * sy, 12f * sx, 22f * sy)
+                    cubicTo(8f * sx, 20.5f * sy, 5f * sx, 17.5f * sy, 4f * sx, 13f * sy)
+                    lineTo(3f * sx, 5.2f * sy)
+                    close()
+                }
+                circle(12f, 10f, 2.1f)
+                path {
+                    moveTo(8f * sx, 12f * sy)
+                    lineTo(12f * sx, 17f * sy)
+                    lineTo(16f * sx, 12f * sy)
+                }
+            }
+            "shield_lightning" -> {
+                path {
+                    moveTo(12f * sx, 2f * sy)
+                    cubicTo(15f * sx, 3.8f * sy, 18f * sx, 4.6f * sy, 21f * sx, 5.2f * sy)
+                    lineTo(20f * sx, 13f * sy)
+                    cubicTo(19f * sx, 17.5f * sy, 16f * sx, 20.5f * sy, 12f * sx, 22f * sy)
+                    cubicTo(8f * sx, 20.5f * sy, 5f * sx, 17.5f * sy, 4f * sx, 13f * sy)
+                    lineTo(3f * sx, 5.2f * sy)
+                    close()
+                }
+                path {
+                    moveTo(13.5f * sx, 6f * sy)
+                    lineTo(9f * sx, 13f * sy)
+                    lineTo(12f * sx, 13f * sy)
+                    lineTo(10.5f * sx, 18f * sy)
+                    lineTo(16f * sx, 10.5f * sy)
+                    lineTo(13f * sx, 10.5f * sy)
+                    close()
+                }
+            }
             "apps" -> {
                 // Four crisp app tiles; drawn as vectors rather than a 32px atlas.
                 path {
