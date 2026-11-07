@@ -20,10 +20,18 @@ class DeviceScanWorker(appContext: Context, parameters: WorkerParameters) : Coro
         val startedAt = inputData.getLong(KEY_STARTED_AT_MS, System.currentTimeMillis())
         ScanRuntime.isActive = true
         return try {
+            setProgress(workDataOf(
+                KEY_DEEP to deep,
+                KEY_STARTED_AT_MS to startedAt,
+                KEY_CURRENT to 0,
+                KEY_TOTAL to 0
+            ))
             setForeground(createForegroundInfo(0, 0))
             val report = DeviceScanEngine.scanDevice(applicationContext, deep) { current, total, name ->
                 val elapsed = (System.currentTimeMillis() - startedAt).coerceAtLeast(0L)
                 setProgress(workDataOf(
+                    KEY_DEEP to deep,
+                    KEY_STARTED_AT_MS to startedAt,
                     KEY_CURRENT to current,
                     KEY_TOTAL to total,
                     KEY_CURRENT_NAME to "$current / $total • $name",
@@ -34,6 +42,7 @@ class DeviceScanWorker(appContext: Context, parameters: WorkerParameters) : Coro
             ScanReportStore.save(applicationContext, deep, report)
             Result.success(workDataOf(
                 KEY_DEEP to deep,
+                KEY_STARTED_AT_MS to startedAt,
                 KEY_CURRENT to report.scannedCount,
                 KEY_TOTAL to report.discoveredFiles,
                 KEY_ELAPSED_MS to (System.currentTimeMillis() - startedAt).coerceAtLeast(0L)
@@ -41,7 +50,11 @@ class DeviceScanWorker(appContext: Context, parameters: WorkerParameters) : Coro
         } catch (cancelled: kotlinx.coroutines.CancellationException) {
             throw cancelled
         } catch (error: Exception) {
-            Result.failure(workDataOf(KEY_ERROR to (error.message ?: "Device scan failed.")))
+            Result.failure(workDataOf(
+                KEY_DEEP to deep,
+                KEY_STARTED_AT_MS to startedAt,
+                KEY_ERROR to (error.message ?: "Device scan failed.")
+            ))
         } finally {
             ScanRuntime.isActive = false
         }
