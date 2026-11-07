@@ -84,13 +84,51 @@ def fetch_recent_detections(auth_key: str) -> list[dict]:
     return data
 
 
-def clean_family(raw: str) -> str:
+def clean_family(raw: str, source: str) -> str:
     value = re.sub(r"[^A-Z0-9._-]+", "_", raw.upper()).strip("._-")
     value = value[:60] or "UNCLASSIFIED"
-    return "MALWAREBAZAAR." + value
+    return source + "." + value
 
 
-def make_entries(data: list[dict]) -> list[tuple[str, str, str]]:
+def fetch_threatfox_recent_samples(auth_key: str) -> list[dict]:
+    """Return metadata for hashes attached to recent, active ThreatFox IOCs."""
+    body = json.dumps({"query": "get_iocs", "days": 7}).encode("utf-8")
+    request = urllib.request.Request(
+        "https://threatfox-api.abuse.ch/api/v1/",
+        data=body,
+        headers={
+            "Auth-Key": auth_key,
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "User-Agent": "ANTIVIRUS-AL-AI-threat-feed-publisher/1.0",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=35) as response:
+            raw = response.read(4 * 1024 * 1024 + 1)
+    except Exception as exc:
+        fail("ThreatFox API request failed: " + str(exc))
+
+    if len(raw) > 4 * 1024 * 1024:
+        fail("ThreatFox response exceeded the 4 MiB safety limit.")
+    try:
+        payload = json.loads(raw.decode("utf-8"))
+    except Exception as exc:
+        fail("Malformed JSON from ThreatFox: " + str(exc))
+
+    if payload.get("query_status") != "ok":
+        fail("ThreatFox did not return query_status=ok: " + str(payload.get("query_status")))
+    data = payload.get("data")
+    if not isinstance(data, list) or not data:
+        fail("ThreatFox returned no recent IOC metadata.")
+    return data
+
+
+def make_entries(
+    data: list[dict],
+    threatfox_data: list[dict] | None = None,
+) -> list[tuple[str, str, str]]:
     entries: dict[str, tuple[str, str, str]] = {}
     for item in data:
         if not isinstance(item, dict):
@@ -99,9 +137,34 @@ def make_entries(data: list[dict]) -> list[tuple[str, str, str]]:
         signature = str(item.get("signature", "")).strip()
         if not re.fullmatch(r"[0-9a-f]{64}", sha) or not signature:
             continue
-        entries[sha] = (sha, clean_family(signature), "MALWARE")
+        entries[sha] = (sha, clean_family(signature, "MALWAREBAZAAR"), "MALWARE")
+
+    # ThreatFox supplies malware_samples attached to recent IOCs. Import only
+    # their SHA-256 metadata and family label; never retrieve sample content.
+    for ioc in threatfox_data or []:
+        if not isinstance(ioc, dict):
+            continue
+        raw_family = str(ioc.get("malware") or ioc.get("malware_printable") or "").strip()
+        if not raw_family:
+            continue
+        samples = ioc.get("malware_samples")
+        if not isinstance(samples, list):
+            continue
+        for sample in samples:
+            if not isinstance(sample, dict):
+                continue
+            sha = str(sample.get("sha256_hash", "")).lower()
+            if not re.fullmatch(r"[0-9a-f]{64}", sha):
+                continue
+            # Prefer MalwareBazaar's family label when the same hash occurs
+            # in both feeds.
+            entries.setdefault(
+                sha,
+                (sha, clean_family(raw_family, "THREATFOX"), "MALWARE"),
+            )
+
     if not entries:
-        fail("The API response had no valid SHA-256 hashes with family labels.")
+        fail("The threat sources returned no valid SHA-256 malware indicators.")
     return [entries[key] for key in sorted(entries)[:MAX_ENTRIES]]
 
 
@@ -128,6 +191,7 @@ def main() -> None:
     args = parser.parse_args()
 
     auth_key = os.environ.get("MALWAREBAZAAR_AUTH_KEY", "").strip()
+    threatfox_auth_key = os.environ.get("THREATFOX_AUTH_KEY", "").strip()
     private_pem = os.environ.get("ALAI_FEED_SIGNING_KEY_PEM", "")
     commercial_ok = os.environ.get("ALAI_ABUSECH_COMMERCIAL_USE_APPROVED", "").strip().lower()
 
@@ -139,7 +203,9 @@ def main() -> None:
         fail("Set ALAI_ABUSECH_COMMERCIAL_USE_APPROVED=true only after confirming the current commercial-use terms.")
     key = load_private_key(private_pem)
 
-    entries = make_entries(fetch_recent_detections(auth_key))
+    malwarebazaar_data = fetch_recent_detections(auth_key)
+    threatfox_data = fetch_threatfox_recent_samples(threatfox_auth_key) if threatfox_auth_key else []
+    entries = make_entries(malwarebazaar_data, threatfox_data)
     now = int(time.time())
     version = max(now, previous_version(args.previous_version) + 1)
 
@@ -161,7 +227,10 @@ def main() -> None:
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_bytes(final_bytes)
     print("Published-feed candidate: version=" + str(version) + " indicators=" + str(len(entries)))
-    print("Source: MalwareBazaar recent_detections; hashes/family labels only; no samples downloaded.")
+    sources = "MalwareBazaar recent_detections"
+    if threatfox_auth_key:
+        sources += " + ThreatFox recent IOC-linked malware_samples"
+    print("Sources: " + sources + "; SHA-256/family metadata only; no samples downloaded.")
 
 
 if __name__ == "__main__":
