@@ -50,7 +50,6 @@ object ThreatFeedRuntime {
             verifier()
         )
 
-    /** Null means no valid, current signed feed is available; it never means clean. */
     /**
      * Freshness of the intelligence snapshot is separate from a scan verdict.
      * An absent, invalid or expired feed must never be interpreted as clean.
@@ -127,7 +126,7 @@ object ThreatFeedRuntime {
                     if (count < 0) break
                     total += count
                     require(total <= SignedThreatFeedParser.MAX_FEED_BYTES) {
-                        "Threat feed exceeds the 2 MiB safety limit."
+                        "Threat feed exceeds the 4 MiB safety limit."
                     }
                     output.write(buffer, 0, count)
                 }
