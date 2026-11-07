@@ -20,7 +20,7 @@ object ThreatFeedRuntime {
 
     // Public X.509 P-256 key only. Never package the matching private signing key.
     private const val RELEASE_PUBLIC_KEY_X509_B64 =
-        "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEAzDOX+WcMzHRxjHa/zC4ZHIUePAR3IxTWtedJPzrM/sov5xWIWbvlnw/WBJczc6Jix9ccV5Z2EqgfKfLaQrNhg=="
+        "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEGlAeEsGIl5WbnNM6s6S5rCmNyj0+72zTaSfviukExrrH69cmg/UEntINqQEZP/ezrhNCYziWUp7Vp5ke89yn0Q="
 
     private val hashPattern = Regex("[0-9a-fA-F]{64}")
     private val cacheLock = Any()
