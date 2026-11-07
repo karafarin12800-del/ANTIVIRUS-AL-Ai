@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.os.Environment
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -103,6 +104,7 @@ import com.antivirusalai.engine.ScanResult
 import com.antivirusalai.engine.ScanVerdict
 import com.antivirusalai.engine.ScanReportStore
 import com.antivirusalai.remediation.QuarantineVault
+import com.antivirusalai.intel.ThreatFeedRuntime
 import com.antivirusalai.remediation.VaultEntry
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
@@ -160,7 +162,36 @@ fun AntivirusApp(inPictureInPicture: Boolean = false) {
     var showStoragePermissionRationale by remember { mutableStateOf(false) }
     var showAbout by remember { mutableStateOf(false) }
     var vaultRefresh by remember { mutableStateOf(0) }
+    var protectionEnabled by remember { mutableStateOf(ProtectionRuntime.isEnabled(context)) }
     val fa = language == "fa"
+
+    val toggleProtection: (Boolean) -> Unit = { enabled ->
+        if (enabled) {
+            try {
+                ProtectionRuntime.setEnabled(context, true)
+                context.startForegroundService(Intent(context, ProtectionService::class.java))
+                protectionEnabled = true
+                notice = tr(
+                    fa,
+                    "محافظت فعال شد؛ اعلان دائمی وضعیت آن را نشان می‌دهد.",
+                    "Protection is active; its ongoing notification shows the service status."
+                )
+            } catch (error: Exception) {
+                ProtectionRuntime.setEnabled(context, false)
+                protectionEnabled = false
+                errorMessage = error.message ?: tr(
+                    fa,
+                    "سرویس محافظت شروع نشد. مجوز اعلان‌ها و تنظیمات Android را بررسی کن.",
+                    "Protection could not start. Check notification permission and Android settings."
+                )
+            }
+        } else {
+            ProtectionRuntime.setEnabled(context, false)
+            context.stopService(Intent(context, ProtectionService::class.java))
+            protectionEnabled = false
+            notice = tr(fa, "محافظت متوقف شد.", "Protection has been stopped.")
+        }
+    }
 
     LaunchedEffect(scanning, scanStartedAtMs) {
         while (scanning) {
@@ -490,6 +521,7 @@ fun AntivirusApp(inPictureInPicture: Boolean = false) {
                                 scanning = scanning,
                                 result = scanResult,
                                 batchReport = batchReport,
+                                protectionEnabled = protectionEnabled,
                                 onOpenScan = { activeTab = MainTab.SCAN.key },
                                 onFileScan = launchFileScan,
                                 onApkScan = launchApkScan,
@@ -531,6 +563,8 @@ fun AntivirusApp(inPictureInPicture: Boolean = false) {
                             MainTab.TOOLS.key -> SecurityToolsScreen(
                                 fa = fa,
                                 result = scanResult,
+                                protectionEnabled = protectionEnabled,
+                                onToggleProtection = toggleProtection,
                                 onOpenScan = { activeTab = MainTab.SCAN.key },
                                 onOpenVault = { activeTab = MainTab.VAULT.key }
                             )
@@ -873,6 +907,7 @@ private fun DashboardScreen(
     scanning: Boolean,
     result: ScanResult?,
     batchReport: FolderScanReport?,
+    protectionEnabled: Boolean,
     onOpenScan: () -> Unit,
     onFileScan: () -> Unit,
     onApkScan: () -> Unit,
@@ -880,6 +915,8 @@ private fun DashboardScreen(
     onOpenStore: () -> Unit,
     onOpenSettings: () -> Unit
 ) {
+    val context = LocalContext.current
+    val currentThreatFeed = ThreatFeedRuntime.currentFeed(context)
     Column(verticalArrangement = Arrangement.spacedBy(23.dp)) {
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(
@@ -964,9 +1001,13 @@ private fun DashboardScreen(
                     modifier = Modifier.weight(1f),
                     icon = "database",
                     title = tr(fa, "بانک تهدید", "Threat intelligence"),
-                    value = tr(fa, "متصل نیست", "Offline"),
-                    detail = tr(fa, "اتصال منتشرکننده تنظیم نشده", "Threat feed not configured"),
-                    tint = ColorWarning
+                    value = if (currentThreatFeed != null) tr(fa, "متصل", "Connected") else tr(fa, "در انتظار اتصال", "Pending"),
+                    detail = if (currentThreatFeed != null) {
+                        tr(fa, "${currentThreatFeed.indicators.size} شاخص · نسخه ${currentThreatFeed.version}", "${currentThreatFeed.indicators.size} indicators · v${currentThreatFeed.version}")
+                    } else {
+                        tr(fa, "بانک امضاشده هنوز منتشر نشده", "Signed feed has not been published")
+                    },
+                    tint = if (currentThreatFeed != null) ColorSuccess else ColorWarning
                 )
             }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -974,9 +1015,13 @@ private fun DashboardScreen(
                     modifier = Modifier.weight(1f),
                     icon = "activity",
                     title = tr(fa, "محافظت بلادرنگ", "Real-time guard"),
-                    value = tr(fa, "غیرفعال", "Inactive"),
-                    detail = tr(fa, "در حال توسعه", "Not implemented yet"),
-                    tint = ColorDanger
+                    value = if (protectionEnabled) tr(fa, "فعال", "Active") else tr(fa, "غیرفعال", "Inactive"),
+                    detail = if (protectionEnabled) {
+                        tr(fa, "پایش فایل‌های قابل‌دسترسی و نصب برنامه‌ها", "Monitoring accessible files and app installs")
+                    } else {
+                        tr(fa, "برای فعال‌سازی به ابزار امنیتی برو", "Enable it from the security toolkit")
+                    },
+                    tint = if (protectionEnabled) ColorSuccess else ColorWarning
                 )
                 StatusCard(
                     modifier = Modifier.weight(1f),
@@ -1813,7 +1858,11 @@ private fun HomeSafetyStatusCard(
                 contentAlignment = Alignment.Center
             ) {
                 // Keep the full shield/biohazard mark inside a larger, uncropped status medallion.
-                IconArt(if (hasFindings) "biohazard" else "status_shield", tint = accent, size = 28.dp)
+                if (hasFindings) {
+                    IconArt("biohazard", tint = accent, size = 28.dp)
+                } else {
+                    HighQualityShieldIcon(tint = accent, size = 48.dp)
+                }
             }
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
@@ -2442,9 +2491,34 @@ private fun DetailLine(label: String, value: String) {
 private fun SecurityToolsScreen(
     fa: Boolean,
     result: ScanResult?,
+    protectionEnabled: Boolean,
+    onToggleProtection: (Boolean) -> Unit,
     onOpenScan: () -> Unit,
     onOpenVault: () -> Unit
 ) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var currentFeed by remember { mutableStateOf(ThreatFeedRuntime.currentFeed(context)) }
+    var refreshingFeed by remember { mutableStateOf(false) }
+    var feedMessage by remember { mutableStateOf<String?>(null) }
+    val fileMonitoringAvailable = Build.VERSION.SDK_INT < Build.VERSION_CODES.R ||
+        Environment.isExternalStorageManager()
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) onToggleProtection(true)
+        else feedMessage = tr(fa, "برای نمایش هشدارهای محافظت، مجوز اعلان لازم است.", "Notification permission is required for visible protection alerts.")
+    }
+    val enableProtection = {
+        if (Build.VERSION.SDK_INT >= 33 &&
+            context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            onToggleProtection(true)
+        }
+    }
+
     Column(verticalArrangement = Arrangement.spacedBy(17.dp)) {
         Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
             EyebrowLabel(tr(fa, "محافظت دستگاه", "DEVICE PROTECTION"))
@@ -2453,7 +2527,72 @@ private fun SecurityToolsScreen(
         }
 
         Card(
-            modifier = Modifier.fillMaxWidth().clickable(onClick = onOpenScan),
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(23.dp),
+            colors = CardDefaults.cardColors(containerColor = SurfaceRaised)
+        ) {
+            Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    HighQualityShieldIcon(
+                        tint = if (protectionEnabled) ColorSuccess else ColorWarning,
+                        size = 42.dp
+                    )
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(tr(fa, "محافظت بلادرنگ", "Real-time protection"), color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                        Text(
+                            if (protectionEnabled) tr(fa, "سرویس محافظت روشن است", "Protection service is running") else tr(fa, "پایش فایل‌ها و برنامه‌های تازه نصب‌شده", "Monitor new files and newly installed apps"),
+                            color = if (protectionEnabled) ColorSuccess else TextSecondary,
+                            fontSize = 11.sp
+                        )
+                    }
+                    StatusBadge(
+                        text = if (protectionEnabled) tr(fa, "فعال", "ON") else tr(fa, "خاموش", "OFF"),
+                        tint = if (protectionEnabled) ColorSuccess else ColorWarning
+                    )
+                }
+                Text(
+                    tr(fa, "هنگام فعال بودن، فایل‌های تازه در پوشه‌های قابل‌دسترسی و برنامه‌های تازه نصب‌شده بررسی می‌شوند. Android دسترسی به داده‌های خصوصی برنامه‌های دیگر و پایش کامل شبکه را به این سرویس نمی‌دهد.", "When enabled, newly written files in accessible folders and newly installed apps are checked. Android does not expose other apps' private data or a system-wide network inspection API to this service."),
+                    color = TextSecondary,
+                    fontSize = 10.sp,
+                    lineHeight = 15.sp
+                )
+                if (!fileMonitoringAvailable) {
+                    Text(
+                        tr(fa, "برای پایش فایل‌های حافظه، مجوز مدیریت همه فایل‌ها را از تنظیمات Android فعال کن. پایش نصب برنامه‌ها مستقل از این مجوز است.", "To monitor shared-storage files, grant All files access in Android settings. App-install monitoring works independently."),
+                        color = ColorWarning,
+                        fontSize = 10.sp,
+                        lineHeight = 15.sp
+                    )
+                    OutlinedButton(
+                        onClick = {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                                val settingsIntent = Intent(
+                                    Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                                    Uri.parse("package:${context.packageName}")
+                                )
+                                runCatching { context.startActivity(settingsIntent) }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text(tr(fa, "تنظیم دسترسی فایل‌ها", "Set file access")) }
+                }
+                Button(
+                    onClick = { if (protectionEnabled) onToggleProtection(false) else enableProtection() },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (protectionEnabled) ColorDanger.copy(alpha = 0.88f) else BrandBlue
+                    )
+                ) {
+                    Text(
+                        if (protectionEnabled) tr(fa, "توقف محافظت", "Stop protection")
+                        else tr(fa, "فعال‌سازی محافظت", "Enable protection")
+                    )
+                }
+            }
+        }
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(23.dp),
             colors = CardDefaults.cardColors(containerColor = SurfaceRaised)
         ) {
@@ -2471,6 +2610,52 @@ private fun SecurityToolsScreen(
                     Text(tr(fa, "اسکن سریع، عمیق و بررسی فایل انتخابی", "Quick, deep and selected-file scans"), color = TextSecondary, fontSize = 11.sp)
                 }
                 IconArt("chevron", tint = BrandTeal, size = 19.dp)
+            }
+        }
+
+        Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = SurfaceBase)) {
+            Column(Modifier.fillMaxWidth().padding(15.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                    IconArt("database", tint = if (currentFeed != null) ColorSuccess else ColorWarning, size = 24.dp)
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Text(tr(fa, "بانک اطلاعات تهدید", "Threat intelligence database"), color = TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        Text(
+                            if (currentFeed != null) tr(fa, "${currentFeed.indicators.size} شاخص معتبر · نسخه ${currentFeed.version}", "${currentFeed.indicators.size} verified indicators · v${currentFeed.version}")
+                            else tr(fa, "هنوز بانک امضاشده معتبری روی دستگاه نیست", "No verified signed feed is installed yet"),
+                            color = TextSecondary,
+                            fontSize = 10.sp
+                        )
+                    }
+                }
+                Text(
+                    tr(fa, "به‌روزرسانی فقط پس از تأیید امضای دیجیتال و اعتبار بانک پذیرفته می‌شود؛ هیچ فایل یا محتوای شخصی برای دریافت بانک ارسال نمی‌شود.", "Updates are accepted only after digital-signature and freshness checks. No personal file or file content is uploaded to retrieve the feed."),
+                    color = TextTertiary,
+                    fontSize = 10.sp,
+                    lineHeight = 15.sp
+                )
+                Button(
+                    enabled = !refreshingFeed,
+                    onClick = {
+                        scope.launch {
+                            refreshingFeed = true
+                            feedMessage = null
+                            try {
+                                currentFeed = ThreatFeedRuntime.refresh(context)
+                                feedMessage = tr(fa, "بانک تهدید با موفقیت تأیید و به‌روزرسانی شد.", "Threat intelligence was verified and updated.")
+                            } catch (error: Exception) {
+                                feedMessage = error.message ?: tr(fa, "به‌روزرسانی بانک انجام نشد.", "Threat feed refresh failed.")
+                            } finally {
+                                refreshingFeed = false
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(if (refreshingFeed) tr(fa, "در حال دریافت و بررسی…", "Downloading and verifying…") else tr(fa, "به‌روزرسانی بانک تهدید", "Update threat database"))
+                }
+                feedMessage?.let {
+                    Text(it, color = if (currentFeed != null) ColorSuccess else ColorWarning, fontSize = 10.sp, lineHeight = 15.sp)
+                }
             }
         }
 
@@ -2881,6 +3066,44 @@ private fun InfoBanner(title: String, body: String, warning: Boolean) {
 }
 
 @Composable
+private fun HighQualityShieldIcon(tint: Color, size: Dp) {
+    Canvas(Modifier.size(size)) {
+        val w = this.size.width
+        val h = this.size.height
+        val shield = Path().apply {
+            moveTo(w * 0.5f, h * 0.055f)
+            cubicTo(w * 0.68f, h * 0.14f, w * 0.82f, h * 0.19f, w * 0.93f, h * 0.22f)
+            lineTo(w * 0.89f, h * 0.57f)
+            cubicTo(w * 0.86f, h * 0.78f, w * 0.70f, h * 0.91f, w * 0.5f, h * 0.965f)
+            cubicTo(w * 0.30f, h * 0.91f, w * 0.14f, h * 0.78f, w * 0.11f, h * 0.57f)
+            lineTo(w * 0.07f, h * 0.22f)
+            cubicTo(w * 0.18f, h * 0.19f, w * 0.32f, h * 0.14f, w * 0.5f, h * 0.055f)
+            close()
+        }
+        drawPath(shield, tint.copy(alpha = 0.16f))
+        drawPath(
+            shield,
+            tint,
+            style = Stroke(width = w * 0.065f, cap = StrokeCap.Round, join = StrokeJoin.Round)
+        )
+        drawLine(
+            tint,
+            Offset(w * 0.30f, h * 0.51f),
+            Offset(w * 0.44f, h * 0.65f),
+            strokeWidth = w * 0.075f,
+            cap = StrokeCap.Round
+        )
+        drawLine(
+            tint,
+            Offset(w * 0.44f, h * 0.65f),
+            Offset(w * 0.72f, h * 0.36f),
+            strokeWidth = w * 0.075f,
+            cap = StrokeCap.Round
+        )
+    }
+}
+
+@Composable
 private fun AssetArt(index: Int, size: Dp) {
     val atlas = ImageBitmap.imageResource(R.drawable.security_artwork_sheet)
     Canvas(Modifier.size(size)) {
@@ -2905,6 +3128,10 @@ private fun IconArt(
     // The current 16-tile artwork atlas is readable but undersized throughout the UI.
     // Render every IconArt asset and fallback glyph at 2x its former dimensions.
     val displaySize = size * 2f
+    if (name == "shield" || name == "shield_check" || name == "status_shield") {
+        HighQualityShieldIcon(tint = tint, size = displaySize)
+        return
+    }
     val artworkIndex = when (name) {
         "apps", "apk" -> 0
         "biohazard", "malware" -> 1
