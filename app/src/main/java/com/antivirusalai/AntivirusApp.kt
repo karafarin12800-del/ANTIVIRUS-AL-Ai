@@ -900,7 +900,7 @@ private fun MainNavigationBar(
                     IconArt(
                         item.icon,
                         tint = if (activeTab == item.tab.key) BrandTeal else TextTertiary,
-                        size = 21.dp
+                        size = 22.dp
                     )
                 },
                 label = { Text(item.label, fontSize = 10.sp, maxLines = 1) },
@@ -3370,20 +3370,22 @@ private fun IconArt(
                 line(7f, 12f, 9f, 12f); line(15f, 12f, 17f, 12f)
             }
             "store" -> {
-                // High-resolution vector shopping cart with basket rails and wheels.
+                // Crisp shopping-bag glyph: a clear store/checkout symbol at launcher-scale UI sizes.
                 path {
-                    moveTo(2.5f * sx, 4f * sy)
-                    lineTo(5f * sx, 4f * sy)
-                    lineTo(7.4f * sx, 16f * sy)
-                    lineTo(19.3f * sx, 16f * sy)
-                    lineTo(21.5f * sx, 8f * sy)
-                    lineTo(6f * sx, 8f * sy)
+                    moveTo(5f * sx, 8f * sy)
+                    lineTo(19f * sx, 8f * sy)
+                    lineTo(20.5f * sx, 21f * sy)
+                    lineTo(3.5f * sx, 21f * sy)
+                    close()
                 }
-                line(7.5f, 11f, 20.5f, 11f)
-                line(8.2f, 13.5f, 19.8f, 13.5f)
-                line(7f, 18.5f, 19f, 18.5f)
-                circle(9f, 21f, 1.15f)
-                circle(18f, 21f, 1.15f)
+                path {
+                    moveTo(8f * sx, 9f * sy)
+                    lineTo(8f * sx, 6.5f * sy)
+                    cubicTo(8f * sx, 1.8f * sy, 16f * sx, 1.8f * sy, 16f * sx, 6.5f * sy)
+                    lineTo(16f * sx, 9f * sy)
+                }
+                line(8f, 13f, 16f, 13f)
+                line(12f, 11.5f, 12f, 17f)
             }
             "settings" -> {
                 circle(12f, 12f, 7.5f)
