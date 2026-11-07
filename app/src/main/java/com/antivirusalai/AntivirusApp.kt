@@ -1836,6 +1836,9 @@ private fun HomeSafetyStatusCard(
     report: FolderScanReport?,
     onOpenScan: () -> Unit
 ) {
+    val context = LocalContext.current
+    val threatFeedReady = ThreatFeedRuntime.currentFeed(context) != null
+    val hasMissingThreatFeed = report != null && !threatFeedReady
     // Reserve red for an exact known-malware reputation match.
     // Permission/metadata heuristics and PUA are review signals, not proof of infection.
     val hasConfirmedMalware = report?.items?.any {
@@ -1846,11 +1849,12 @@ private fun HomeSafetyStatusCard(
             it.result.verdict == ScanVerdict.SUSPICIOUS
     } == true
     val hasUnknown = (report?.unknownCount ?: 0) > 0
-    // Unknown, skipped or truncated work must never be presented as a fully clean scan.
+    // Unknown, skipped work, or an unavailable signed threat feed must never be shown as clean.
     val hasIncompleteResults = hasUnknown ||
         report?.failures?.isNotEmpty() == true ||
         report?.truncated == true ||
-        (report?.skippedFiles ?: 0) > 0
+        (report?.skippedFiles ?: 0) > 0 ||
+        hasMissingThreatFeed
     val accent = when {
         hasConfirmedMalware -> ColorDanger
         scanning || report == null || hasReviewFindings || hasIncompleteResults -> ColorWarning
@@ -1897,6 +1901,7 @@ private fun HomeSafetyStatusCard(
                         report == null -> tr(fa, "هنوز اسکن دستگاه انجام نشده", "No device scan yet")
                         hasConfirmedMalware -> tr(fa, "بدافزار شناخته‌شده پیدا شد", "Known malware detected")
                         hasReviewFindings -> tr(fa, "موارد مشکوک برای بررسی وجود دارد", "Items need security review")
+                        hasMissingThreatFeed -> tr(fa, "بانک تهدید معتبر در دسترس نیست؛ پاک بودن تأیید نشده", "Threat feed unavailable; clean status is not verified")
                         hasIncompleteResults -> tr(fa, "بعضی فایل‌ها نتیجه قطعی ندارند یا کامل اسکن نشدند", "Some files have no definitive verdict or were not fully scanned")
                         else -> tr(fa, "در محدوده اسکن‌شده مورد مشکوکی پیدا نشد", "No suspicious item found in the scanned scope")
                     },
