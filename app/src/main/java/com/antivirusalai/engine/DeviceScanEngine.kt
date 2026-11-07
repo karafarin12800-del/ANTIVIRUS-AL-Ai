@@ -40,15 +40,20 @@ object DeviceScanEngine {
         deep: Boolean,
         onProgress: suspend (current: Int, total: Int, name: String) -> Unit
     ): FolderScanReport = withContext(Dispatchers.IO) {
-        require(hasBroadStorageAccess()) {
-            "برای اسکن خودکار حافظه، دسترسی «مدیریت همه فایل‌ها» باید در تنظیمات Android فعال شود."
-        }
-
-        val roots = findStorageRoots(context)
+        // Never bypass Android's special-access gate. If the user declines it,
+        // continue with the readable installed APK components instead of aborting.
+        val hasStorageAccess = hasBroadStorageAccess()
+        val roots = if (hasStorageAccess) findStorageRoots(context) else emptyList()
         val failures = mutableListOf<FolderScanFailure>()
+        if (!hasStorageAccess) {
+            failures += FolderScanFailure(
+                "Shared storage",
+                "All files access was not granted. Installed application APK components are checked only where Android exposes readable paths; shared-storage folders are not included."
+            )
+        }
         val candidates = linkedMapOf<String, File>()
         val maxFiles = if (deep) DEEP_FILE_LIMIT else QUICK_FILE_LIMIT
-        var traversalLimitReached = false
+        var traversalLimitReached = !hasStorageAccess
         var dataLimitReached = false
         var discoverySkipped = 0
 
@@ -406,8 +411,18 @@ object DeviceScanEngine {
         }
         apps.forEach { app ->
             if (output.size >= maxFiles) return@forEach
-            addPackageArchive(app.sourceDir, output, maxFiles)
-            app.splitSourceDirs.orEmpty().forEach { addPackageArchive(it, output, maxFiles) }
+            val componentPaths = listOfNotNull(app.sourceDir) + app.splitSourceDirs.orEmpty()
+            // Process every readable split APK. Do not silently treat an app with
+            // no readable package bytes as clean.
+            val readableComponents = componentPaths.map { path ->
+                addPackageArchive(path, output, maxFiles)
+            }.any { it }
+            if (!readableComponents) {
+                failures += FolderScanFailure(
+                    app.packageName,
+                    "Installed package is visible, but Android did not expose a readable base or split APK component; this app was not counted as clean."
+                )
+            }
         }
     }
 
@@ -415,11 +430,12 @@ object DeviceScanEngine {
         path: String?,
         output: LinkedHashMap<String, File>,
         maxFiles: Int
-    ) {
-        if (output.size >= maxFiles || path.isNullOrBlank()) return
+    ): Boolean {
+        if (output.size >= maxFiles || path.isNullOrBlank()) return false
         val file = File(path)
-        if (!file.isFile || !file.canRead()) return
-        val canonical = runCatching { file.canonicalFile }.getOrNull() ?: return
+        if (!file.isFile || !file.canRead()) return false
+        val canonical = runCatching { file.canonicalFile }.getOrNull() ?: return false
         output.putIfAbsent(canonical.path, canonical)
+        return true
     }
 }
