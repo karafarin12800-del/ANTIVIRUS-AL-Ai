@@ -234,7 +234,7 @@ object DeviceScanEngine {
                 scannedCount++
                 when (result.verdict) {
                     ScanVerdict.KNOWN_MALWARE, ScanVerdict.POTENTIALLY_UNWANTED, ScanVerdict.SUSPICIOUS -> suspiciousCount++
-                    ScanVerdict.UNKNOWN_APK, ScanVerdict.UNSUPPORTED_FILE -> unknownCount++
+                    ScanVerdict.UNKNOWN_APK, ScanVerdict.UNSUPPORTED_FILE, ScanVerdict.INCOMPLETE_THREAT_INTELLIGENCE -> unknownCount++
                     ScanVerdict.TEST_MARKER_MATCH -> matchedCount++
                     ScanVerdict.NO_KNOWN_INDICATOR -> Unit
                 }

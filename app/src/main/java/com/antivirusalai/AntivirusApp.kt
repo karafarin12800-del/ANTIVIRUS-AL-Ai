@@ -3592,6 +3592,7 @@ private fun verdictBadge(verdict: ScanVerdict, fa: Boolean): String = when (verd
     ScanVerdict.NO_KNOWN_INDICATOR -> tr(fa, "بدون تطبیق", "NO MATCH")
     ScanVerdict.UNKNOWN_APK -> tr(fa, "نامشخص", "UNKNOWN")
     ScanVerdict.UNSUPPORTED_FILE -> tr(fa, "پشتیبانی‌نشده", "UNSUPPORTED")
+    ScanVerdict.INCOMPLETE_THREAT_INTELLIGENCE -> tr(fa, "بانک تهدید تازه در دسترس نیست", "INTEL UNAVAILABLE")
 }
 
 private fun verdictTitle(verdict: ScanVerdict, fa: Boolean): String = when (verdict) {
@@ -3602,6 +3603,7 @@ private fun verdictTitle(verdict: ScanVerdict, fa: Boolean): String = when (verd
     ScanVerdict.NO_KNOWN_INDICATOR -> tr(fa, "نشانگر شناخته‌شده‌ای پیدا نشد", "No known indicator found")
     ScanVerdict.UNKNOWN_APK -> tr(fa, "نتیجه نامشخص", "Unknown result")
     ScanVerdict.UNSUPPORTED_FILE -> tr(fa, "این نوع فایل پشتیبانی نمی‌شود", "File type not covered")
+    ScanVerdict.INCOMPLETE_THREAT_INTELLIGENCE -> tr(fa, "بانک تهدید معتبر و تازه در دسترس نیست؛ این فایل پاک اعلام نمی‌شود.", "A current authenticated threat feed is unavailable; this file is not declared clean.")
 }
 
 private fun verdictDescription(verdict: ScanVerdict, fa: Boolean): String = when (verdict) {
@@ -3612,6 +3614,7 @@ private fun verdictDescription(verdict: ScanVerdict, fa: Boolean): String = when
     ScanVerdict.NO_KNOWN_INDICATOR -> tr(fa, "هیچ نشانگر موجود در نسخه فعلی با فایل تطبیق نکرد. این نتیجه تضمین پاک بودن نیست.", "No indicator in this MVP matched. This does not guarantee that the file is safe.")
     ScanVerdict.UNKNOWN_APK -> tr(fa, "اطلاعات APK قابل خواندن نبود؛ از اعلام پاک بودن خودداری می‌کنیم.", "APK metadata could not be read; the file is not declared clean.")
     ScanVerdict.UNSUPPORTED_FILE -> tr(fa, "موتور فعلی تحلیل محتوایی این قالب را انجام نمی‌دهد؛ نتیجه ناشناخته است.", "The current engine does not perform content-aware analysis for this format; treat it as unknown.")
+    ScanVerdict.INCOMPLETE_THREAT_INTELLIGENCE -> tr(fa, "خوراک امضاشده منقضی شده یا در دسترس نیست. نبود تطبیق هش در این وضعیت قابل اتکا نیست و فایل پاک محسوب نمی‌شود.", "The signed feed is expired or unavailable. A hash no-match cannot be trusted in this state, so the file is not declared clean.")
 }
 
 private fun verdictColor(verdict: ScanVerdict): Color = when (verdict) {
@@ -3619,9 +3622,10 @@ private fun verdictColor(verdict: ScanVerdict): Color = when (verdict) {
     ScanVerdict.POTENTIALLY_UNWANTED -> ColorWarning
     ScanVerdict.TEST_MARKER_MATCH -> BrandBlue
     ScanVerdict.SUSPICIOUS -> ColorWarning
-    ScanVerdict.NO_KNOWN_INDICATOR -> ColorSuccess
+    ScanVerdict.NO_KNOWN_INDICATOR -> TextTertiary
     ScanVerdict.UNKNOWN_APK -> ColorWarning
     ScanVerdict.UNSUPPORTED_FILE -> TextTertiary
+    ScanVerdict.INCOMPLETE_THREAT_INTELLIGENCE -> ColorWarning
 }
 
 private fun featureTitle(fa: Boolean, feature: String): String = when (feature) {

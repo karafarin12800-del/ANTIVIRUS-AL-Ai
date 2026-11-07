@@ -11,6 +11,7 @@ import java.io.File
 import java.io.FileOutputStream
 import java.security.MessageDigest
 import com.antivirusalai.intel.ThreatClassification
+import com.antivirusalai.intel.ThreatFeedFreshness
 import com.antivirusalai.intel.ThreatFeedRuntime
 
 class ScanTooLargeException(message: String) : Exception(message)
@@ -79,7 +80,30 @@ object ScanEngine {
             val evidence = mutableListOf<ScanEvidence>()
             val localMatch = LocalIndicatorDatabase.lookup(hash)
             val eicarMatch = EicarTestDetector.contains(temp)
-            val threatMatch = ThreatFeedRuntime.lookup(context.applicationContext, hash)
+            val currentThreatFeed = ThreatFeedRuntime.currentFeed(context.applicationContext)
+            val threatFeedStatus = ThreatFeedRuntime.status(context.applicationContext)
+            val threatMatch = currentThreatFeed?.indicators?.get(hash.lowercase())
+            if (currentThreatFeed?.truncated == true) {
+                evidence += ScanEvidence(
+                    "THREAT_FEED_TRUNCATED",
+                    "Threat intelligence snapshot is capped",
+                    "The signed feed reports that per-type indicator limits excluded some otherwise valid entries. A non-match is therefore not exhaustive.",
+                    EvidenceSeverity.INFO
+                )
+            }
+            if (threatFeedStatus.freshness != ThreatFeedFreshness.UP_TO_DATE) {
+                val stale = threatFeedStatus.freshness == ThreatFeedFreshness.STALE
+                evidence += ScanEvidence(
+                    if (stale) "THREAT_FEED_STALE" else "THREAT_FEED_UNAVAILABLE",
+                    "Current threat intelligence is not available",
+                    if (stale) {
+                        "The last authenticated threat feed has expired. This file cannot be given a current feed no-match result."
+                    } else {
+                        "No valid current authenticated threat feed is available. This file cannot be given a current feed no-match result."
+                    },
+                    EvidenceSeverity.INFO
+                )
+            }
             val looksLikeApk = ApkFileDetector.isApkArchive(temp) ||
                 displayName.endsWith(".apk", ignoreCase = true) ||
                 mimeType == "application/vnd.android.package-archive"
@@ -146,8 +170,12 @@ object ScanEngine {
                 apk != null -> {
                     val assessment = PermissionRiskAnalyzer.analyze(apk)
                     evidence += assessment.evidence
-                    if (assessment.suspicious) ScanVerdict.SUSPICIOUS
-                    else ScanVerdict.NO_KNOWN_INDICATOR
+                    when {
+                        assessment.suspicious -> ScanVerdict.SUSPICIOUS
+                        threatFeedStatus.freshness != ThreatFeedFreshness.UP_TO_DATE ->
+                            ScanVerdict.INCOMPLETE_THREAT_INTELLIGENCE
+                        else -> ScanVerdict.NO_KNOWN_INDICATOR
+                    }
                 }
                 else -> {
                     evidence += ScanEvidence(
