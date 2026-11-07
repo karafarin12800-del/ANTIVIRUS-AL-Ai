@@ -31,18 +31,19 @@ class ThreatFeedEntryTests(unittest.TestCase):
         self.assertEqual(by_hash[threatfox_hash], ("THREATFOX.ANDROID.THREATFOX_FAMILY", "MALWARE"))
         self.assertEqual(by_hash[shared_hash], ("MALWAREBAZAAR.BAZAAR.FAMILY", "MALWARE"))
 
-    def test_ignores_malformed_hashes_and_missing_family_labels(self):
-        entries = publisher.make_entries(
-            [
-                {"sha256_hash": "not-a-sha256", "signature": "bad"},
-                {"sha256_hash": "d" * 64, "signature": ""},
-            ],
-            [
-                {"malware": "family.without.sample.hash", "malware_samples": [{"sha256_hash": "bad"}]},
-                {"malware": "", "malware_samples": [{"sha256_hash": "e" * 64}]},
-            ],
-        )
-        self.assertEqual(entries, [])
+    def test_rejects_feed_with_no_valid_hashes(self):
+        with contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit):
+                publisher.make_entries(
+                    [
+                        {"sha256_hash": "not-a-sha256", "signature": "bad"},
+                        {"sha256_hash": "d" * 64, "signature": ""},
+                    ],
+                    [
+                        {"malware": "family.without.sample.hash", "malware_samples": [{"sha256_hash": "bad"}]},
+                        {"malware": "", "malware_samples": [{"sha256_hash": "e" * 64}]},
+                    ],
+                )
 
 
 if __name__ == "__main__":
