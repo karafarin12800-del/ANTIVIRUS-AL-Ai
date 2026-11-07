@@ -1836,7 +1836,15 @@ private fun HomeSafetyStatusCard(
     report: FolderScanReport?,
     onOpenScan: () -> Unit
 ) {
-    val hasFindings = (report?.suspiciousCount ?: 0) > 0
+    // Reserve red for an exact known-malware reputation match.
+    // Permission/metadata heuristics and PUA are review signals, not proof of infection.
+    val hasConfirmedMalware = report?.items?.any {
+        it.result.verdict == ScanVerdict.KNOWN_MALWARE
+    } == true
+    val hasReviewFindings = report?.items?.any {
+        it.result.verdict == ScanVerdict.POTENTIALLY_UNWANTED ||
+            it.result.verdict == ScanVerdict.SUSPICIOUS
+    } == true
     val hasUnknown = (report?.unknownCount ?: 0) > 0
     // Unknown, skipped or truncated work must never be presented as a fully clean scan.
     val hasIncompleteResults = hasUnknown ||
@@ -1844,8 +1852,8 @@ private fun HomeSafetyStatusCard(
         report?.truncated == true ||
         (report?.skippedFiles ?: 0) > 0
     val accent = when {
-        hasFindings -> ColorDanger
-        scanning || report == null || hasIncompleteResults -> ColorWarning
+        hasConfirmedMalware -> ColorDanger
+        scanning || report == null || hasReviewFindings || hasIncompleteResults -> ColorWarning
         else -> ColorSuccess
     }
     Card(
@@ -1876,7 +1884,7 @@ private fun HomeSafetyStatusCard(
                 contentAlignment = Alignment.Center
             ) {
                 // Keep the full shield/biohazard mark inside a larger, uncropped status medallion.
-                if (hasFindings) {
+                if (hasConfirmedMalware) {
                     IconArt("biohazard", tint = accent, size = 28.dp)
                 } else {
                     HighQualityShieldIcon(tint = accent, size = 56.dp)
@@ -1887,7 +1895,8 @@ private fun HomeSafetyStatusCard(
                     when {
                         scanning -> tr(fa, "اسکن دستگاه در حال اجراست", "Device scan is running")
                         report == null -> tr(fa, "هنوز اسکن دستگاه انجام نشده", "No device scan yet")
-                        hasFindings -> tr(fa, "تهدید یا مورد مشکوک پیدا شد", "Threat or suspicious item found")
+                        hasConfirmedMalware -> tr(fa, "بدافزار شناخته‌شده پیدا شد", "Known malware detected")
+                        hasReviewFindings -> tr(fa, "موارد مشکوک برای بررسی وجود دارد", "Items need security review")
                         hasIncompleteResults -> tr(fa, "بعضی فایل‌ها نتیجه قطعی ندارند یا کامل اسکن نشدند", "Some files have no definitive verdict or were not fully scanned")
                         else -> tr(fa, "در محدوده اسکن‌شده مورد مشکوکی پیدا نشد", "No suspicious item found in the scanned scope")
                     },
