@@ -187,7 +187,7 @@ class ProtectionService : Service() {
     private fun watchTree(directory: File, depth: Int, visited: MutableSet<String>) {
         if (depth > MAX_WATCH_DEPTH || observers.size >= MAX_WATCHERS) return
         val canonical = runCatching { directory.canonicalFile }.getOrNull() ?: return
-        if (!canonical.isDirectory || !visited.add(canonical.path)) return
+        if (!canonical.isDirectory || !synchronized(visited) { visited.add(canonical.path) }) return
         synchronized(watchedPaths) {
             if (!watchedPaths.add(canonical.path)) return
         }
@@ -198,11 +198,11 @@ class ProtectionService : Service() {
                 override fun onEvent(event: Int, path: String?) {
                     val relative = path ?: return
                     val target = File(canonical, relative)
-                    val isDirectory = event and FileObserver.ISDIR != 0
-                    if (isDirectory && event and FileObserver.CREATE != 0) {
+                    val isDirectory = (event and FileObserver.ISDIR) != 0
+                    if (isDirectory && (event and FileObserver.CREATE) != 0) {
                         serviceScope.launch { watchTree(target, depth + 1, visited) }
                     } else if (!isDirectory &&
-                        (event and FileObserver.CLOSE_WRITE != 0 || event and FileObserver.MOVED_TO != 0)
+                        ((event and FileObserver.CLOSE_WRITE) != 0 || (event and FileObserver.MOVED_TO) != 0)
                     ) {
                         serviceScope.launch {
                             delay(1_000L)
