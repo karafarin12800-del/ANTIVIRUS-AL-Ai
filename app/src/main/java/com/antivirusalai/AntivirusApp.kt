@@ -3593,7 +3593,6 @@ private fun verdictBadge(verdict: ScanVerdict, fa: Boolean): String = when (verd
     ScanVerdict.UNKNOWN_APK -> tr(fa, "نامشخص", "UNKNOWN")
     ScanVerdict.UNSUPPORTED_FILE -> tr(fa, "پشتیبانی‌نشده", "UNSUPPORTED")
     ScanVerdict.INCOMPLETE_THREAT_INTELLIGENCE -> tr(fa, "بانک تهدید تازه در دسترس نیست", "INTEL UNAVAILABLE")
-    ScanVerdict.INCOMPLETE_THREAT_INTELLIGENCE -> tr(fa, "بانک تهدید تازه در دسترس نیست", "INTEL UNAVAILABLE")
 }
 
 private fun verdictTitle(verdict: ScanVerdict, fa: Boolean): String = when (verdict) {
@@ -3604,7 +3603,6 @@ private fun verdictTitle(verdict: ScanVerdict, fa: Boolean): String = when (verd
     ScanVerdict.NO_KNOWN_INDICATOR -> tr(fa, "نشانگر شناخته‌شده‌ای پیدا نشد", "No known indicator found")
     ScanVerdict.UNKNOWN_APK -> tr(fa, "نتیجه نامشخص", "Unknown result")
     ScanVerdict.UNSUPPORTED_FILE -> tr(fa, "این نوع فایل پشتیبانی نمی‌شود", "File type not covered")
-    ScanVerdict.INCOMPLETE_THREAT_INTELLIGENCE -> tr(fa, "بانک تهدید معتبر و تازه در دسترس نیست؛ این فایل پاک اعلام نمی‌شود.", "A current authenticated threat feed is unavailable; this file is not declared clean.")
     ScanVerdict.INCOMPLETE_THREAT_INTELLIGENCE -> tr(fa, "بانک تهدید معتبر و تازه در دسترس نیست؛ این فایل پاک اعلام نمی‌شود.", "A current authenticated threat feed is unavailable; this file is not declared clean.")
 }
 
