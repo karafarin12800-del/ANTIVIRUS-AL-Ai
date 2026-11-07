@@ -10,6 +10,8 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
 import java.security.MessageDigest
+import com.antivirusalai.intel.ThreatClassification
+import com.antivirusalai.intel.ThreatFeedRuntime
 
 class ScanTooLargeException(message: String) : Exception(message)
 
@@ -18,17 +20,22 @@ object ScanEngine {
 
     suspend fun scan(context: Context, uri: Uri): ScanResult = withContext(Dispatchers.IO) {
         val resolver = context.contentResolver
-        val metadata = resolver.query(
-            uri,
-            arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE),
-            null, null, null
-        )?.use { cursor ->
-            if (!cursor.moveToFirst()) null else {
-                val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
-                val name = if (nameIndex >= 0) cursor.getString(nameIndex) else null
-                val size = if (sizeIndex >= 0 && !cursor.isNull(sizeIndex)) cursor.getLong(sizeIndex) else -1L
-                name to size
+        val localFile = if (uri.scheme == "file") uri.path?.let(::File) else null
+        val metadata = if (localFile != null) {
+            localFile.name to localFile.length()
+        } else {
+            resolver.query(
+                uri,
+                arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE),
+                null, null, null
+            )?.use { cursor ->
+                if (!cursor.moveToFirst()) null else {
+                    val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                    val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
+                    val name = if (nameIndex >= 0) cursor.getString(nameIndex) else null
+                    val size = if (sizeIndex >= 0 && !cursor.isNull(sizeIndex)) cursor.getLong(sizeIndex) else -1L
+                    name to size
+                }
             }
         }
 
@@ -71,12 +78,53 @@ object ScanEngine {
             }
             val evidence = mutableListOf<ScanEvidence>()
             val localMatch = LocalIndicatorDatabase.lookup(hash)
+            val eicarMatch = EicarTestDetector.contains(temp)
+            val threatMatch = ThreatFeedRuntime.lookup(context.applicationContext, hash)
             val looksLikeApk = ApkFileDetector.isApkArchive(temp) ||
                 displayName.endsWith(".apk", ignoreCase = true) ||
                 mimeType == "application/vnd.android.package-archive"
             val apk = if (looksLikeApk) ApkMetadataInspector.inspect(context, temp) else null
 
             val verdict = when {
+                threatMatch?.classification == ThreatClassification.MALWARE -> {
+                    evidence += ScanEvidence(
+                        "SIGNED_FEED_KNOWN_MALWARE",
+                        "Known malware hash match",
+                        "Exact SHA-256 match in the current authenticated threat feed. Family: " +
+                            threatMatch.familyId + ". This is a reputation match, not behavioral analysis.",
+                        EvidenceSeverity.HIGH
+                    )
+                    ScanVerdict.KNOWN_MALWARE
+                }
+                threatMatch?.classification == ThreatClassification.PUA -> {
+                    evidence += ScanEvidence(
+                        "SIGNED_FEED_PUA",
+                        "Potentially unwanted file hash match",
+                        "Exact SHA-256 match in the current authenticated threat feed. Family: " +
+                            threatMatch.familyId + ". Review the publisher and intended use before taking action.",
+                        EvidenceSeverity.MEDIUM
+                    )
+                    ScanVerdict.POTENTIALLY_UNWANTED
+                }
+                threatMatch?.classification == ThreatClassification.SUSPICIOUS -> {
+                    evidence += ScanEvidence(
+                        "SIGNED_FEED_SUSPICIOUS",
+                        "Suspicious file hash match",
+                        "Exact SHA-256 match in the current authenticated threat feed. Family: " +
+                            threatMatch.familyId + ". The source classifies this as suspicious, not confirmed malware.",
+                        EvidenceSeverity.MEDIUM
+                    )
+                    ScanVerdict.SUSPICIOUS
+                }
+                eicarMatch -> {
+                    evidence += ScanEvidence(
+                        "EICAR_TEST_FILE",
+                        "Harmless EICAR test string detected",
+                        "The standard EICAR antivirus test string was detected. It is intentionally harmless and is used only to test scanner reporting.",
+                        EvidenceSeverity.INFO
+                    )
+                    ScanVerdict.TEST_MARKER_MATCH
+                }
                 localMatch != null -> {
                     evidence += ScanEvidence(
                         "BENIGN_PROJECT_TEST_MARKER",

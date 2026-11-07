@@ -1,6 +1,6 @@
 package com.antivirusalai.engine
 
-enum class ScanVerdict { TEST_MARKER_MATCH, SUSPICIOUS, NO_KNOWN_INDICATOR, UNKNOWN_APK, UNSUPPORTED_FILE }
+enum class ScanVerdict { KNOWN_MALWARE, POTENTIALLY_UNWANTED, TEST_MARKER_MATCH, SUSPICIOUS, NO_KNOWN_INDICATOR, UNKNOWN_APK, UNSUPPORTED_FILE }
 enum class EvidenceSeverity { INFO, LOW, MEDIUM, HIGH }
 
 data class ScanEvidence(

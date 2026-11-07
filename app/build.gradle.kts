@@ -11,8 +11,8 @@ android {
         applicationId = "com.antivirusalai"
         minSdk = 26
         targetSdk = 36
-        versionCode = 2
-        versionName = "0.2.0"
+        versionCode = 3
+        versionName = "0.3.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildFeatures {
@@ -38,9 +38,15 @@ kotlin {
 
 dependencies {
     implementation(libs.androidx.activity.compose)
+    implementation("androidx.work:work-runtime-ktx:2.12.0")
+    implementation(libs.androidx.compose.animation.core)
+    implementation("androidx.lifecycle:lifecycle-livedata-ktx:2.9.4")
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
     debugImplementation(libs.androidx.compose.ui.tooling)
     testImplementation(libs.junit)
+    androidTestImplementation("androidx.test:core:1.6.1")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test:runner:1.6.2")
 }

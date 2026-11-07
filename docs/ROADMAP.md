@@ -1,40 +1,43 @@
 # Roadmap
 
-## Phase 0 — Buildable foundation
-- [x] Merge the professional bilingual Android interface into `main`.
-- [x] Set an identifiable app milestone version: 0.2.0 / versionCode 2.
-- [x] Prepare version-labelled CI APK artifacts with source commit metadata.
-- Android app shell, file picker, bounded streaming hash.
-- APK metadata inspection without execution.
-- Explainable heuristic evidence and safe test fixture.
-- AES-GCM private quarantine copy.
-- CI build, unit tests, and lint.
+## Phase 0 — Buildable Android foundation
+- [x] Bilingual Android dashboard and scan centre.
+- [x] Automatic quick/deep shared-storage scan paths with progress and access-limit reporting.
+- [x] Streaming SHA-256 and bounded per-file scan.
+- [x] APK package metadata inspection without loading or executing packages.
+- [x] Evidence-based permission heuristics; no “safe” guarantee.
+- [x] AES-GCM quarantine vault APIs with integrity-checked restore and explicit source-removal attempt.
+- [x] CI unit tests, lint, debug APK assembly, and emulator instrumentation coverage (current launch test still being stabilized).
 
-## Phase 1 — Detection quality
-- [x] Strict versioned threat-feed format and ECDSA P-256 public-key verification core.
-- [x] Key-ID keyring interface to support planned public-key rotation.
-- [x] Feed expiry, clock-skew, size, entry-count, duplicate-entry, and rollback validation.
-- [x] Atomic private-storage feed replacement and persistent version floor.
-- [x] Unit tests using generated test-only signing keys and synthetic indicators.
-- [ ] Provision a production signing key securely; embed only its public key in the app.
-- [ ] Add feed import/update UX and integrate verified indicators into scan verdicts.
-- [ ] Publish a signed, maintained indicator feed with provenance and test cases.
-- [ ] Expand APK static analysis and dependency/CVE inventory.
-- [ ] Build a larger benign-app corpus to tune false positives.
+## Phase 1 — Hash reputation and static detection
+- [x] Strict ALAI v1 feed format and ECDSA P-256 signature verification.
+- [x] Pinned release public key; private key remains external to source and APK.
+- [x] Expiry, clock-skew, size, entry-count, duplicate/sort, and rollback checks.
+- [x] Runtime feed lookup is integrated into per-file SHA-256 scan verdicts.
+- [x] WorkManager schedules network-constrained feed refresh (best effort, not real-time).
+- [x] EICAR safe test marker and stream-boundary regression tests.
+- [x] Publisher workflow and hash-only MalwareBazaar recent-detections adapter prepared.
+- [ ] Configure provider API credential, the matching signing-key secret, and confirm commercial-use entitlement/terms.
+- [ ] Run and verify the first successful feed publication; measure feed age, size, and family coverage.
+- [ ] Expand APK static analysis with bounded DEX string signals and false-positive calibration.
+- [ ] Add a larger lawful benign-app corpus and benchmark set before making accuracy claims.
 
-## Phase 2 — Online threat intelligence
-- Backend-only secrets and hash-reputation proxy.
-- Explicit opt-in, hash-only queries by default.
-- Provider attribution, cache expiry, rate limits, and offline fallback.
-- No file-content upload without separate, clear user consent.
+## Phase 2 — Production threat intelligence and analysis
+- [ ] Add a backend reputation proxy, key rotation, provider-health monitoring, rate limiting, and emergency revocation.
+- [ ] Evaluate additional licensed sources and curated YARA/signature engines; preserve source attribution and licensing.
+- [ ] Add behavior analysis only through supported, policy-compliant Android facilities and a reviewed design.
+- [ ] Do not upload file content by default; any hash lookup or telemetry must be transparent and opt-in.
 
 ## Phase 3 — Remediation and monitoring
-- Source removal only when Android's document provider authorizes it and after explicit confirmation.
-- System uninstall handoff and verified result tracking.
-- Additional monitoring only through supported Android APIs and policy-reviewed permissions.
+- [x] Verify encrypted quarantine copy and source hash before requesting removal.
+- [x] Expose vault list/restore/delete APIs and accurate source-removal result.
+- [ ] Build quarantine-management UI, restore destination flow, and recovery tests on multiple document providers.
+- [ ] Add Android uninstall handoff with explicit user confirmation; no silent uninstall.
+- [ ] Design any continuous monitoring only through supported Android APIs, with battery, privacy, and Play policy review.
 
-## Phase 4 — Independent validation
-- External security review and penetration test.
-- AV-TEST or equivalent independent malware-detection evaluation.
-- Privacy, battery, performance, accessibility, and localization review.
-- Release signing and reproducible supply-chain controls.
+## Phase 4 — Independent validation and release readiness
+- [ ] Measure precision, recall, false-positive rate, false-negative rate, unknown coverage, scan latency, and battery cost on a lawful benchmark.
+- [ ] Complete an external security review and independent AV detection evaluation (AV-TEST or equivalent).
+- [ ] Resolve all critical/high findings and publish a reproducible report.
+- [ ] Complete Play Console permission declarations for MANAGE_EXTERNAL_STORAGE and QUERY_ALL_PACKAGES.
+- [ ] Complete privacy, retention, accessibility, localization, billing, release-signing, and supply-chain reviews.
