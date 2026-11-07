@@ -23,7 +23,7 @@ concurrency:
 
 jobs:
   publish:
-    name: Build and publish hash-only signed feed
+    name: Build and publish signed multi-source feed
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
