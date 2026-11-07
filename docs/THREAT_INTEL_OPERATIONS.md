@@ -2,13 +2,12 @@
 
 ## Data source and scope
 
-The publisher queries MalwareBazaar \`recent_detections\` using its authenticated HTTPS API. It requests only recent metadata and emits:
+The publisher uses two complementary abuse.ch sources through authenticated HTTPS metadata APIs:
 
-- SHA-256 file hashes.
-- Malware family labels supplied by the source.
-- The fixed \`MALWARE\` classification.
+- **MalwareBazaar**: `recent_detections` returns files for which the source assigned a malware-family label. Their SHA-256 values and family labels are imported as exact-file indicators.
+- **ThreatFox (optional)**: `get_iocs` over the last seven days returns recent IOCs. When its API credential is configured, the publisher imports SHA-256 values only from each IOC's documented `malware_samples` metadata and retains the associated family label.
 
-It does not retrieve or execute malware samples. The Android scanner compares a local SHA-256 value with the signed hash list. A match is a strong reputation signal for the exact byte-identical file; a modified or previously unseen sample can evade hash matching.
+No malware sample bytes are retrieved or executed. The Android scanner compares a local SHA-256 value with the signed hash list. A match is a reputation signal for the exact byte-identical file; a modified or previously unseen sample can evade hash matching. MalwareBazaar's family label takes precedence when the same hash appears in both sources.
 
 The feed currently contains only entries for which the source returned a family label. Missing or malformed hashes and missing family labels are discarded. Duplicate hashes are collapsed, entries are sorted, and the feed is capped at 20,000 indicators / 2 MiB.
 
@@ -56,3 +55,9 @@ Before calling the feed live, confirm all of the following:
 - The accepted feed has a current expiry and increasing version.
 - A known hash in the feed is reported as a known malware match, while an unknown hash remains unmatched.
 - No file content or scanned hash is sent to the provider by the Android client.
+
+## URL and network indicators
+
+URLhaus is a separate source for malicious distribution URLs, host/domain indicators, and collected payload hashes. Its documentation warns that a collected payload hash is not automatically malicious because a URL may later serve clean content. The current Android scanner is a local file-hash/APK scanner and does not inspect browser navigation or all device network connections, so URLhaus URL/domain indicators are not mixed into the file-malware hash feed or advertised as active protection. A future URL-reputation component must evaluate URLs/hosts in an actual browsing or network workflow and implement freshness/revocation handling.
+
+For commercial or for-profit deployment, confirm the applicable abuse.ch enhanced commercial API terms for each selected source before setting the operator approval secret. Community API availability does not itself authorize commercial use.
