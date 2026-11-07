@@ -187,6 +187,11 @@ def load_private_key(raw_pem: str):
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", required=True)
+    parser.add_argument(
+        "--check-key-only",
+        action="store_true",
+        help="Validate that the configured signing private key matches the app-pinned public key; do not contact providers or publish a feed.",
+    )
     parser.add_argument("--previous-version")
     args = parser.parse_args()
 
@@ -195,13 +200,18 @@ def main() -> None:
     private_pem = os.environ.get("ALAI_FEED_SIGNING_KEY_PEM", "")
     commercial_ok = os.environ.get("ALAI_ABUSECH_COMMERCIAL_USE_APPROVED", "").strip().lower()
 
-    if not auth_key:
-        fail("Missing MALWAREBAZAAR_AUTH_KEY GitHub Actions secret.")
     if not private_pem:
         fail("Missing ALAI_FEED_SIGNING_KEY_PEM GitHub Actions secret.")
+    key = load_private_key(private_pem)
+    if args.check_key_only:
+        print("Signing-key check: MATCH. The configured private key corresponds to the public key pinned in Android.")
+        print("No provider API was contacted and no threat feed was generated or published.")
+        return
+
+    if not auth_key:
+        fail("Missing MALWAREBAZAAR_AUTH_KEY GitHub Actions secret.")
     if commercial_ok != "true":
         fail("Set ALAI_ABUSECH_COMMERCIAL_USE_APPROVED=true only after confirming the current commercial-use terms.")
-    key = load_private_key(private_pem)
 
     malwarebazaar_data = fetch_recent_detections(auth_key)
     threatfox_data = fetch_threatfox_recent_samples(threatfox_auth_key) if threatfox_auth_key else []
