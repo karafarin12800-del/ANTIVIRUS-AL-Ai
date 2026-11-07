@@ -1766,7 +1766,7 @@ private fun StorePromoCard(fa: Boolean, onClick: () -> Unit) {
                 Modifier.size(45.dp).background(BrandTeal.copy(alpha = 0.12f), RoundedCornerShape(14.dp)),
                 contentAlignment = Alignment.Center
             ) {
-                IconArt("crown", tint = BrandTeal, size = 23.dp)
+                IconArt("store", tint = BrandTeal, size = 23.dp)
             }
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(tr(fa, "طرح‌های اشتراک و فروشگاه", "Plans & membership"), color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
@@ -3142,7 +3142,7 @@ private fun AssetArt(index: Int, size: Dp) {
             srcOffset = IntOffset((safeIndex % 4) * cell, (safeIndex / 4) * cell),
             srcSize = IntSize(cell, cell),
             dstSize = IntSize(this.size.width.toInt().coerceAtLeast(1), this.size.height.toInt().coerceAtLeast(1)),
-            filterQuality = FilterQuality.Medium
+            filterQuality = FilterQuality.High
         )
     }
 }
@@ -3163,7 +3163,7 @@ private fun IconArt(
     val artworkIndex = when (name) {
         "apps", "apk" -> 0
         "biohazard", "malware" -> 1
-        "crown", "store" -> 2
+        "crown" -> 2
         "folder", "file" -> 3
         "lightning", "spark" -> 4
         "pause" -> 5
@@ -3242,20 +3242,20 @@ private fun IconArt(
                 line(7f, 12f, 9f, 12f); line(15f, 12f, 17f, 12f)
             }
             "store" -> {
+                // High-resolution vector shopping cart with basket rails and wheels.
                 path {
-                    moveTo(4f * sx, 8f * sy)
-                    lineTo(6f * sx, 4f * sy)
-                    lineTo(18f * sx, 4f * sy)
-                    lineTo(20f * sx, 8f * sy)
-                    lineTo(19f * sx, 21f * sy)
-                    lineTo(5f * sx, 21f * sy)
-                    close()
+                    moveTo(2.5f * sx, 4f * sy)
+                    lineTo(5f * sx, 4f * sy)
+                    lineTo(7.4f * sx, 16f * sy)
+                    lineTo(19.3f * sx, 16f * sy)
+                    lineTo(21.5f * sx, 8f * sy)
+                    lineTo(6f * sx, 8f * sy)
                 }
-                path {
-                    moveTo(9f * sx, 9f * sy)
-                    quadraticTo(9f * sx, 14f * sy, 12f * sx, 14f * sy)
-                    quadraticTo(15f * sx, 14f * sy, 15f * sx, 9f * sy)
-                }
+                line(7.5f, 11f, 20.5f, 11f)
+                line(8.2f, 13.5f, 19.8f, 13.5f)
+                line(7f, 18.5f, 19f, 18.5f)
+                circle(9f, 21f, 1.15f)
+                circle(18f, 21f, 1.15f)
             }
             "settings" -> {
                 circle(12f, 12f, 7.5f)
