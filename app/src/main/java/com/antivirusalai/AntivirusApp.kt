@@ -2501,13 +2501,17 @@ private fun SecurityToolsScreen(
     var currentFeed by remember { mutableStateOf(ThreatFeedRuntime.currentFeed(context)) }
     var refreshingFeed by remember { mutableStateOf(false) }
     var feedMessage by remember { mutableStateOf<String?>(null) }
+    var feedMessageSuccess by remember { mutableStateOf(false) }
     val fileMonitoringAvailable = Build.VERSION.SDK_INT < Build.VERSION_CODES.R ||
         Environment.isExternalStorageManager()
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         if (granted) onToggleProtection(true)
-        else feedMessage = tr(fa, "برای نمایش هشدارهای محافظت، مجوز اعلان لازم است.", "Notification permission is required for visible protection alerts.")
+        else {
+            feedMessage = tr(fa, "برای نمایش هشدارهای محافظت، مجوز اعلان لازم است.", "Notification permission is required for visible protection alerts.")
+            feedMessageSuccess = false
+        }
     }
     val enableProtection = {
         if (Build.VERSION.SDK_INT >= 33 &&
@@ -2639,9 +2643,11 @@ private fun SecurityToolsScreen(
                         scope.launch {
                             refreshingFeed = true
                             feedMessage = null
+                            feedMessageSuccess = false
                             try {
                                 currentFeed = ThreatFeedRuntime.refresh(context)
                                 feedMessage = tr(fa, "بانک تهدید با موفقیت تأیید و به‌روزرسانی شد.", "Threat intelligence was verified and updated.")
+                                feedMessageSuccess = true
                             } catch (error: Exception) {
                                 feedMessage = error.message ?: tr(fa, "به‌روزرسانی بانک انجام نشد.", "Threat feed refresh failed.")
                             } finally {
@@ -2654,7 +2660,7 @@ private fun SecurityToolsScreen(
                     Text(if (refreshingFeed) tr(fa, "در حال دریافت و بررسی…", "Downloading and verifying…") else tr(fa, "به‌روزرسانی بانک تهدید", "Update threat database"))
                 }
                 feedMessage?.let {
-                    Text(it, color = if (currentFeed != null) ColorSuccess else ColorWarning, fontSize = 10.sp, lineHeight = 15.sp)
+                    Text(it, color = if (feedMessageSuccess) ColorSuccess else ColorWarning, fontSize = 10.sp, lineHeight = 15.sp)
                 }
             }
         }
