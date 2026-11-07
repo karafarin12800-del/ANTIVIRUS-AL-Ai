@@ -26,14 +26,6 @@ class MainActivity : ComponentActivity() {
             Log.w(TAG, "Threat-feed background scheduling was deferred.", error)
         }
 
-        // Restore an explicitly enabled protection service when the user reopens the app.
-        if (ProtectionRuntime.isEnabled(applicationContext)) {
-            try {
-                startForegroundService(Intent(applicationContext, ProtectionService::class.java))
-            } catch (error: Exception) {
-                Log.w(TAG, "Previously enabled protection could not be restored.", error)
-            }
-        }
     }
 
     override fun onResume() {
