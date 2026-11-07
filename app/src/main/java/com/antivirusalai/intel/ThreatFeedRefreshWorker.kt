@@ -56,9 +56,16 @@ object ThreatFeedScheduler {
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.MINUTES)
             .build()
 
+        // First refresh should not wait for the battery-not-low condition.
+        // A network connection is sufficient; WorkManager still applies its own
+        // execution and quota policies.
+        val firstRunConstraints = Constraints.Builder()
+            .setRequiredNetworkType(NetworkType.CONNECTED)
+            .build()
+
         val firstRun = OneTimeWorkRequestBuilder<ThreatFeedRefreshWorker>()
-            .setConstraints(constraints)
-            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.MINUTES)
+            .setConstraints(firstRunConstraints)
+            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 15, TimeUnit.MINUTES)
             .build()
 
         WorkManager.getInstance(context.applicationContext).enqueueUniquePeriodicWork(
