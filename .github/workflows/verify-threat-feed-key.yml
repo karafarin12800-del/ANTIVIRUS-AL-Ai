@@ -1,0 +1,34 @@
+name: Verify threat-feed signing key
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-key:
+    name: Check private/public key match (no publishing)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout reviewed key-check code
+        uses: actions/checkout@v4
+        with:
+          ref: feature/purple-environment-menus
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install verification dependency
+        run: python -m pip install --disable-pip-version-check "cryptography>=43,<47"
+
+      - name: Verify private key matches pinned public key
+        env:
+          ALAI_FEED_SIGNING_KEY_PEM: ${{ secrets.ALAI_FEED_SIGNING_KEY_PEM }}
+        run: |
+          set -euo pipefail
+          python tools/publish_threat_feed.py --output "$RUNNER_TEMP/key-check-unused.alfeed" --check-key-only
