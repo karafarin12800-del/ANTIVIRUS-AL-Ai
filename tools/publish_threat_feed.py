@@ -23,8 +23,7 @@ from cryptography.hazmat.primitives.asymmetric import ec
 
 
 PUBLIC_KEY_B64 = (
-    "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEAzDOX+WcMzHRxjHa/"
-    "zC4ZHIUePAR3IxTWtedJPzrM/sov5xWIWbvlnw/WBJczc6Jix9ccV5Z2EqgfKfLaQrNhg=="
+    "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEGlAeEsGIl5WbnNM6s6S5rCmNyj0+72zTaSfviukExrrH69cmg/UEntINqQEZP/ezrhNCYziWUp7Vp5ke89yn0Q="
 )
 KEY_ID = "alai-release-2026"
 API_URL = "https://mb-api.abuse.ch/api/v1/"
