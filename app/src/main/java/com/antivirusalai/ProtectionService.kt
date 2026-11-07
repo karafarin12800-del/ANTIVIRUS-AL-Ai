@@ -8,6 +8,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.net.Uri
 import android.os.Build
@@ -83,6 +84,9 @@ class ProtectionService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
+        // Re-run setup when the activity asks the existing service to start again,
+        // e.g. after the user returns from Android's All files access settings.
+        startFileMonitoring()
         return START_STICKY
     }
 
@@ -226,11 +230,63 @@ class ProtectionService : Service() {
 
     private suspend fun scanInstalledPackage(packageName: String) {
         try {
-            val info = packageManager.getApplicationInfo(packageName, 0)
-            val apk = info.sourceDir?.let(::File) ?: return
-            if (apk.isFile) scanFile(apk, packageName)
-        } catch (_: Exception) {
-            // Android may hide or revoke access to an installed package's APK path.
+            val info = if (Build.VERSION.SDK_INT >= 33) {
+                packageManager.getApplicationInfo(
+                    packageName,
+                    PackageManager.ApplicationInfoFlags.of(0L)
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                packageManager.getApplicationInfo(packageName, 0)
+            }
+            // Modern Android apps may consist of a base APK plus split APKs.
+            // Check every readable component instead of silently checking only the base.
+            val apkPaths = (listOfNotNull(info.sourceDir) + info.splitSourceDirs.orEmpty())
+                .distinct()
+            if (apkPaths.isEmpty()) {
+                postUnverifiedAlert(packageName, "Android did not expose an APK path for this installed app.")
+                return
+            }
+
+            var checkedComponents = 0
+            var incomplete = false
+            for (path in apkPaths) {
+                val apk = File(path)
+                if (!apk.isFile || !apk.canRead() || apk.length() <= 0L ||
+                    apk.length() > ScanEngine.MAX_FILE_SIZE_BYTES
+                ) {
+                    incomplete = true
+                    continue
+                }
+                checkedComponents++
+                val result = ScanEngine.scan(applicationContext, Uri.fromFile(apk))
+                when (result.verdict) {
+                    ScanVerdict.KNOWN_MALWARE,
+                    ScanVerdict.POTENTIALLY_UNWANTED,
+                    ScanVerdict.SUSPICIOUS -> postThreatAlert(packageName, result.verdict)
+                    ScanVerdict.UNKNOWN_APK,
+                    ScanVerdict.UNSUPPORTED_FILE -> incomplete = true
+                    else -> Unit
+                }
+            }
+            if (checkedComponents == 0 || incomplete) {
+                postUnverifiedAlert(
+                    packageName,
+                    if (checkedComponents == 0) {
+                        "No installed APK component could be read and checked."
+                    } else {
+                        "One or more APK components could not be fully checked."
+                    }
+                )
+            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            // An inaccessible package is unknown, never silently marked clean.
+            postUnverifiedAlert(
+                packageName,
+                error.message ?: "Android did not allow the installed app to be checked."
+            )
         }
     }
 
@@ -269,6 +325,23 @@ class ProtectionService : Service() {
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .build()
         manager.notify((name.hashCode() and 0x7fffffff).coerceAtLeast(1), notification)
+    }
+
+    private fun postUnverifiedAlert(name: String, reason: String) {
+        val manager = getSystemService(NotificationManager::class.java)
+        val notification = NotificationCompat.Builder(this, ALERT_CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.stat_sys_warning)
+            .setContentTitle("ANTIVIRUS AL AI · نتیجه نامشخص")
+            .setContentText(name)
+            .setStyle(
+                NotificationCompat.BigTextStyle().bigText(
+                    "بررسی کامل این برنامه ممکن نشد: $name. این نتیجه به معنی پاک بودن برنامه نیست. $reason"
+                )
+            )
+            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .build()
+        manager.notify(((name.hashCode() xor 0x13579BDF) and 0x7fffffff).coerceAtLeast(1), notification)
     }
 
     private fun packageNameForSelf(): String = applicationContext.packageName
