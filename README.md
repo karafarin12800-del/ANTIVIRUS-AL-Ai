@@ -18,13 +18,18 @@ Privacy-first Android security scanner. Current Android milestone: **0.3.0 (vers
 
 The Android client and publisher workflow are prepared, but a live database is **not active until the repository owner configures** these GitHub Actions secrets:
 
-- `MALWAREBAZAAR_AUTH_KEY` — provider API credential.
+- `MALWAREBAZAAR_AUTH_KEY` — required MalwareBazaar API credential.
+- `THREATFOX_AUTH_KEY` — optional ThreatFox API credential; when configured, the publisher includes SHA-256 metadata for malware samples linked to recent ThreatFox IOCs.
 - `ALAI_FEED_SIGNING_KEY_PEM` — matching ECDSA P-256 private key; never commit it or place it in the app.
 - `ALAI_ABUSECH_COMMERCIAL_USE_APPROVED` — set to `true` only after the owner has confirmed that the selected provider plan and terms allow this commercial use.
 
 The publisher queries hash/family metadata only; it does not download malware samples. MalwareBazaar documents that its community API is free under fair-use principles, while company or for-profit use may require the enhanced commercial API. The approval flag is only an owner attestation; it is not provider approval or legal advice. Do not activate the workflow until the applicable plan/terms have been confirmed.
 
 The private signing key corresponding to the app-pinned public key is a separate secret. If it is lost or compromised, a reviewed app update and key-rotation procedure are required.
+
+## Threat-intelligence source roles
+
+The signed file-hash feed combines family-labelled MalwareBazaar detections with optional SHA-256 hashes in ThreatFox-linked sample metadata. These sources update reputation for exact file bytes; they do not provide behavioral analysis or guarantee detection of modified/unknown malware. URLhaus is documented as a separate future URL/domain reputation layer and is not represented as active protection in this file-only scanner.
 
 ## Important Android and detection boundaries
 
