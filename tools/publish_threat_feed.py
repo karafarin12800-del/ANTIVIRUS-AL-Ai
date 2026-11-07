@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import base64
 import json
+import hashlib
 import os
 import re
 import sys
@@ -178,7 +179,13 @@ def load_private_key(raw_pem: str):
         serialization.Encoding.DER,
         serialization.PublicFormat.SubjectPublicKeyInfo,
     )
-    if base64.b64encode(derived).decode("ascii") != PUBLIC_KEY_B64:
+    derived_b64 = base64.b64encode(derived).decode("ascii")
+    if derived_b64 != PUBLIC_KEY_B64:
+        actual_fp = hashlib.sha256(derived).hexdigest()
+        expected_der = base64.b64decode(PUBLIC_KEY_B64, validate=True)
+        expected_fp = hashlib.sha256(expected_der).hexdigest()
+        print("Configured key public fingerprint (SHA-256): " + actual_fp, file=sys.stderr)
+        print("App-pinned public fingerprint (SHA-256): " + expected_fp, file=sys.stderr)
         fail("Private key does not match the public key pinned in the Android app.")
     return key
 
