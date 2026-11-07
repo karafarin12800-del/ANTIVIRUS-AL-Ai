@@ -38,6 +38,9 @@ object ThreatFeedRuntime {
     @Volatile
     private var cachedFileModified: Long = -1L
 
+    @Volatile
+    private var cachedFeedStatus: ThreatFeedStatus? = null
+
     private fun verifier(): FeedSignatureVerifier {
         val key: PublicKey =
             EcdsaP256KeyringVerifier.decodeX509PublicKey(RELEASE_PUBLIC_KEY_X509_B64)
@@ -56,8 +59,37 @@ object ThreatFeedRuntime {
      */
     fun status(context: Context): ThreatFeedStatus {
         val file = File(context.applicationContext.filesDir, "threat-intelligence/current.alfeed")
-        if (!file.isFile) return ThreatFeedStatus(ThreatFeedFreshness.UNAVAILABLE, "NO_CACHED_FEED")
-        val result = runCatching { store(context).loadCurrent() }
+        if (!file.isFile) {
+            synchronized(cacheLock) {
+                cachedFeed = null
+                cachedFileLength = -1L
+                cachedFileModified = -1L
+                cachedFeedStatus = ThreatFeedStatus(ThreatFeedFreshness.UNAVAILABLE, "NO_CACHED_FEED")
+            }
+            return ThreatFeedStatus(ThreatFeedFreshness.UNAVAILABLE, "NO_CACHED_FEED")
+        }
+        synchronized(cacheLock) {
+            val length = file.length()
+            val modified = file.lastModified()
+            val now = System.currentTimeMillis() / 1000L
+            val cachedStatus = cachedFeedStatus
+            val sameFile = cachedFileLength == length && cachedFileModified == modified
+            if (sameFile && cachedStatus != null) {
+                if (cachedStatus.freshness != ThreatFeedFreshness.UP_TO_DATE) return cachedStatus
+                if (cachedFeed?.expiresAtEpochSeconds?.let { it > now } == true) return cachedStatus
+            }
+
+            val result = runCatching { store(context).loadCurrent() }
+            cachedFeed = result.getOrNull()
+            cachedFileLength = length
+            cachedFileModified = modified
+            val status = statusFrom(result)
+            cachedFeedStatus = status
+            return status
+        }
+    }
+
+    private fun statusFrom(result: Result<SignedThreatFeed?>): ThreatFeedStatus {
         if (result.getOrNull() != null) return ThreatFeedStatus(ThreatFeedFreshness.UP_TO_DATE)
         val validation = result.exceptionOrNull() as? FeedValidationException
         return if (validation?.code == FeedValidationCode.FEED_EXPIRED) {
@@ -77,22 +109,33 @@ object ThreatFeedRuntime {
 
     fun currentFeed(context: Context): SignedThreatFeed? {
         val file = File(context.applicationContext.filesDir, "threat-intelligence/current.alfeed")
-        if (!file.isFile) return null
+        if (!file.isFile) {
+            synchronized(cacheLock) {
+                cachedFeed = null
+                cachedFileLength = -1L
+                cachedFileModified = -1L
+                cachedFeedStatus = ThreatFeedStatus(ThreatFeedFreshness.UNAVAILABLE, "NO_CACHED_FEED")
+            }
+            return null
+        }
         synchronized(cacheLock) {
             val length = file.length()
             val modified = file.lastModified()
-            val cached = cachedFeed
             val now = System.currentTimeMillis() / 1000L
-            if (cached != null &&
-                cachedFileLength == length &&
-                cachedFileModified == modified &&
-                cached.expiresAtEpochSeconds > now
-            ) return cached
+            val sameFile = cachedFileLength == length && cachedFileModified == modified
+            val cached = cachedFeed
+            if (sameFile && cached != null && cached.expiresAtEpochSeconds > now) return cached
+            if (sameFile && cached == null &&
+                cachedFeedStatus?.freshness != null &&
+                cachedFeedStatus?.freshness != ThreatFeedFreshness.UP_TO_DATE
+            ) return null
 
-            val loaded = runCatching { store(context).loadCurrent() }.getOrNull()
+            val result = runCatching { store(context).loadCurrent() }
+            val loaded = result.getOrNull()
             cachedFeed = loaded
             cachedFileLength = length
             cachedFileModified = modified
+            cachedFeedStatus = statusFrom(result)
             return loaded
         }
     }

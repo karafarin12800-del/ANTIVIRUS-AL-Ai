@@ -82,6 +82,9 @@ object ScanEngine {
             val eicarMatch = EicarTestDetector.contains(temp)
             val currentThreatFeed = ThreatFeedRuntime.currentFeed(context.applicationContext)
             val threatFeedStatus = ThreatFeedRuntime.status(context.applicationContext)
+            val threatCoverageComplete =
+                threatFeedStatus.freshness == ThreatFeedFreshness.UP_TO_DATE &&
+                    currentThreatFeed?.truncated != true
             val threatMatch = currentThreatFeed?.indicators?.get(hash.lowercase())
             if (currentThreatFeed?.truncated == true) {
                 evidence += ScanEvidence(
@@ -172,8 +175,7 @@ object ScanEngine {
                     evidence += assessment.evidence
                     when {
                         assessment.suspicious -> ScanVerdict.SUSPICIOUS
-                        threatFeedStatus.freshness != ThreatFeedFreshness.UP_TO_DATE ->
-                            ScanVerdict.INCOMPLETE_THREAT_INTELLIGENCE
+                        !threatCoverageComplete -> ScanVerdict.INCOMPLETE_THREAT_INTELLIGENCE
                         else -> ScanVerdict.NO_KNOWN_INDICATOR
                     }
                 }
