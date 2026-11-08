@@ -4,6 +4,7 @@ enum class ScanVerdict { KNOWN_MALWARE, POTENTIALLY_UNWANTED, TEST_MARKER_MATCH,
 enum class EvidenceSeverity { INFO, LOW, MEDIUM, HIGH }
 enum class ContentEngineState { UNAVAILABLE, INCOMPLETE, COMPLETE }
 enum class MlModelState { NOT_CONFIGURED, READY, ERROR }
+enum class BehavioralAnalysisState { NOT_APPLICABLE, STATIC_INDICATORS_ONLY, SANDBOX_NOT_CONFIGURED }
 
 data class ContentSignatureRule(
     val id: String,
@@ -68,5 +69,6 @@ data class ScanResult(
     val contentRuleBundleVersion: Long? = null,
     val staticAnalysis: StaticAnalysisSummary? = null,
     val mlModelState: MlModelState = MlModelState.NOT_CONFIGURED,
-    val mlFeatureCount: Int = 0
+    val mlFeatureCount: Int = 0,
+    val behavioralAnalysisState: BehavioralAnalysisState = BehavioralAnalysisState.NOT_APPLICABLE
 )
