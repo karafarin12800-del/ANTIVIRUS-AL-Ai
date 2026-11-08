@@ -184,6 +184,7 @@ object ThreatFeedRuntime {
                 cachedFeed = installed
                 cachedFileLength = file.length()
                 cachedFileModified = file.lastModified()
+                cachedFeedStatus = ThreatFeedStatus(ThreatFeedFreshness.UP_TO_DATE)
             }
             installed
         } finally {
