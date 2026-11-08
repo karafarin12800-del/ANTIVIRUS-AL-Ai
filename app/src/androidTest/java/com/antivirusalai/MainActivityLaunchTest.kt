@@ -49,24 +49,11 @@ class MainActivityLaunchTest {
         }
     }
 
-    /**
-     * Finish the launched Activity explicitly before closing its scenario.
-     * This keeps ActivityScenario cleanup deterministic when the Activity has
-     * transitioned to STOPPED during instrumentation teardown.
-     */
     private fun withMainActivityScenario(
         block: (ActivityScenario<MainActivity>) -> Unit
     ) {
-        val scenario = ActivityScenario.launch(MainActivity::class.java)
-        try {
+        ActivityScenario.launch<MainActivity>(MainActivity::class.java).use { scenario ->
             block(scenario)
-        } finally {
-            try {
-                scenario.onActivity { activity -> activity.finish() }
-                InstrumentationRegistry.getInstrumentation().waitForIdleSync()
-            } finally {
-                scenario.close()
-            }
         }
     }
 }
