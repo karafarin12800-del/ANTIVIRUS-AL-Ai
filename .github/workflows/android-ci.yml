@@ -11,7 +11,7 @@ permissions:
 
 # One active validation per PR/branch. New commits supersede stale runs.
 concurrency:
-  group: android-ci-\${{ github.workflow }}-\${{ github.event.pull_request.number || github.ref }}
+  group: android-ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -60,8 +60,8 @@ jobs:
             echo "app=ANTIVIRUS AL AI"
             echo "version=0.3.0"
             echo "version_code=3"
-            echo "commit=\${GITHUB_SHA}"
-            echo "workflow_run=\${GITHUB_RUN_ID}"
+            echo "commit=${GITHUB_SHA}"
+            echo "workflow_run=${GITHUB_RUN_ID}"
             echo "sha256=$(sha256sum "$APK" | cut -d ' ' -f 1)"
           } > artifacts/build-info.txt
 
@@ -110,7 +110,7 @@ jobs:
         run: gradle --no-daemon testDebugUnitTest lintDebug
 
   emulator-smoke:
-    name: Android startup and instrumentation (API \${{ matrix.api-level }})
+    name: Android startup and instrumentation (API ${{ matrix.api-level }})
     needs: [build-apk, quality]
     runs-on: ubuntu-24.04
     timeout-minutes: 20
@@ -146,12 +146,12 @@ jobs:
         shell: bash
         run: |
           mkdir -p artifacts
-          touch "artifacts/emulator-\${{ matrix.api-level }}-diagnostics.log"
+          touch "artifacts/emulator-${{ matrix.api-level }}-diagnostics.log"
 
       - name: Launch app and run instrumentation tests
         uses: reactivecircus/android-emulator-runner@v2.38.0
         with:
-          api-level: \${{ matrix.api-level }}
+          api-level: ${{ matrix.api-level }}
           target: google_apis
           arch: x86_64
           profile: pixel_2
@@ -164,7 +164,7 @@ jobs:
               local status=$?
               trap - EXIT
               {
-                echo "=== API \${{ matrix.api-level }} emulator diagnostics ==="
+                echo "=== API ${{ matrix.api-level }} emulator diagnostics ==="
                 echo "=== adb devices ==="
                 adb devices -l || true
                 echo "=== logcat -d ==="
@@ -173,7 +173,7 @@ jobs:
                 adb shell dumpsys activity activities || true
                 echo "=== system properties ==="
                 adb shell getprop || true
-              } > "artifacts/emulator-\${{ matrix.api-level }}-diagnostics.log" 2>&1
+              } > "artifacts/emulator-${{ matrix.api-level }}-diagnostics.log" 2>&1
               exit "$status"
             }
             trap capture_emulator_diagnostics EXIT
@@ -193,13 +193,13 @@ jobs:
             adb devices -l || true
             echo "=== post-run logcat -d ==="
             adb logcat -d -b all -v threadtime || true
-          } >> "artifacts/emulator-\${{ matrix.api-level }}-diagnostics.log" 2>&1
+          } >> "artifacts/emulator-${{ matrix.api-level }}-diagnostics.log" 2>&1
 
       - name: Upload emulator diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: emulator-diagnostics-api-\${{ matrix.api-level }}
-          path: artifacts/emulator-\${{ matrix.api-level }}-diagnostics.log
+          name: emulator-diagnostics-api-${{ matrix.api-level }}
+          path: artifacts/emulator-${{ matrix.api-level }}-diagnostics.log
           if-no-files-found: warn
           retention-days: 14
