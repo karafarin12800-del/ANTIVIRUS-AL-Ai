@@ -73,3 +73,10 @@ See `docs/DETECTION_VALIDATION.md`, `docs/THREAT_INTEL_OPERATIONS.md`, and `docs
 ## Build
 
 The Android package version is `0.3.0` (`versionCode=3`). GitHub Actions publishes `ANTIVIRUS-AL-AI-v0.3.0-debug.apk` with source commit, workflow run ID, and SHA-256 metadata. Debug APKs are for testing only and are not production-signed release packages. CI runs unit tests, Android lint, APK assembly, and emulator instrumentation tests.
+
+
+## Reviewed Android content-rule seed
+
+This implementation branch now includes a reviewed, grouped Android indicator rule adapted from WithSecure Labs' `WITHSECURELABS_Fallspy` rule in the `WithSecureLabs/iocs` repository (pinned commit `1a8384468dd292c6d2c5114c32e42dc0da1f5ae1`, BSD 2-Clause). The source rule requires **4 of 10** string indicators. ANTIVIRUS AL AI preserves that grouping, classifies the adaptation as **SUSPICIOUS** rather than confirmed malware, and records source and licence metadata. The current matcher does not implement YARA's `fullword` modifier, so the adaptation is deliberately conservative and is not equivalent to running the original YARA rule.
+
+The CSV and publisher workflow are included in this branch. They do not activate signatures by themselves: publishing still requires the matching `ALAI_FEED_SIGNING_KEY_PEM` GitHub Secret and the two owner attestation secrets `ALAI_CONTENT_RULES_REVIEWED=true` and `ALAI_CONTENT_RULES_COMMERCIAL_USE_APPROVED=true`. The publishing workflow runs only from `main` and writes the signed bundle to `security-feed/content-rules/latest.alrules`. Until that signed bundle has been published and fetched by a device, only the built-in harmless self-test marker remains active.
