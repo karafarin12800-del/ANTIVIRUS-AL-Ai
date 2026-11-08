@@ -53,8 +53,14 @@ object ScanEngine {
         val digest = MessageDigest.getInstance("SHA-256")
         var totalBytes = 0L
         val startedAt = System.nanoTime()
-        val contentBundle = ContentRuleBundleRuntime.current(context.applicationContext)
-        var nativeSession = NativeContentEngine.openSession(contentBundle?.rules.orEmpty())
+        val contentBundleStage = ScanStageRunner.execute("CONTENT_RULE_BUNDLE") {
+            ContentRuleBundleRuntime.current(context.applicationContext)
+        }
+        val contentBundle = contentBundleStage.value
+        val nativeInitStage = ScanStageRunner.execute("NATIVE_ENGINE_INIT") {
+            NativeContentEngine.openSession(contentBundle?.rules.orEmpty())
+        }
+        var nativeSession = nativeInitStage.value
         var contentEngineState = if (nativeSession == null) ContentEngineState.UNAVAILABLE else ContentEngineState.INCOMPLETE
         var contentEngineErrorCode: String? =
             if (nativeSession == null) "NATIVE_LIBRARY_UNAVAILABLE" else null
@@ -111,6 +117,8 @@ object ScanEngine {
 
             val hash = digest.digest().joinToString("") { "%02x".format(it.toInt() and 0xff) }
             val evidence = mutableListOf<ScanEvidence>()
+            ScanStageRunner.failureEvidence(contentBundleStage)?.let(evidence::add)
+            ScanStageRunner.failureEvidence(nativeInitStage)?.let(evidence::add)
             if (contentEngineState != ContentEngineState.COMPLETE) {
                 evidence += ScanEvidence(
                     "NATIVE_CONTENT_ENGINE_INCOMPLETE",
@@ -120,7 +128,11 @@ object ScanEngine {
                 )
             }
             if (contentBundle == null) {
-                val state = ContentRuleBundleRuntime.state(context.applicationContext)
+                val stateStage = ScanStageRunner.execute("CONTENT_RULE_BUNDLE_STATE") {
+                    ContentRuleBundleRuntime.state(context.applicationContext)
+                }
+                ScanStageRunner.failureEvidence(stateStage)?.let(evidence::add)
+                val state = stateStage.value ?: ContentRuleBundleState.INVALID
                 evidence += ScanEvidence(
                     "SIGNED_CONTENT_RULES_${state.name}",
                     "Production content rules are not currently available",
@@ -136,8 +148,16 @@ object ScanEngine {
 
             val selfTestMatch = NativeContentEngine.SELF_TEST_RULE_ID in nativeMatches
             val allContentRules = contentBundle?.rules.orEmpty()
-            val matchedContentRules = ContentRuleGroupEvaluator.qualifiedMatches(allContentRules, nativeMatches)
-            ContentRuleGroupEvaluator.partialMatches(allContentRules, nativeMatches).forEach { partial ->
+            val qualifiedRulesStage = ScanStageRunner.execute("CONTENT_RULE_GROUPING") {
+                ContentRuleGroupEvaluator.qualifiedMatches(allContentRules, nativeMatches)
+            }
+            ScanStageRunner.failureEvidence(qualifiedRulesStage)?.let(evidence::add)
+            val matchedContentRules = qualifiedRulesStage.value.orEmpty()
+            val partialRulesStage = ScanStageRunner.execute("CONTENT_RULE_PARTIAL_MATCHES") {
+                ContentRuleGroupEvaluator.partialMatches(allContentRules, nativeMatches)
+            }
+            ScanStageRunner.failureEvidence(partialRulesStage)?.let(evidence::add)
+            partialRulesStage.value.orEmpty().forEach { partial ->
                 evidence += ScanEvidence(
                     "CONTENT_RULE_GROUP_PARTIAL_${partial.groupId}",
                     "Partial match for ${partial.familyId}",
@@ -165,10 +185,29 @@ object ScanEngine {
                 )
             }
 
-            val localMatch = LocalIndicatorDatabase.lookup(hash)
-            val eicarMatch = EicarTestDetector.contains(temp)
-            val currentThreatFeed = ThreatFeedRuntime.currentFeed(context.applicationContext)
-            val threatFeedStatus = ThreatFeedRuntime.status(context.applicationContext)
+            val localReputationStage = ScanStageRunner.execute("LOCAL_HASH_REPUTATION") {
+                LocalIndicatorDatabase.lookup(hash)
+            }
+            ScanStageRunner.failureEvidence(localReputationStage)?.let(evidence::add)
+            val localMatch = localReputationStage.value
+
+            val eicarStage = ScanStageRunner.execute("EICAR_SELF_TEST") {
+                EicarTestDetector.contains(temp)
+            }
+            ScanStageRunner.failureEvidence(eicarStage)?.let(evidence::add)
+            val eicarMatch = eicarStage.value == true
+
+            val threatFeedStage = ScanStageRunner.execute("SIGNED_THREAT_FEED_READ") {
+                ThreatFeedRuntime.currentFeed(context.applicationContext)
+            }
+            ScanStageRunner.failureEvidence(threatFeedStage)?.let(evidence::add)
+            val currentThreatFeed = threatFeedStage.value
+            val threatFeedStatusStage = ScanStageRunner.execute("SIGNED_THREAT_FEED_STATUS") {
+                ThreatFeedRuntime.status(context.applicationContext)
+            }
+            ScanStageRunner.failureEvidence(threatFeedStatusStage)?.let(evidence::add)
+            val threatFeedStatus = threatFeedStatusStage.value
+                ?: com.antivirusalai.intel.ThreatFeedStatus(ThreatFeedFreshness.UNAVAILABLE, "STATUS_READ_FAILED")
             val threatMatch = currentThreatFeed?.indicators?.get(hash.lowercase())
             if (threatMatch != null) {
                 val label = when (threatMatch.classification) {
@@ -208,12 +247,53 @@ object ScanEngine {
             val looksLikeApk = ApkFileDetector.isApkArchive(temp) ||
                 displayName.endsWith(".apk", ignoreCase = true) ||
                 mimeType == "application/vnd.android.package-archive"
-            val apk = if (looksLikeApk) ApkMetadataInspector.inspect(context, temp) else null
-            val staticReport = FormatStaticAnalyzer.analyze(temp)
-            val permissionAssessment = apk?.let(PermissionRiskAnalyzer::analyze)
-            val combinedRisk = MultiSignalRiskScorer.assess(permissionAssessment, staticReport)
+            val apkStage = ScanStageRunner.execute("APK_METADATA_ANALYSIS") {
+                if (looksLikeApk) ApkMetadataInspector.inspect(context, temp) else null
+            }
+            ScanStageRunner.failureEvidence(apkStage)?.let(evidence::add)
+            val apk = apkStage.value
+
+            val staticStage = ScanStageRunner.execute("FORMAT_STATIC_ANALYSIS") {
+                FormatStaticAnalyzer.analyze(temp)
+            }
+            ScanStageRunner.failureEvidence(staticStage)?.let(evidence::add)
+            val staticReport = staticStage.value ?: StaticAnalysisReport(
+                format = null,
+                supported = false,
+                complete = false,
+                entryCount = 0,
+                expandedBytes = 0L,
+                evidence = emptyList(),
+                signalCategories = setOf("ANALYZER_FAILURE"),
+                riskPoints = 0
+            )
+
+            val permissionStage = ScanStageRunner.execute("APK_PERMISSION_ANALYSIS") {
+                apk?.let(PermissionRiskAnalyzer::analyze)
+            }
+            ScanStageRunner.failureEvidence(permissionStage)?.let(evidence::add)
+            val permissionAssessment = permissionStage.value
+
+            val fusionStage = ScanStageRunner.execute("MULTI_SIGNAL_RISK_FUSION") {
+                MultiSignalRiskScorer.assess(permissionAssessment, staticReport)
+            }
+            ScanStageRunner.failureEvidence(fusionStage)?.let(evidence::add)
+            val combinedRisk = fusionStage.value ?: CombinedRiskAssessment(
+                score = 0,
+                suspicious = false,
+                evidence = emptyList(),
+                independentSignalGroups = emptySet()
+            )
             evidence += combinedRisk.evidence
 
+            if (!staticStage.completed) {
+                evidence += ScanEvidence(
+                    "STATIC_ANALYZER_FALLBACK_ONLY",
+                    "Static parser failed; independent checks continued",
+                    "The structured file parser failed. Hash reputation, the streaming content engine, and other independent checks still ran where available; structural coverage for this file is incomplete.",
+                    EvidenceSeverity.INFO
+                )
+            }
             if (!staticReport.complete) {
                 evidence += ScanEvidence(
                     "STATIC_ANALYSIS_INCOMPLETE",
@@ -239,11 +319,16 @@ object ScanEngine {
             )
             // The trained model is currently scoped to structurally parsed APK files.
             // ZIP/ELF/unknown inputs are not silently interpreted as APKs.
-            val mlResult = if (apk != null && staticReport.format == "APK") {
-                OnDeviceMlScorer.score(context.applicationContext, mlFeatures)
-            } else {
-                MlScoringResult(MlModelState.NOT_APPLICABLE)
+            val mlStage = ScanStageRunner.execute("ON_DEVICE_MODEL_INFERENCE") {
+                if (apk != null && staticReport.format == "APK") {
+                    OnDeviceMlScorer.score(context.applicationContext, mlFeatures)
+                } else {
+                    MlScoringResult(MlModelState.NOT_APPLICABLE)
+                }
             }
+            ScanStageRunner.failureEvidence(mlStage)?.let(evidence::add)
+            val mlResult = mlStage.value
+                ?: MlScoringResult(MlModelState.ERROR, errorCode = "MODEL_STAGE_FAILED")
             val behavioralState = if (staticReport.supported) {
                 BehavioralAnalysisState.STATIC_INDICATORS_ONLY
             } else {
