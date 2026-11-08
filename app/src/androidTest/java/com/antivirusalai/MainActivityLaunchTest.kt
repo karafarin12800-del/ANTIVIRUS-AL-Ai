@@ -14,7 +14,7 @@ import org.junit.runner.RunWith
 class MainActivityLaunchTest {
     @Test
     fun guardianArtworkResourceDecodesToBitmap() {
-        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+        withMainActivityScenario { scenario ->
             InstrumentationRegistry.getInstrumentation().waitForIdleSync()
             scenario.onActivity { activity ->
                 val bitmap = requireNotNull(
@@ -31,7 +31,7 @@ class MainActivityLaunchTest {
 
     @Test
     fun launcherActivityAttachesItsComposeContentAfterStartup() {
-        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+        withMainActivityScenario { scenario ->
             InstrumentationRegistry.getInstrumentation().waitForIdleSync()
             scenario.onActivity { activity ->
                 assertNotNull("The launcher Activity must create a window.", activity.window)
@@ -45,6 +45,27 @@ class MainActivityLaunchTest {
                     "The Compose content root must be attached to the active window.",
                     content.getChildAt(0).isAttachedToWindow
                 )
+            }
+        }
+    }
+
+    /**
+     * Finish the launched Activity explicitly before closing its scenario.
+     * This keeps ActivityScenario cleanup deterministic when the Activity has
+     * transitioned to STOPPED during instrumentation teardown.
+     */
+    private fun withMainActivityScenario(
+        block: (ActivityScenario<MainActivity>) -> Unit
+    ) {
+        val scenario = ActivityScenario.launch(MainActivity::class.java)
+        try {
+            block(scenario)
+        } finally {
+            try {
+                scenario.onActivity { activity -> activity.finish() }
+                InstrumentationRegistry.getInstrumentation().waitForIdleSync()
+            } finally {
+                scenario.close()
             }
         }
     }
