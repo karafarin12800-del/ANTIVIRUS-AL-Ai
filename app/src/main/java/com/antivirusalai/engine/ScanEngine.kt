@@ -226,6 +226,25 @@ object ScanEngine {
 
             val mlFeatures = OnDeviceMlScorer.extractFeatures(apk, staticReport, combinedRisk)
             val mlState = OnDeviceMlScorer.score(mlFeatures)
+            val behavioralState = if (staticReport.supported) {
+                BehavioralAnalysisState.STATIC_INDICATORS_ONLY
+            } else {
+                BehavioralAnalysisState.NOT_APPLICABLE
+            }
+            if (staticReport.supported) {
+                evidence += ScanEvidence(
+                    "DYNAMIC_BEHAVIORAL_SANDBOX_NOT_CONFIGURED",
+                    "Dynamic behavioral sandbox was not run",
+                    "This report contains static DEX/API and ELF symbol indicators only. The selected application was not executed, and other apps' private processes were not instrumented.",
+                    EvidenceSeverity.INFO
+                )
+                evidence += ScanEvidence(
+                    "ON_DEVICE_ML_NOT_CONFIGURED",
+                    "On-device ML inference is not configured",
+                    "A deterministic feature vector was extracted, but no trained model is loaded or used in the verdict.",
+                    EvidenceSeverity.INFO
+                )
+            }
             val topContentRule = matchedContentRules.maxByOrNull {
                 when (it.classification) {
                     ThreatClassification.MALWARE -> 3
@@ -302,7 +321,8 @@ object ScanEngine {
                     staticReport.signalCategories
                 ),
                 mlModelState = mlState,
-                mlFeatureCount = mlFeatures.featureCount
+                mlFeatureCount = mlFeatures.featureCount,
+                behavioralAnalysisState = behavioralState
             )
         } finally {
             runCatching { nativeSession?.close() }
