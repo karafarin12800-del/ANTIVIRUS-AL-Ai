@@ -342,6 +342,7 @@ class ProtectionService : Service() {
             }
             // Modern Android apps may consist of a base APK plus split APKs.
             // Check every readable component instead of silently checking only the base.
+            val hasBaseApkPath = !info.sourceDir.isNullOrBlank()
             val apkPaths = (listOfNotNull(info.sourceDir) + info.splitSourceDirs.orEmpty())
                 .distinct()
             if (apkPaths.isEmpty()) {
@@ -350,7 +351,8 @@ class ProtectionService : Service() {
             }
 
             var checkedComponents = 0
-            var incomplete = false
+            // A readable split cannot hide a missing/unreadable base APK component.
+            var incomplete = !hasBaseApkPath
             for (path in apkPaths) {
                 val apk = File(path)
                 if (!apk.isFile || !apk.canRead() || apk.length() <= 0L ||
@@ -366,7 +368,8 @@ class ProtectionService : Service() {
                     ScanVerdict.POTENTIALLY_UNWANTED,
                     ScanVerdict.SUSPICIOUS -> postThreatAlert(packageName, result.verdict)
                     ScanVerdict.UNKNOWN_APK,
-                    ScanVerdict.UNSUPPORTED_FILE -> incomplete = true
+                    ScanVerdict.UNSUPPORTED_FILE,
+                    ScanVerdict.INCOMPLETE_THREAT_INTELLIGENCE -> incomplete = true
                     else -> Unit
                 }
             }
@@ -392,21 +395,49 @@ class ProtectionService : Service() {
     }
 
     private suspend fun scanFile(file: File, displayName: String = file.name) {
-        if (!file.isFile || !file.canRead() || file.length() <= 0L ||
-            file.length() > ScanEngine.MAX_FILE_SIZE_BYTES
-        ) return
         try {
+            // Stale events are harmless, but a present file that cannot be read or
+            // exceeds the scanner's hard ceiling must be surfaced as unverified.
+            if (!file.isFile) return
+            if (!file.canRead()) {
+                postUnverifiedAlert(displayName, "The file is not readable by this app; no content scan was completed.")
+                return
+            }
+            val size = file.length()
+            if (size > ScanEngine.MAX_FILE_SIZE_BYTES) {
+                postUnverifiedAlert(
+                    displayName,
+                    "The file exceeds the configured ${ScanEngine.MAX_FILE_SIZE_BYTES}-byte scan limit and was not scanned."
+                )
+                return
+            }
+
             val result = ScanEngine.scan(applicationContext, Uri.fromFile(file))
             when (result.verdict) {
                 ScanVerdict.KNOWN_MALWARE,
                 ScanVerdict.POTENTIALLY_UNWANTED,
                 ScanVerdict.SUSPICIOUS -> postThreatAlert(displayName, result.verdict)
+                ScanVerdict.UNKNOWN_APK -> postUnverifiedAlert(
+                    displayName,
+                    "APK metadata could not be fully analyzed; this file is not declared clean."
+                )
+                ScanVerdict.UNSUPPORTED_FILE -> postUnverifiedAlert(
+                    displayName,
+                    "This file format has no content-aware analyzer in the current build."
+                )
+                ScanVerdict.INCOMPLETE_THREAT_INTELLIGENCE -> postUnverifiedAlert(
+                    displayName,
+                    "A current authenticated threat-intelligence feed is unavailable or expired."
+                )
                 else -> Unit
             }
         } catch (cancelled: CancellationException) {
             throw cancelled
-        } catch (_: Exception) {
-            // Inaccessible or unsupported files remain unverified; never mark them clean.
+        } catch (error: Exception) {
+            postUnverifiedAlert(
+                displayName,
+                error.message ?: "The scan failed before a complete result could be produced."
+            )
         }
     }
 
