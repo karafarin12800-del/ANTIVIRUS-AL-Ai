@@ -81,6 +81,7 @@ internal data class MlForestModel(
             }
             val root = JSONObject(json)
             require(root.optString("format") == "ALAI-MV-FOREST/1") { "MODEL_FORMAT_UNSUPPORTED" }
+            require(root.optInt("feature_schema_version", -1) == 1) { "MODEL_FEATURE_SCHEMA_VERSION_UNSUPPORTED" }
             val version = root.optString("model_version")
             require(version.isNotBlank() && version.length <= 32) { "MODEL_VERSION_INVALID" }
             val threshold = root.optDouble("decision_threshold", Double.NaN).toFloat()
@@ -181,7 +182,6 @@ object OnDeviceMlScorer {
     fun extractFeatures(
         apk: ApkMetadata?,
         static: StaticAnalysisReport,
-        combined: CombinedRiskAssessment,
         fileSizeBytes: Long,
         contentEngineState: ContentEngineState
     ): MlFeatureVector {
@@ -258,9 +258,7 @@ object OnDeviceMlScorer {
         values["static_analysis_complete"] = bit(static.supported && static.complete)
         values["native_content_engine_complete"] = bit(contentEngineState == ContentEngineState.COMPLETE)
 
-        // Feature schema deliberately excludes the heuristic's final verdict/score.
-        // This reduces direct target leakage and keeps the learned model independent.
-        @Suppress("UNUSED_VARIABLE") val independentGroups = combined.independentSignalGroups.size
+        // The model feature schema excludes the legacy heuristic score and verdict.
         return MlFeatureVector(values.size, values)
     }
 
