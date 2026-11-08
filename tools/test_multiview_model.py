@@ -47,8 +47,11 @@ class MultiViewTrainerTests(unittest.TestCase):
             self.assertGreaterEqual(result["validation"]["recall_at_threshold"], 0.50)
             self.assertEqual(
                 result["training"]["independent_groups"]
+                + result["calibration"]["independent_groups"]
                 + result["validation"]["independent_groups"], 80
             )
+            self.assertTrue(result["validation"]["threshold_chosen_before_test"])
+            self.assertNotEqual(result["calibration"]["independent_groups"], 0)
             self.assertTrue(all(len(tree) <= 2047 for tree in result["trees"]))
 
     def test_rejects_unknown_labels(self):
