@@ -154,10 +154,10 @@ object FormatStaticAnalyzer {
                 budget.complete = false
                 evidence += ScanEvidence(
                     "ARCHIVE_ENTRY_LIMIT", "Archive entry exceeded analysis limits",
-                    "An entry was skipped because its expanded size exceeded the configured safety ceiling.",
+                    "An entry was skipped because its expanded size exceeded the configured safety ceiling. The archive scan stopped safely.",
                     EvidenceSeverity.MEDIUM
                 )
-                continue
+                break
             }
             inspectEntryBytes(entry.name, bytes, 0, budget, evidence, categories)
         }
@@ -273,11 +273,12 @@ object FormatStaticAnalyzer {
         while (true) {
             val count = input.read(buffer)
             if (count < 0) break
-            entryBytes += count
-            budget.expanded += count
-            if (entryBytes > perEntryLimit || budget.expanded > MAX_EXPANDED_BYTES) {
+            val nextEntryBytes = entryBytes + count
+            if (nextEntryBytes > perEntryLimit || count.toLong() > MAX_EXPANDED_BYTES - budget.expanded) {
                 throw LimitExceeded()
             }
+            entryBytes = nextEntryBytes
+            budget.expanded += count
             output.write(buffer, 0, count)
         }
         return output.toByteArray()
