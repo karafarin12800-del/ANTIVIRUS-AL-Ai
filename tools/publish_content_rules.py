@@ -69,8 +69,9 @@ def read_rules(path: Path) -> list[dict]:
                 confidence_raw = (row.get("confidence") or "").strip()
                 encoded = (row.get("pattern_base64url") or "").strip()
                 description = (row.get("description") or "").strip()
-                if not ID_RE.fullmatch(rule_id) or not FAMILY_RE.fullmatch(family):
-                    fail("Invalid rule ID or family: " + rule_id)
+                if (not ID_RE.fullmatch(rule_id) or rule_id == "ALAI-NATIVE-ENGINE-SELFTEST"
+                        or not FAMILY_RE.fullmatch(family)):
+                    fail("Invalid or reserved rule ID/family: " + rule_id)
                 if classification not in CLASSIFICATIONS:
                     fail("Invalid classification for rule: " + rule_id)
                 try:
