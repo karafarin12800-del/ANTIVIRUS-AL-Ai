@@ -680,7 +680,7 @@ fun AntivirusApp(inPictureInPicture: Boolean = false) {
                                     } catch (_: Exception) {
                                         Toast.makeText(
                                             context,
-                                            tr(fa, "برنامه ایمیل روی دستگاه پیدا نشد؛ نشانی را کپی و دستی استفاده کن.", "No email app was found; copy the address and use it manually."),
+                                            tr(fa, "برنامه ایمیل روی دستگاه پیدا نشد؛ نشانی را یادداشت کن و دستی استفاده کن.", "No email app was found; note the address and use it manually."),
                                             Toast.LENGTH_LONG
                                         ).show()
                                     }
