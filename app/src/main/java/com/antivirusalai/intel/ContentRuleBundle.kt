@@ -94,8 +94,10 @@ object ContentRuleBundleParser {
                 ?: throw IllegalArgumentException("Invalid rule classification.")
             val confidence = fields[3].toIntOrNull()
                 ?: throw IllegalArgumentException("Invalid rule confidence.")
-            require(idPattern.matches(id) && (previousId == null || id > previousId)) {
-                "Rule IDs must be valid, sorted and unique."
+            require(idPattern.matches(id) && id != "ALAI-NATIVE-ENGINE-SELFTEST" &&
+                (previousId == null || id > previousId)
+            ) {
+                "Rule IDs must be valid, sorted, unique, and not reserved."
             }
             require(familyPattern.matches(family) && confidence in 1..100) { "Invalid rule metadata." }
             val pattern = Base64.getUrlDecoder().decode(fields[4])
