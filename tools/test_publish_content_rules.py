@@ -30,7 +30,7 @@ class PublishContentRulesTests(unittest.TestCase):
         raw = b"content-pattern-01"
         encoded = publisher.encode_url(raw)
         self.assertNotIn("=", encoded)
-        self.assertEqual(base64.urlsafe_b64decode(encoded + "=="), raw)
+        self.assertEqual(base64.urlsafe_b64decode(encoded + "=" * ((4 - len(encoded) % 4) % 4)), raw)
 
 
 if __name__ == "__main__":
