@@ -14,7 +14,10 @@ bool StreamScanner::AddRule(const std::string& id,const std::uint8_t* p,std::siz
  rules_.push_back({id,std::string(reinterpret_cast<const char*>(p),n)});totalPatternBytes_+=n;return true;
 }
 bool StreamScanner::BuildAutomaton(){
- if(built_)return true;nodes_.clear();nodes_.emplace_back();matched_.assign(rules_.size(),false);
+ if (built_) return true;
+ nodes_.clear();
+ nodes_.emplace_back();
+ matched_.assign(rules_.size(), false);
  for(std::size_t ri=0;ri<rules_.size();++ri){std::size_t ni=0;for(unsigned char b:rules_[ri].pattern){std::size_t nx=FindEdge(nodes_[ni],b);if(nx==static_cast<std::size_t>(-1)){if(nodes_.size()>=kMaxNodes)return false;nx=nodes_.size();nodes_.emplace_back();nodes_[ni].edges.emplace_back(b,nx);}ni=nx;}nodes_[ni].outputs.push_back(ri);}
  std::queue<std::size_t> q;for(const auto& e:nodes_[0].edges){nodes_[e.second].failure=0;q.push(e.second);}
  while(!q.empty()){const auto parent=q.front();q.pop();for(const auto& e:nodes_[parent].edges){const std::uint8_t byte=e.first;const std::size_t child=e.second;std::size_t fallback=nodes_[parent].failure;std::size_t candidate=FindEdge(nodes_[fallback],byte);while(fallback!=0U&&candidate==static_cast<std::size_t>(-1)){fallback=nodes_[fallback].failure;candidate=FindEdge(nodes_[fallback],byte);}nodes_[child].failure=(candidate!=static_cast<std::size_t>(-1)&&candidate!=child)?candidate:0U;const auto& inherited=nodes_[nodes_[child].failure].outputs;nodes_[child].outputs.insert(nodes_[child].outputs.end(),inherited.begin(),inherited.end());q.push(child);}}
