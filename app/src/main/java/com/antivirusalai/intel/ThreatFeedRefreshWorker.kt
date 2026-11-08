@@ -24,8 +24,15 @@ class ThreatFeedRefreshWorker(
     override suspend fun doWork(): Result =
         try {
             val feed = ThreatFeedRuntime.refresh(applicationContext)
+            // Content rules are an optional second signed channel. A missing or
+            // expired rule bundle must not block a valid hash-feed refresh.
+            val contentRules = runCatching {
+                ContentRuleBundleRuntime.refresh(applicationContext)
+            }.getOrNull()
             applicationContext.getSharedPreferences("threat-feed-status", Context.MODE_PRIVATE)
                 .edit()
+                .putLong("content_rules_version", contentRules?.version ?: 0L)
+                .putString("content_rules_state", ContentRuleBundleRuntime.state(applicationContext).name)
                 .putLong("version", feed.version)
                 .putInt("indicator_count", feed.indicators.size)
                 .putLong("expires_at", feed.expiresAtEpochSeconds)
