@@ -9,53 +9,200 @@ on:
 permissions:
   contents: read
 
+# One active validation per PR/branch. New commits supersede stale runs.
 concurrency:
-  group: android-ci-${{ github.ref }}
+  group: android-ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
-  build-and-test:
-    name: Build, unit tests, and lint
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
+  build-apk:
+    name: Assemble, verify, and upload debug APK
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7.0.1
+
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6.2.0
         with:
           distribution: temurin
           java-version: "17"
+
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6.4.1
         with:
           gradle-version: "8.13"
+
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4.0.4
         with:
           packages: platform-tools
+
       - name: Install Android 36 SDK packages
         run: sdkmanager "platforms;android-36" "build-tools;36.0.0" "platform-tools"
-      - name: Run unit tests, lint, and debug build
-        run: gradle --no-daemon clean testDebugUnitTest lintDebug assembleDebug
-      - name: Label APK and write build identity
-        if: success()
+
+      - name: Assemble debug APK
+        run: gradle --no-daemon clean assembleDebug
+
+      - name: Verify APK package, archive, and signature
+        shell: bash
         run: |
-          cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/ANTIVIRUS-AL-AI-v0.2.0-debug.apk
+          set -euo pipefail
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+          test -s "$APK"
+          unzip -t "$APK" >/dev/null
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose "$APK"
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$APK" | grep -F "package: name='com.antivirusalai' versionCode='3' versionName='0.3.0'"
+          mkdir -p artifacts
+          cp "$APK" artifacts/ANTIVIRUS-AL-AI-v0.3.0-debug.apk
           {
             echo "app=ANTIVIRUS AL AI"
-            echo "version=0.2.0"
-            echo "version_code=2"
+            echo "version=0.3.0"
+            echo "version_code=3"
             echo "commit=${GITHUB_SHA}"
             echo "workflow_run=${GITHUB_RUN_ID}"
-          } > app/build/outputs/apk/debug/build-info.txt
+            echo "sha256=$(sha256sum "$APK" | cut -d ' ' -f 1)"
+          } > artifacts/build-info.txt
+
       - name: Upload debug APK
-        if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: antivirus-al-ai-v0.2.0-debug
-          path: |
-            app/build/outputs/apk/debug/ANTIVIRUS-AL-AI-v0.2.0-debug.apk
-            app/build/outputs/apk/debug/build-info.txt
+          name: antivirus-al-ai-v0.3.0-debug
+          path: artifacts/*
           if-no-files-found: error
+          retention-days: 14
+
+  quality:
+    name: Unit tests and Android lint
+    needs: build-apk
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v6.2.0
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6.4.1
+        with:
+          gradle-version: "8.13"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4.0.4
+        with:
+          packages: platform-tools
+
+      - name: Install Android 36 SDK packages
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0" "platform-tools"
+
+      - name: Test threat-feed publisher source merging
+        run: |
+          python -m pip install --disable-pip-version-check "cryptography>=43,<47"
+          python -m unittest discover -s tools -p "test_*.py"
+
+      - name: Run unit tests and lint
+        run: gradle --no-daemon testDebugUnitTest lintDebug
+
+  emulator-smoke:
+    name: Android startup and instrumentation (API ${{ matrix.api-level }})
+    needs: [build-apk, quality]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        api-level: [33, 35]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v6.2.0
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6.4.1
+        with:
+          gradle-version: "8.13"
+
+      - name: Set up Android SDK and emulator
+        uses: android-actions/setup-android@v4.0.4
+        with:
+          packages: platform-tools emulator
+
+      - name: Install Android 36 SDK packages
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0" "platform-tools" "emulator"
+
+      - name: Prepare emulator diagnostics
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          touch "artifacts/emulator-${{ matrix.api-level }}-diagnostics.log"
+
+      - name: Launch app and run instrumentation tests
+        uses: reactivecircus/android-emulator-runner@v2.38.0
+        with:
+          api-level: ${{ matrix.api-level }}
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot -wipe-data
+          emulator-boot-timeout: 480
+          script: |
+            set -Eeuo pipefail
+            capture_emulator_diagnostics() {
+              local status=$?
+              trap - EXIT
+              {
+                echo "=== API ${{ matrix.api-level }} emulator diagnostics ==="
+                echo "=== adb devices ==="
+                adb devices -l || true
+                echo "=== logcat -d ==="
+                adb logcat -d -b all -v threadtime || true
+                echo "=== activity state ==="
+                adb shell dumpsys activity activities || true
+                echo "=== system properties ==="
+                adb shell getprop || true
+              } > "artifacts/emulator-${{ matrix.api-level }}-diagnostics.log" 2>&1
+              exit "$status"
+            }
+            trap capture_emulator_diagnostics EXIT
+
+            timeout 60s adb wait-for-device
+            timeout 90s bash -c 'until [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = "1" ]; do sleep 2; done'
+            adb shell input keyevent 82
+            adb shell settings put global window_animation_scale 0
+            adb shell settings put global transition_animation_scale 0
+            adb shell settings put global animator_duration_scale 0
+            adb logcat -c
+            timeout --signal=TERM --kill-after=20s 8m gradle --no-daemon connectedDebugAndroidTest --stacktrace
+
+      - name: Capture post-run ADB state
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "=== post-run adb devices ==="
+            adb devices -l || true
+            echo "=== post-run logcat -d ==="
+            adb logcat -d -b all -v threadtime || true
+          } >> "artifacts/emulator-${{ matrix.api-level }}-diagnostics.log" 2>&1
+
+      - name: Upload emulator diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: emulator-diagnostics-api-${{ matrix.api-level }}
+          path: artifacts/emulator-${{ matrix.api-level }}-diagnostics.log
+          if-no-files-found: warn
           retention-days: 14
