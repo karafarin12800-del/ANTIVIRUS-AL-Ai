@@ -10,12 +10,12 @@ Privacy-first Android security scanner. Current Android milestone: **0.3.0 (vers
 
 - Bounded device scanning: quick scan up to 350 files/1 GiB; deep and user-selected folder scans up to 100,000 files/25 GiB; 200 MiB per file. These are traversal limits, not detection-coverage guarantees. Results disclose skipped files and incomplete coverage.
 - EICAR harmless antivirus test-string detection for scanner regression checks. EICAR is not live malware and is never described as malware.
-- A native C++ streaming matcher is now wired into the file-read pass through JNI. Its initial bundled rule set recognizes only a harmless self-test marker; it is an integration/streaming proof, not a production malware-signature database.
-- APK package metadata inspection without installation or execution. APK/DEX bytecode-level threat analysis is not yet active; a hash non-match is kept as incomplete coverage.
-- Conservative permission/component evidence. Static metadata patterns are leads for review, not proof of malware.
+- A native C++ Aho-Corasick multi-pattern matcher is wired into the bounded file-read pass through JNI. It accepts reviewed patterns from a signed, expiring offline content-rule bundle; until a production bundle is published, only the harmless built-in self-test rule is active.
+- Bounded ZIP/APK structure analysis, DEX header validation, selected static API-reference checks, and ELF header/symbol inspection. No archive entry or native library is extracted for execution.
+- Multi-signal heuristics combine manifest capabilities, DEX API references, native symbol references, and archive anomalies. Static references are leads for review, not proof of execution or malware.
 - ECDSA P-256 signed-feed verification with a pinned public key, strict format, expiry, monotonic version checks, and atomic private-storage replacement.
-- Hash-reputation verdicts for feed entries classified as MALWARE, PUA, or SUSPICIOUS. These are exact SHA-256 matches, not behavioral or machine-learning detection.
-- WorkManager refresh scheduling for the signed feed. Network/battery constraints and Android Doze may delay work; this is not continuous device monitoring.
+- Hash-reputation and content-signature verdicts are separate evidence sources. ML feature extraction is implemented, but model inference is NOT_CONFIGURED until a licensed labelled dataset and independent validation exist.
+- WorkManager refresh scheduling for both signed hash intelligence and the optional signed content-rule bundle. Network/battery constraints and Android Doze may delay work; this is not continuous device monitoring.
 - AES-GCM private quarantine vault with verified-copy creation, listing, restore, and removal APIs. Source-removal action is restricted to malware/PUA/suspicious verdicts, requires explicit user confirmation and a verified copy, and can still be refused by Android or the document provider. A full quarantine-management screen remains outstanding.
 - File contents and file hashes are not uploaded by the scanning path. The app downloads only the public signed feed.
 
@@ -51,7 +51,7 @@ Android uses SHA-256 entries for local file reputation. It parses network IOCs s
 - Deep device scan and user-selected folder scan: up to 100,000 files / 25 GiB.
 - Maximum individual file size: 200 MiB.
 - Android-protected private app locations remain inaccessible and excluded.
-- The local hash database currently contains only a benign development fixture, not production malware signatures. The C++ matcher currently has only a harmless self-test rule; production content signatures, APK/DEX structural scanning, and general ZIP/archive recursion are not yet active.
+- The local hash database currently contains only a benign development fixture, not production malware hashes. The C++ matcher currently has only a harmless self-test rule until a signed production content-rule bundle is published. APK/DEX/ELF/ZIP structural checks and bounded nested-archive inspection are implemented, but are not a substitute for an independently validated malware signature corpus.
 - As of 2026-11-08, the `security-feed` branch and published `threat-feed/latest.alfeed` do not exist yet. Until a signed feed is published and installed, the app must show threat intelligence as unavailable.
 
 See [Scanning coverage and known limitations](docs/SCANNING_COVERAGE.md) for the exact boundaries and release gates. These limits do not make the app a full or independently validated antivirus product.
