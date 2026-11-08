@@ -7,6 +7,7 @@ plugins {
 android {
     namespace = "com.antivirusalai"
     compileSdk = 36
+    ndkVersion = "30.0.16248370"
     defaultConfig {
         applicationId = "com.antivirusalai"
         minSdk = 26
@@ -14,6 +15,20 @@ android {
         versionCode = 3
         versionName = "0.3.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        ndk {
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
+        }
+        externalNativeBuild {
+            cmake {
+                cppFlags += listOf("-std=c++17")
+            }
+        }
+    }
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
+        }
     }
     buildFeatures {
         compose = true
