@@ -331,7 +331,20 @@ object FormatStaticAnalyzer {
         evidence: MutableList<ScanEvidence>,
         categories: MutableSet<String>
     ): Int {
-        val bytes = runCatching { file.inputStream().use { it.readNBytes(8 * 1024 * 1024) } }.getOrDefault(byteArrayOf())
+        val bytes = runCatching {
+            file.inputStream().use { input ->
+                val output = ByteArrayOutputStream()
+                val buffer = ByteArray(8192)
+                var remaining = 8L * 1024L * 1024L
+                while (remaining > 0L) {
+                    val count = input.read(buffer, 0, minOf(buffer.size.toLong(), remaining).toInt())
+                    if (count < 0) break
+                    output.write(buffer, 0, count)
+                    remaining -= count
+                }
+                output.toByteArray()
+            }
+        }.getOrDefault(byteArrayOf())
         return riskPointsForElf(bytes, evidence, categories)
     }
 
