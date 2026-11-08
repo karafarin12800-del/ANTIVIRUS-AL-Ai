@@ -142,10 +142,9 @@ object ScanEngine {
                     "CONTENT_SIGNATURE_${rule.id}",
                     "Content signature matched: ${rule.familyId}",
                     rule.description + " Confidence metadata: ${rule.confidence}%.",
-                    when (rule.classification) {
-                        ThreatClassification.MALWARE -> EvidenceSeverity.HIGH
-                        ThreatClassification.PUA -> EvidenceSeverity.MEDIUM
-                        ThreatClassification.SUSPICIOUS -> EvidenceSeverity.MEDIUM
+                    when {
+                        rule.classification == ThreatClassification.MALWARE && rule.confidence >= 90 -> EvidenceSeverity.HIGH
+                        else -> EvidenceSeverity.MEDIUM
                     }
                 )
             }
@@ -246,11 +245,19 @@ object ScanEngine {
                 )
             }
             val topContentRule = matchedContentRules.maxByOrNull {
-                when (it.classification) {
-                    ThreatClassification.MALWARE -> 3
-                    ThreatClassification.PUA -> 2
-                    ThreatClassification.SUSPICIOUS -> 1
+                when {
+                    it.classification == ThreatClassification.MALWARE && it.confidence >= 90 -> 3
+                    it.classification == ThreatClassification.PUA && it.confidence >= 70 -> 2
+                    else -> 1
                 }
+            }
+            val contentRuleVerdict = when (topContentRule?.classification) {
+                ThreatClassification.MALWARE ->
+                    if (topContentRule.confidence >= 90) ScanVerdict.KNOWN_MALWARE else ScanVerdict.SUSPICIOUS
+                ThreatClassification.PUA ->
+                    if (topContentRule.confidence >= 70) ScanVerdict.POTENTIALLY_UNWANTED else ScanVerdict.SUSPICIOUS
+                ThreatClassification.SUSPICIOUS -> ScanVerdict.SUSPICIOUS
+                null -> null
             }
 
             val verdict = when {
@@ -262,11 +269,11 @@ object ScanEngine {
                     )
                     ScanVerdict.KNOWN_MALWARE
                 }
-                topContentRule?.classification == ThreatClassification.MALWARE -> ScanVerdict.KNOWN_MALWARE
+                contentRuleVerdict == ScanVerdict.KNOWN_MALWARE -> ScanVerdict.KNOWN_MALWARE
                 threatMatch?.classification == ThreatClassification.PUA ||
-                    topContentRule?.classification == ThreatClassification.PUA -> ScanVerdict.POTENTIALLY_UNWANTED
+                    contentRuleVerdict == ScanVerdict.POTENTIALLY_UNWANTED -> ScanVerdict.POTENTIALLY_UNWANTED
                 threatMatch?.classification == ThreatClassification.SUSPICIOUS ||
-                    topContentRule?.classification == ThreatClassification.SUSPICIOUS -> ScanVerdict.SUSPICIOUS
+                    contentRuleVerdict == ScanVerdict.SUSPICIOUS -> ScanVerdict.SUSPICIOUS
                 eicarMatch -> {
                     evidence += ScanEvidence(
                         "EICAR_TEST_FILE", "Harmless EICAR test string detected",
