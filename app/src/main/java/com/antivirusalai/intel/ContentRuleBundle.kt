@@ -155,7 +155,7 @@ object ContentRuleBundleRuntime {
 
     fun current(context: Context): SignedContentRuleBundle? {
         val file = File(context.applicationContext.filesDir, "$DIRECTORY/$FILE_NAME")
-        if (!file.isFile) return null
+        if (!file.isFile || file.length() !in 1L..ContentRuleBundleParser.MAX_BUNDLE_BYTES.toLong()) return null
         return runCatching {
             ContentRuleBundleParser.parse(
                 file.readBytes(),
