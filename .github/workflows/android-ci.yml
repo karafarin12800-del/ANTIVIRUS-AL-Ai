@@ -42,7 +42,7 @@ jobs:
           packages: platform-tools
 
       - name: Install Android 36 SDK packages
-        run: sdkmanager "platforms;android-36" "build-tools;36.0.0" "platform-tools"
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0" "platform-tools" "cmake;3.22.1" "ndk;30.0.16248370"
 
       - name: Assemble debug APK
         run: gradle --no-daemon clean assembleDebug
@@ -103,7 +103,18 @@ jobs:
           packages: platform-tools
 
       - name: Install Android 36 SDK packages
-        run: sdkmanager "platforms;android-36" "build-tools;36.0.0" "platform-tools"
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0" "platform-tools" "cmake;3.22.1" "ndk;30.0.16248370"
+
+      - name: Run native C++ stream matcher tests
+        run: |
+          set -euo pipefail
+          mkdir -p build/native
+          g++ -std=c++17 -Wall -Wextra -Werror \
+            -I app/src/main/cpp \
+            app/src/main/cpp/stream_scanner.cpp \
+            app/src/test/native/stream_scanner_test.cpp \
+            -o build/native/stream_scanner_test
+          ./build/native/stream_scanner_test
 
       - name: Test threat-feed publisher source merging
         run: |
@@ -143,7 +154,7 @@ jobs:
           packages: platform-tools
 
       - name: Install Android 36 SDK packages
-        run: sdkmanager "platforms;android-36" "build-tools;36.0.0" "platform-tools"
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0" "platform-tools" "cmake;3.22.1" "ndk;30.0.16248370"
 
       - name: Launch app and run instrumentation tests
         uses: reactivecircus/android-emulator-runner@v2
@@ -183,7 +194,7 @@ jobs:
           packages: platform-tools
 
       - name: Install Android 36 SDK packages
-        run: sdkmanager "platforms;android-36" "build-tools;36.0.0" "platform-tools"
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0" "platform-tools" "cmake;3.22.1" "ndk;30.0.16248370"
 
       - name: Assemble release AAB (unsigned preflight only)
         run: gradle --no-daemon bundleRelease
