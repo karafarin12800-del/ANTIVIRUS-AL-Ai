@@ -54,10 +54,14 @@ jobs:
           APK="app/build/outputs/apk/debug/app-debug.apk"
           test -s "$APK"
           unzip -t "$APK" >/dev/null
-          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose "$APK"
+          SIGNATURE_REPORT="$("$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$APK")"
+          printf '%s\\n' "$SIGNATURE_REPORT"
+          grep -Fq "Signer #1 certificate SHA-256 digest:" <<< "$SIGNATURE_REPORT"
           "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$APK" | grep -F "package: name='com.antivirusalai' versionCode='3' versionName='0.3.0'"
           mkdir -p artifacts
           cp "$APK" artifacts/ANTIVIRUS-AL-AI-v0.3.0-debug.apk
+          printf '%s\\n' "$SIGNATURE_REPORT" > artifacts/apk-signature.txt
+          CERT_SHA256="$(awk -F': ' '/Signer #1 certificate SHA-256 digest:/ {print $2; exit}' <<< "$SIGNATURE_REPORT")"
           {
             echo "app=ANTIVIRUS AL AI"
             echo "version=0.3.0"
@@ -65,6 +69,8 @@ jobs:
             echo "commit=${GITHUB_SHA}"
             echo "workflow_run=${GITHUB_RUN_ID}"
             echo "sha256=$(sha256sum "$APK" | cut -d ' ' -f 1)"
+            echo "signer_certificate_sha256=${CERT_SHA256}"
+            echo "signing_type=DEBUG_ONLY_NOT_FOR_STORE_RELEASE"
           } > artifacts/build-info.txt
 
       # Upload is intentionally in the build job. Test/lint/emulator failures
