@@ -14,6 +14,8 @@ class PublishContentRulesTests(unittest.TestCase):
             "family": "TEST_FAMILY",
             "classification": "SUSPICIOUS",
             "confidence": 50,
+            "source_id": "INTERNAL_TEST_SOURCE",
+            "license_id": "MIT",
             "pattern": b"SAFE_TEST_PATTERN",
             "description": "Harmless test pattern only.",
         }
