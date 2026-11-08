@@ -337,13 +337,21 @@ object ScanEngine {
                 else -> ScanVerdict.UNSUPPORTED_FILE
             }
 
-            ScanResult(
+            if (UnknownFileInvestigator.shouldInvestigate(verdict)) {
+                evidence += ScanEvidence(
+                    "UNKNOWN_FILE_INVESTIGATION_QUEUED",
+                    "Unknown file added to local investigation queue",
+                    "A privacy-minimal case was created from the SHA-256 and local analysis metadata. No file bytes, filename, or path were uploaded. Online hash lookup is not configured, so the result remains unknown.",
+                    EvidenceSeverity.INFO
+                )
+            }
+            val baseResult = ScanResult(
                 displayName = displayName,
                 mimeType = mimeType,
                 sizeBytes = totalBytes,
                 sha256 = hash,
                 verdict = verdict,
-                evidence = evidence,
+                evidence = evidence.toList(),
                 apkMetadata = apk,
                 durationMillis = (System.nanoTime() - startedAt) / 1_000_000L,
                 contentEngineState = contentEngineState,
@@ -367,6 +375,15 @@ object ScanEngine {
                 mlTopFeatures = mlResult.topFeatures,
                 behavioralAnalysisState = behavioralState
             )
+            val unknownCase = UnknownFileInvestigator.createCase(baseResult)
+            if (unknownCase != null) {
+                runCatching {
+                    UnknownFileInvestigationStore.record(context.applicationContext, unknownCase)
+                }
+                baseResult.copy(unknownFileCase = unknownCase)
+            } else {
+                baseResult
+            }
         } finally {
             runCatching { nativeSession?.close() }
             temp.delete()
