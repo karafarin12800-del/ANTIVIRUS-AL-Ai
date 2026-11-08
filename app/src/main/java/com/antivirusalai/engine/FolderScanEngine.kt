@@ -127,6 +127,9 @@ object FolderScanEngine {
                         val mime = if (mimeColumn >= 0) cursor.getString(mimeColumn) else null
                         val fallbackName = if (nameColumn >= 0) cursor.getString(nameColumn).orEmpty() else "Unnamed file"
                         if (idColumn < 0) {
+                            // Without document IDs no SAF child URI can be constructed;
+                            // this provider listing cannot be treated as complete.
+                            truncated = true
                             if (mime == DocumentsContract.Document.MIME_TYPE_DIR) {
                                 failures += FolderScanFailure(fallbackName, "Directory identifier was unavailable; its contents could not be enumerated.")
                                 truncated = true
