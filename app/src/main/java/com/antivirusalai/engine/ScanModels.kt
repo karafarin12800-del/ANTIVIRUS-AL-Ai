@@ -14,7 +14,9 @@ data class ContentSignatureRule(
     val pattern: ByteArray,
     val description: String,
     val sourceId: String = "INTERNAL",
-    val licenseId: String = "UNSPECIFIED"
+    val licenseId: String = "UNSPECIFIED",
+    val groupId: String = id,
+    val minimumGroupMatches: Int = 1
 )
 
 data class StaticAnalysisSummary(
