@@ -10,7 +10,7 @@ This document tracks release gates for ANTIVIRUS AL AI. A successful debug APK b
 - Current development version: `0.3.0`, version code `3`.
 - Compile SDK / target SDK: Android 16 / API 36.
 - Minimum SDK: API 26.
-- Current CI artifact is a debug APK and is for development/testing only.
+- CI now builds an unsigned release AAB preflight artifact after the APK, quality, and API 33/35 emulator jobs pass. It validates bundle structure only and is not uploadable to Google Play.
 - No production signing keystore or signed release AAB is configured in this repository.
 
 ## Required before a public Play submission
@@ -45,7 +45,8 @@ The current manifest requests `MANAGE_EXTERNAL_STORAGE` and `QUERY_ALL_PACKAGES`
 
 ### 4. Release artifact and account
 
-- [ ] Create a production Android App Bundle (AAB), not a debug APK.
+- [ ] Complete the unsigned AAB preflight and inspect its package/version/permissions for the exact release commit.
+- [ ] Create a production-signed Android App Bundle (AAB), not a debug APK or unsigned preflight artifact.
 - [ ] Use a production signing key controlled by the authorized account owner. Never commit it or send it in chat.
 - [ ] Configure protected CI secrets for signing only after the key is securely backed up.
 - [ ] Increment versionCode and set the intended release version.
