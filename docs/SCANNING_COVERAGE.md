@@ -20,10 +20,11 @@ The UI keeps at most 60 result details in memory, prioritizes threat findings wh
 
 - Every supported scan path computes a SHA-256 digest.
 - A file can be classified as known malware, PUA, or suspicious by an exact SHA-256 match in a successfully authenticated, unexpired signed feed.
-- The local indicator database currently contains a benign development fixture only. It is not a production malware-signature database.
+- The local indicator database currently contains a benign development fixture only. It is not a production malware-signature database. The native C++ matcher currently contains only a harmless engine self-test rule.
 - EICAR recognition is a harmless scanner self-test, not a real malware family.
-- APK analysis inspects package metadata and permission patterns. It is heuristic evidence only, not runtime or behavioral malware analysis.
-- Other file formats do not yet have general content-aware detection. Unless their hash matches an active signed feed or the harmless EICAR marker, they remain unsupported/unknown.
+- APK analysis inspects package metadata and permission patterns. It is heuristic evidence only, not DEX bytecode or runtime/behavioral malware analysis.
+- The new C++ stream matcher is invoked on the same bounded read pass as SHA-256 and uses a fixed-size overlap buffer. Its initial rule set contains only one harmless self-test marker; a match is reported as `TEST_MARKER_MATCH`, never as malware.
+- Production content signatures and signed offline rule bundles are not active yet. A native-engine no-match is not a clean verdict. Non-APK formats remain unsupported unless another configured indicator/test marker matches; APK hash non-matches remain incomplete because a complete APK/DEX content rule set is not active.
 
 ## Threat-feed activation state
 

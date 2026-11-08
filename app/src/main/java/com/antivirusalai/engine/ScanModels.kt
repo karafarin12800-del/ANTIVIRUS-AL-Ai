@@ -2,6 +2,7 @@ package com.antivirusalai.engine
 
 enum class ScanVerdict { KNOWN_MALWARE, POTENTIALLY_UNWANTED, TEST_MARKER_MATCH, SUSPICIOUS, NO_KNOWN_INDICATOR, UNKNOWN_APK, UNSUPPORTED_FILE, INCOMPLETE_THREAT_INTELLIGENCE }
 enum class EvidenceSeverity { INFO, LOW, MEDIUM, HIGH }
+enum class ContentEngineState { UNAVAILABLE, INCOMPLETE, COMPLETE }
 
 data class ScanEvidence(
     val code: String,
@@ -35,5 +36,9 @@ data class ScanResult(
     val verdict: ScanVerdict,
     val evidence: List<ScanEvidence>,
     val apkMetadata: ApkMetadata?,
-    val durationMillis: Long
+    val durationMillis: Long,
+    val contentEngineState: ContentEngineState = ContentEngineState.UNAVAILABLE,
+    val contentRuleSetId: String? = null,
+    val contentRuleMatches: List<String> = emptyList(),
+    val contentEngineErrorCode: String? = null
 )
