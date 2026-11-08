@@ -1,42 +1,28 @@
 #ifndef ALAI_STREAM_SCANNER_H_
 #define ALAI_STREAM_SCANNER_H_
-
 #include <cstddef>
 #include <cstdint>
 #include <string>
-
+#include <utility>
+#include <vector>
 namespace alai {
-
 class StreamScanner final {
 public:
-    enum ResultCode : int {
-        kNoMatch = 0,
-        kSelfTestMarkerMatch = 1,
-        kEngineError = -1,
-    };
-
-    static constexpr std::size_t kMaxChunkBytes = 64U * 1024U;
-
-    StreamScanner() = default;
-
-    // Accepts one bounded chunk. Data is not retained after Update returns,
-    // except for the short suffix needed to detect a marker spanning chunks.
-    bool Update(const std::uint8_t* bytes, std::size_t length);
-
-    // Idempotently returns the final result code.
-    int Finish();
-
-    // Exposed for native unit tests to prove state is bounded.
-    std::size_t RetainedBytesForTest() const noexcept;
-
-    static const char* SelfTestMarker() noexcept;
-
+ static constexpr std::size_t kMaxChunkBytes=64U*1024U, kMaxRules=512U, kMaxPatternBytes=256U, kMaxTotalPatternBytes=64U*1024U;
+ StreamScanner()=default;
+ bool AddRule(const std::string&,const std::uint8_t*,std::size_t);
+ bool Update(const std::uint8_t*,std::size_t);
+ std::vector<std::string> Finish();
+ std::size_t RetainedBytesForTest() const noexcept;
+ static const char* SelfTestMarker() noexcept;
 private:
-    std::string overlap_;
-    bool matched_ = false;
-    bool finished_ = false;
+ struct Rule { std::string id; std::string pattern; };
+ struct Node { std::vector<std::pair<std::uint8_t,std::size_t>> edges; std::size_t failure=0U; std::vector<std::size_t> outputs; };
+ static constexpr std::size_t kMaxNodes=65'536U;
+ std::vector<Rule> rules_; std::vector<Node> nodes_; std::vector<bool> matched_;
+ std::size_t totalPatternBytes_=0U,state_=0U; bool built_=false,finished_=false;
+ static std::size_t FindEdge(const Node&,std::uint8_t) noexcept;
+ bool BuildAutomaton();
 };
-
-}  // namespace alai
-
-#endif  // ALAI_STREAM_SCANNER_H_
+}
+#endif

@@ -23,20 +23,39 @@ class ThreatFeedRefreshWorker(
 ) : CoroutineWorker(appContext, parameters) {
     override suspend fun doWork(): Result =
         try {
-            val feed = ThreatFeedRuntime.refresh(applicationContext)
-            applicationContext.getSharedPreferences("threat-feed-status", Context.MODE_PRIVATE)
-                .edit()
-                .putLong("version", feed.version)
-                .putInt("indicator_count", feed.indicators.size)
-                .putLong("expires_at", feed.expiresAtEpochSeconds)
-                .putLong("updated_at", System.currentTimeMillis())
-                .putBoolean("truncated", feed.truncated)
-                .putString(
-                    "source_counts",
-                    feed.sourceCounts.toSortedMap().entries.joinToString(",") { it.key + ":" + it.value }
-                )
-                .apply()
-            Result.success()
+            val feed = try {
+                ThreatFeedRuntime.refresh(applicationContext)
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                null
+            }
+            // The two signed channels are independent: a missing hash feed must
+            // not prevent an available content-rule bundle from being refreshed.
+            val contentRules = try {
+                ContentRuleBundleRuntime.refresh(applicationContext)
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                null
+            }
+            val preferences = applicationContext.getSharedPreferences("threat-feed-status", Context.MODE_PRIVATE)
+            val editor = preferences.edit()
+                .putString("content_rules_state", ContentRuleBundleRuntime.state(applicationContext).name)
+                .putLong("content_rules_version", contentRules?.version ?: ContentRuleBundleRuntime.current(applicationContext)?.version ?: 0L)
+            feed?.let {
+                editor.putLong("version", it.version)
+                    .putInt("indicator_count", it.indicators.size)
+                    .putLong("expires_at", it.expiresAtEpochSeconds)
+                    .putLong("updated_at", System.currentTimeMillis())
+                    .putBoolean("truncated", it.truncated)
+                    .putString(
+                        "source_counts",
+                        it.sourceCounts.toSortedMap().entries.joinToString(",") { entry -> entry.key + ":" + entry.value }
+                    )
+            }
+            editor.apply()
+            if (feed != null || contentRules != null) Result.success() else Result.retry()
         } catch (cancelled: kotlinx.coroutines.CancellationException) {
             throw cancelled
         } catch (_: Exception) {

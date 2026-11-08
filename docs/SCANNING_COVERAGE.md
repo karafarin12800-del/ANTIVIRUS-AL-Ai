@@ -22,11 +22,11 @@ The UI keeps at most 60 result details in memory, prioritizes threat findings wh
 - A file can be classified as known malware, PUA, or suspicious by an exact SHA-256 match in a successfully authenticated, unexpired signed feed.
 - The local indicator database currently contains a benign development fixture only. It is not a production malware-signature database. The native C++ matcher currently contains only a harmless engine self-test rule.
 - EICAR recognition is a harmless scanner self-test, not a real malware family.
-- APK analysis inspects package metadata and permission patterns. It is heuristic evidence only, not DEX bytecode or runtime/behavioral malware analysis.
-- The new C++ stream matcher is invoked on the same bounded read pass as SHA-256 and uses a fixed-size overlap buffer. Its initial rule set contains only one harmless self-test marker; a match is reported as `TEST_MARKER_MATCH`, never as malware.
-- Production content signatures and signed offline rule bundles are not active yet. A native-engine no-match is not a clean verdict. Non-APK formats remain unsupported unless another configured indicator/test marker matches; APK hash non-matches remain incomplete because a complete APK/DEX content rule set is not active.
+- APK/ZIP analysis enforces entry-count, per-entry, total-expanded-byte, compression-ratio, and nested-depth limits. It validates DEX headers and records selected sensitive API references; it does not execute bytecode.
+- The C++ Aho-Corasick multi-pattern matcher is invoked on the same bounded read pass as SHA-256. It retains rule automaton state, not file contents, and accepts rules only from a validated signed bundle. Until such a bundle is published, the only active built-in pattern is a harmless self-test marker reported as `TEST_MARKER_MATCH`.
+- The signed offline content-rule parser, anti-rollback storage, and HTTPS refresh client are implemented. The published bundle is not yet available, so no production content signatures are active. A native-engine no-match is not a clean verdict. ZIP/APK and ELF structure can be inspected, but no-format-match remains incomplete until a production ruleset and coverage benchmark exist.
 
-## Threat-feed activation state
+## Static and behavioral analysis boundary\n\nDEX API references and ELF symbol strings are static capability indicators only. They do not prove that code ran. This app does not execute selected APKs in a dynamic sandbox and cannot instrument other apps’ private processes. True behavioral sandboxing requires a separately isolated emulator service.\n\nML feature extraction is available, but inference remains `NOT_CONFIGURED`; no model score is used in verdicts.\n\n## Threat-feed activation state
 
 The Android client is pinned to:
 

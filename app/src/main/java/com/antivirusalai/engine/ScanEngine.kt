@@ -3,6 +3,11 @@ package com.antivirusalai.engine
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
+import com.antivirusalai.intel.ContentRuleBundleRuntime
+import com.antivirusalai.intel.ContentRuleBundleState
+import com.antivirusalai.intel.ThreatClassification
+import com.antivirusalai.intel.ThreatFeedFreshness
+import com.antivirusalai.intel.ThreatFeedRuntime
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -10,9 +15,6 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
 import java.security.MessageDigest
-import com.antivirusalai.intel.ThreatClassification
-import com.antivirusalai.intel.ThreatFeedFreshness
-import com.antivirusalai.intel.ThreatFeedRuntime
 
 class ScanTooLargeException(message: String) : Exception(message)
 
@@ -51,20 +53,16 @@ object ScanEngine {
         val digest = MessageDigest.getInstance("SHA-256")
         var totalBytes = 0L
         val startedAt = System.nanoTime()
-        var nativeSession = NativeContentEngine.openSession()
-        var contentEngineState = if (nativeSession == null) {
-            ContentEngineState.UNAVAILABLE
-        } else {
-            ContentEngineState.INCOMPLETE
-        }
+        val contentBundle = ContentRuleBundleRuntime.current(context.applicationContext)
+        var nativeSession = NativeContentEngine.openSession(contentBundle?.rules.orEmpty())
+        var contentEngineState = if (nativeSession == null) ContentEngineState.UNAVAILABLE else ContentEngineState.INCOMPLETE
         var contentEngineErrorCode: String? =
             if (nativeSession == null) "NATIVE_LIBRARY_UNAVAILABLE" else null
-        var nativeSelfTestMatch = false
+        var nativeMatches = emptySet<String>()
 
         try {
             val input = resolver.openInputStream(uri)
                 ?: throw IllegalStateException("Android could not open the selected file.")
-
             input.use { source ->
                 FileOutputStream(temp).use { sink ->
                     val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
@@ -100,11 +98,7 @@ object ScanEngine {
 
             if (nativeSession != null && contentEngineErrorCode == null) {
                 try {
-                    when (nativeSession!!.finish()) {
-                        NativeContentEngine.RESULT_NO_MATCH -> Unit
-                        NativeContentEngine.RESULT_SELF_TEST_MATCH -> nativeSelfTestMatch = true
-                        else -> error("Native engine returned an unknown result code.")
-                    }
+                    nativeMatches = nativeSession!!.finish()
                     contentEngineState = ContentEngineState.COMPLETE
                 } catch (_: Exception) {
                     contentEngineState = ContentEngineState.INCOMPLETE
@@ -115,31 +109,83 @@ object ScanEngine {
                 }
             }
 
-            val hash = digest.digest().joinToString("") {
-                "%02x".format(it.toInt() and 0xff)
-            }
+            val hash = digest.digest().joinToString("") { "%02x".format(it.toInt() and 0xff) }
             val evidence = mutableListOf<ScanEvidence>()
             if (contentEngineState != ContentEngineState.COMPLETE) {
                 evidence += ScanEvidence(
                     "NATIVE_CONTENT_ENGINE_INCOMPLETE",
                     "Native content analysis is unavailable or incomplete",
-                    "The local C++ stream matcher did not complete. Its result is not used as evidence of a clean file.",
+                    "The local C++ signature matcher did not complete. Its result is not used as evidence of a clean file.",
                     EvidenceSeverity.INFO
                 )
             }
-            if (nativeSelfTestMatch) {
+            if (contentBundle == null) {
+                val state = ContentRuleBundleRuntime.state(context.applicationContext)
+                evidence += ScanEvidence(
+                    "SIGNED_CONTENT_RULES_${state.name}",
+                    "Production content rules are not currently available",
+                    when (state) {
+                        ContentRuleBundleState.MISSING -> "No signed offline content-rule bundle is installed. Only built-in harmless self-tests are active."
+                        ContentRuleBundleState.EXPIRED -> "The installed signed content-rule bundle has expired and is not used."
+                        ContentRuleBundleState.INVALID -> "The installed content-rule bundle failed validation and is not used."
+                        ContentRuleBundleState.CURRENT -> "A current bundle was reported, but could not be loaded for this scan."
+                    },
+                    EvidenceSeverity.INFO
+                )
+            }
+
+            val selfTestMatch = NativeContentEngine.SELF_TEST_RULE_ID in nativeMatches
+            val allContentRules = contentBundle?.rules.orEmpty()
+            val matchedContentRules = ContentRuleGroupEvaluator.qualifiedMatches(allContentRules, nativeMatches)
+            ContentRuleGroupEvaluator.partialMatches(allContentRules, nativeMatches).forEach { partial ->
+                evidence += ScanEvidence(
+                    "CONTENT_RULE_GROUP_PARTIAL_${partial.groupId}",
+                    "Partial match for ${partial.familyId}",
+                    "${partial.matchedCount} of ${partial.requiredCount} indicators matched. The group threshold was not reached, so this is informational only and does not affect the verdict.",
+                    EvidenceSeverity.LOW
+                )
+            }
+            matchedContentRules.forEach { rule ->
+                evidence += ScanEvidence(
+                    "CONTENT_SIGNATURE_${rule.id}",
+                    "Content signature matched: ${rule.familyId}",
+                    rule.description + " Confidence: ${rule.confidence}%. Source: ${rule.sourceId}. License: ${rule.licenseId}.",
+                    when {
+                        rule.classification == ThreatClassification.MALWARE && rule.confidence >= 90 -> EvidenceSeverity.HIGH
+                        else -> EvidenceSeverity.MEDIUM
+                    }
+                )
+            }
+            if (selfTestMatch) {
                 evidence += ScanEvidence(
                     "NATIVE_ENGINE_SELF_TEST_MARKER",
                     "Harmless native-engine self-test marker matched",
-                    "The C++ stream matcher recognized its dedicated harmless test fixture. This is an engine self-test, not a malware detection.",
+                    "The C++ matcher recognized its dedicated harmless integration fixture. This is not a malware detection.",
                     EvidenceSeverity.INFO
                 )
             }
+
             val localMatch = LocalIndicatorDatabase.lookup(hash)
             val eicarMatch = EicarTestDetector.contains(temp)
             val currentThreatFeed = ThreatFeedRuntime.currentFeed(context.applicationContext)
             val threatFeedStatus = ThreatFeedRuntime.status(context.applicationContext)
             val threatMatch = currentThreatFeed?.indicators?.get(hash.lowercase())
+            if (threatMatch != null) {
+                val label = when (threatMatch.classification) {
+                    ThreatClassification.MALWARE -> "Known malware"
+                    ThreatClassification.PUA -> "Potentially unwanted file"
+                    ThreatClassification.SUSPICIOUS -> "Suspicious file"
+                }
+                evidence += ScanEvidence(
+                    "SIGNED_FEED_${threatMatch.classification.name}",
+                    label,
+                    "Exact SHA-256 match in the authenticated feed. Family: ${threatMatch.familyId}. Sources: ${threatMatch.sources.sorted().joinToString()}.",
+                    when (threatMatch.classification) {
+                        ThreatClassification.MALWARE -> EvidenceSeverity.HIGH
+                        ThreatClassification.PUA, ThreatClassification.SUSPICIOUS -> EvidenceSeverity.MEDIUM
+                    }
+                )
+            }
             if (currentThreatFeed?.truncated == true) {
                 evidence += ScanEvidence(
                     "THREAT_FEED_TRUNCATED",
@@ -153,103 +199,111 @@ object ScanEngine {
                 evidence += ScanEvidence(
                     if (stale) "THREAT_FEED_STALE" else "THREAT_FEED_UNAVAILABLE",
                     "Current threat intelligence is not available",
-                    if (stale) {
-                        "The last authenticated threat feed has expired. This file cannot be given a current feed no-match result."
-                    } else {
-                        "No valid current authenticated threat feed is available. This file cannot be given a current feed no-match result."
-                    },
+                    if (stale) "The last authenticated threat feed has expired. A current feed no-match result is unavailable."
+                    else "No valid current authenticated threat feed is available. A current feed no-match result is unavailable.",
                     EvidenceSeverity.INFO
                 )
             }
+
             val looksLikeApk = ApkFileDetector.isApkArchive(temp) ||
                 displayName.endsWith(".apk", ignoreCase = true) ||
                 mimeType == "application/vnd.android.package-archive"
             val apk = if (looksLikeApk) ApkMetadataInspector.inspect(context, temp) else null
+            val staticReport = FormatStaticAnalyzer.analyze(temp)
+            val permissionAssessment = apk?.let(PermissionRiskAnalyzer::analyze)
+            val combinedRisk = MultiSignalRiskScorer.assess(permissionAssessment, staticReport)
+            evidence += combinedRisk.evidence
+
+            if (!staticReport.complete) {
+                evidence += ScanEvidence(
+                    "STATIC_ANALYSIS_INCOMPLETE",
+                    "Static format analysis was incomplete",
+                    "One or more archive, DEX, or native-code limits were reached. No clean conclusion is drawn.",
+                    EvidenceSeverity.INFO
+                )
+            }
+            if (!staticReport.supported) {
+                evidence += ScanEvidence(
+                    "FORMAT_NOT_SUPPORTED",
+                    "File format is not structurally covered",
+                    "No configured APK/ZIP/ELF structural parser recognized this format.",
+                    EvidenceSeverity.INFO
+                )
+            }
+
+            val mlFeatures = OnDeviceMlScorer.extractFeatures(apk, staticReport, combinedRisk)
+            val mlState = OnDeviceMlScorer.score(mlFeatures)
+            val behavioralState = if (staticReport.supported) {
+                BehavioralAnalysisState.STATIC_INDICATORS_ONLY
+            } else {
+                BehavioralAnalysisState.NOT_APPLICABLE
+            }
+            if (staticReport.supported) {
+                evidence += ScanEvidence(
+                    "DYNAMIC_BEHAVIORAL_SANDBOX_NOT_CONFIGURED",
+                    "Dynamic behavioral sandbox was not run",
+                    "This report contains static DEX/API and ELF symbol indicators only. The selected application was not executed, and other apps' private processes were not instrumented.",
+                    EvidenceSeverity.INFO
+                )
+                evidence += ScanEvidence(
+                    "ON_DEVICE_ML_NOT_CONFIGURED",
+                    "On-device ML inference is not configured",
+                    "A deterministic feature vector was extracted, but no trained model is loaded or used in the verdict.",
+                    EvidenceSeverity.INFO
+                )
+            }
+            val topContentRule = matchedContentRules.maxByOrNull {
+                when {
+                    it.classification == ThreatClassification.MALWARE && it.confidence >= 90 -> 3
+                    it.classification == ThreatClassification.PUA && it.confidence >= 70 -> 2
+                    else -> 1
+                }
+            }
+            val contentRuleVerdict = topContentRule?.let { rule ->
+                when (rule.classification) {
+                    ThreatClassification.MALWARE ->
+                        if (rule.confidence >= 90) ScanVerdict.KNOWN_MALWARE else ScanVerdict.SUSPICIOUS
+                    ThreatClassification.PUA ->
+                        if (rule.confidence >= 70) ScanVerdict.POTENTIALLY_UNWANTED else ScanVerdict.SUSPICIOUS
+                    ThreatClassification.SUSPICIOUS -> ScanVerdict.SUSPICIOUS
+                }
+            }
 
             val verdict = when {
-                threatMatch?.classification == ThreatClassification.MALWARE -> {
-                    evidence += ScanEvidence(
-                        "SIGNED_FEED_KNOWN_MALWARE",
-                        "Known malware hash match",
-                        "Exact SHA-256 match in the current authenticated threat feed. Family: " +
-                            threatMatch.familyId + ". This is a reputation match, not behavioral analysis.",
-                        EvidenceSeverity.HIGH
-                    )
-                    ScanVerdict.KNOWN_MALWARE
-                }
-                threatMatch?.classification == ThreatClassification.PUA -> {
-                    evidence += ScanEvidence(
-                        "SIGNED_FEED_PUA",
-                        "Potentially unwanted file hash match",
-                        "Exact SHA-256 match in the current authenticated threat feed. Family: " +
-                            threatMatch.familyId + ". Review the publisher and intended use before taking action.",
-                        EvidenceSeverity.MEDIUM
-                    )
-                    ScanVerdict.POTENTIALLY_UNWANTED
-                }
-                threatMatch?.classification == ThreatClassification.SUSPICIOUS -> {
-                    evidence += ScanEvidence(
-                        "SIGNED_FEED_SUSPICIOUS",
-                        "Suspicious file hash match",
-                        "Exact SHA-256 match in the current authenticated threat feed. Family: " +
-                            threatMatch.familyId + ". The source classifies this as suspicious, not confirmed malware.",
-                        EvidenceSeverity.MEDIUM
-                    )
-                    ScanVerdict.SUSPICIOUS
-                }
+                threatMatch?.classification == ThreatClassification.MALWARE -> ScanVerdict.KNOWN_MALWARE
+                contentRuleVerdict == ScanVerdict.KNOWN_MALWARE -> ScanVerdict.KNOWN_MALWARE
+                threatMatch?.classification == ThreatClassification.PUA ||
+                    contentRuleVerdict == ScanVerdict.POTENTIALLY_UNWANTED -> ScanVerdict.POTENTIALLY_UNWANTED
+                threatMatch?.classification == ThreatClassification.SUSPICIOUS ||
+                    contentRuleVerdict == ScanVerdict.SUSPICIOUS -> ScanVerdict.SUSPICIOUS
                 eicarMatch -> {
                     evidence += ScanEvidence(
-                        "EICAR_TEST_FILE",
-                        "Harmless EICAR test string detected",
+                        "EICAR_TEST_FILE", "Harmless EICAR test string detected",
                         "The standard EICAR antivirus test string was detected. It is intentionally harmless and is used only to test scanner reporting.",
                         EvidenceSeverity.INFO
                     )
                     ScanVerdict.TEST_MARKER_MATCH
                 }
-                nativeSelfTestMatch -> ScanVerdict.TEST_MARKER_MATCH
+                selfTestMatch -> ScanVerdict.TEST_MARKER_MATCH
                 localMatch != null -> {
                     evidence += ScanEvidence(
-                        "BENIGN_PROJECT_TEST_MARKER",
-                        "Benign project test marker matched",
-                        "This is a harmless ANTIVIRUS AL AI test fixture used only to validate hashing and reporting. It is not malware.",
+                        "BENIGN_PROJECT_TEST_MARKER", "Benign project test marker matched",
+                        "This is a harmless ANTIVIRUS AL AI test fixture. It is not malware.",
                         EvidenceSeverity.INFO
                     )
                     ScanVerdict.TEST_MARKER_MATCH
                 }
                 looksLikeApk && apk == null -> {
                     evidence += ScanEvidence(
-                        "APK_PARSE_UNAVAILABLE",
-                        "APK metadata could not be parsed",
+                        "APK_PARSE_UNAVAILABLE", "APK metadata could not be parsed",
                         "The selected file looks like an APK, but Android's package parser could not read its metadata. The result is unknown, not clean.",
                         EvidenceSeverity.MEDIUM
                     )
                     ScanVerdict.UNKNOWN_APK
                 }
-                apk != null -> {
-                    val assessment = PermissionRiskAnalyzer.analyze(apk)
-                    evidence += assessment.evidence
-                    when {
-                        assessment.suspicious -> ScanVerdict.SUSPICIOUS
-                        else -> {
-                            evidence += ScanEvidence(
-                                "APK_CONTENT_COVERAGE_NOT_ESTABLISHED",
-                                "APK content coverage is not established",
-                                "A non-empty hash feed only checks exact file reputation. The production APK/DEX content-rule set is not active, so a hash non-match cannot establish complete APK coverage.",
-                                EvidenceSeverity.INFO
-                            )
-                            ScanVerdict.INCOMPLETE_THREAT_INTELLIGENCE
-                        }
-                    }
-                }
-                else -> {
-                    evidence += ScanEvidence(
-                        "NO_LOCAL_HASH_MATCH",
-                        "File type not covered by the current scanner",
-                        "This MVP does not yet perform content or format-aware malware analysis for this file type. It must be treated as unknown, not clean.",
-                        EvidenceSeverity.INFO
-                    )
-                    ScanVerdict.UNSUPPORTED_FILE
-                }
+                combinedRisk.suspicious -> ScanVerdict.SUSPICIOUS
+                staticReport.supported || apk != null -> ScanVerdict.INCOMPLETE_THREAT_INTELLIGENCE
+                else -> ScanVerdict.UNSUPPORTED_FILE
             }
 
             ScanResult(
@@ -262,17 +316,22 @@ object ScanEngine {
                 apkMetadata = apk,
                 durationMillis = (System.nanoTime() - startedAt) / 1_000_000L,
                 contentEngineState = contentEngineState,
-                contentRuleSetId = if (contentEngineState == ContentEngineState.UNAVAILABLE) {
-                    null
-                } else {
-                    NativeContentEngine.RULE_SET_ID
-                },
-                contentRuleMatches = if (nativeSelfTestMatch) {
-                    listOf(NativeContentEngine.SELF_TEST_RULE_ID)
-                } else {
-                    emptyList()
-                },
-                contentEngineErrorCode = contentEngineErrorCode
+                contentRuleSetId = contentBundle?.let { "signed-content-rules-v${it.version}" }
+                    ?: NativeContentEngine.RULE_SET_ID,
+                contentRuleMatches = matchedContentRules.map { it.id },
+                contentEngineErrorCode = contentEngineErrorCode,
+                contentRuleBundleVersion = contentBundle?.version,
+                staticAnalysis = StaticAnalysisSummary(
+                    staticReport.format,
+                    staticReport.supported,
+                    staticReport.complete,
+                    staticReport.entryCount,
+                    staticReport.expandedBytes,
+                    staticReport.signalCategories
+                ),
+                mlModelState = mlState,
+                mlFeatureCount = mlFeatures.featureCount,
+                behavioralAnalysisState = behavioralState
             )
         } finally {
             runCatching { nativeSession?.close() }
