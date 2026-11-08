@@ -181,6 +181,9 @@ jobs:
             timeout 60s adb wait-for-device
             timeout 90s bash -c 'until [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = "1" ]; do sleep 2; done'
             adb shell input keyevent 82
+            adb shell settings put global window_animation_scale 0
+            adb shell settings put global transition_animation_scale 0
+            adb shell settings put global animator_duration_scale 0
             adb logcat -c
             timeout --signal=TERM --kill-after=20s 8m gradle --no-daemon connectedDebugAndroidTest --stacktrace
 
