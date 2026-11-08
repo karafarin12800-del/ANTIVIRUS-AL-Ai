@@ -101,8 +101,9 @@ object FormatStaticAnalyzer {
             return StaticAnalysisReport("ELF", true, complete, 0, minOf(file.length(), 8L * 1024L * 1024L), evidence, categories, riskPoints)
         }
         if (headerSize >= 4 && header[0] == 'P'.code.toByte() && header[1] == 'K'.code.toByte()) {
+            var isApkContainer = false
             try {
-                val isApk = ZipFile(file).use { zip ->
+                isApkContainer = ZipFile(file).use { zip ->
                     val apkContainer = zip.getEntry("AndroidManifest.xml") != null
                     scanZipFile(zip, budget, evidence, categories)
                     apkContainer
@@ -117,7 +118,7 @@ object FormatStaticAnalyzer {
             }
             riskPoints += scoreCategories(categories)
             return StaticAnalysisReport(
-                if (isApk) "APK" else "ZIP",
+                if (isApkContainer) "APK" else "ZIP",
                 true, budget.complete, budget.entries, budget.expanded, evidence, categories, riskPoints
             )
         }
