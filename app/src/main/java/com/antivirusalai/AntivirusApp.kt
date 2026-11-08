@@ -1,8 +1,11 @@
 package com.antivirusalai
 
+private const val SUPPORT_EMAIL = "Zojajiali4@gmail.com"
+
 import android.Manifest
 import android.content.Intent
 import android.net.Uri
+import android.widget.Toast
 import android.os.Build
 import android.os.Environment
 import androidx.compose.animation.core.LinearEasing
@@ -650,7 +653,50 @@ fun AntivirusApp(inPictureInPicture: Boolean = false) {
             onDismissRequest = { featureInfo = null },
             containerColor = SurfaceRaised,
             title = { Text(featureTitle(fa, feature), color = TextPrimary) },
-            text = { Text(featureDescription(fa, feature), color = TextSecondary) },
+            text = {
+                if (feature == "support") {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text(
+                            tr(
+                                fa,
+                                "برای پشتیبانی، گزارش اشکال یا پیشنهادهای مربوط به ANTIVIRUS AL AI از ایمیل رسمی زیر استفاده کن:",
+                                "For support, bug reports, or suggestions about ANTIVIRUS AL AI, use the official email below:"
+                            ),
+                            color = TextSecondary
+                        )
+                        Text(
+                            SUPPORT_EMAIL,
+                            color = BrandTeal,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    val intent = Intent(Intent.ACTION_SENDTO).apply {
+                                        data = Uri.parse("mailto:$SUPPORT_EMAIL")
+                                        putExtra(Intent.EXTRA_SUBJECT, "ANTIVIRUS AL AI Support")
+                                    }
+                                    try {
+                                        context.startActivity(intent)
+                                    } catch (_: Exception) {
+                                        Toast.makeText(
+                                            context,
+                                            tr(fa, "برنامه ایمیل روی دستگاه پیدا نشد؛ نشانی را کپی و دستی استفاده کن.", "No email app was found; copy the address and use it manually."),
+                                            Toast.LENGTH_LONG
+                                        ).show()
+                                    }
+                                }
+                                .padding(vertical = 4.dp)
+                        )
+                        Text(
+                            tr(fa, "برای ارسال ایمیل، روی نشانی بالا بزن.", "Tap the address above to compose an email."),
+                            color = TextTertiary,
+                            fontSize = 12.sp
+                        )
+                    }
+                } else {
+                    Text(featureDescription(fa, feature), color = TextSecondary)
+                }
+            },
             confirmButton = {
                 Button(
                     onClick = { featureInfo = null },
@@ -3035,7 +3081,7 @@ private fun SettingsScreen(
         SettingsRow(
             icon = "support",
             title = tr(fa, "پشتیبانی", "Support"),
-            description = tr(fa, "کانال رسمی پیش از عرضه اضافه می‌شود", "Official channel will be added before launch"),
+            description = SUPPORT_EMAIL,
             onClick = { onFeature("support") }
         )
         InfoBanner(
@@ -3647,7 +3693,7 @@ private fun featureDescription(fa: Boolean, feature: String): String = when (fea
     "brain" -> tr(fa, "فعلاً گزارش بر اساس قواعد محدود و شواهد قابل مشاهده ساخته می‌شود. امتیازدهی چندموتوره و تحلیل AI هنوز به موتور اسکن وصل نشده است.", "Reports currently use limited, visible rules and evidence. Multi-engine scoring and AI reasoning are not yet connected to the scanner.")
     "selfdefense" -> tr(fa, "برنامه از تنظیمات پایه مانند غیرفعال‌بودن cleartext و backup استفاده می‌کند. پایش یکپارچگی زمان اجرا و دفاع در برابر دست‌کاری هنوز نیازمند توسعه و آزمون است.", "The app uses baseline controls such as disabled cleartext traffic and backup. Runtime integrity and anti-tamper monitoring still require implementation and testing.")
     "permissions" -> tr(fa, "اسکن سریع مسیرهای رایج حافظه را بررسی می‌کند. اسکن عمیق با اجازه مدیریت همه فایل‌ها، حافظه اشتراکی و APK برنامه‌های نصب‌شده را بررسی می‌کند؛ داده خصوصی برنامه‌های دیگر، Android/data و Android/obb قابل‌دسترسی نیستند.", "Quick scan checks common storage locations. Deep scan uses user-approved All files access to inspect shared storage and installed-app APKs; other apps’ private data, Android/data and Android/obb remain inaccessible.")
-    else -> tr(fa, "کانال پشتیبانی رسمی پیش از عرضه عمومی اضافه می‌شود. در این نسخه نشانی پشتیبانی تأییدشده‌ای تعریف نشده است.", "An official support channel will be added before public release. No verified support address is configured in this build.")
+    else -> tr(fa, "ایمیل پشتیبانی رسمی: $SUPPORT_EMAIL", "Official support email: $SUPPORT_EMAIL")
 }
 
 private fun tr(fa: Boolean, persian: String, english: String): String =
