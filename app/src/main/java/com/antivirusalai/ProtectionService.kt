@@ -161,6 +161,11 @@ class ProtectionService : Service() {
                 description = "هشدار هنگام شناسایی فایل دارای شاخص تهدید"
             }
         )
+        manager.createNotificationChannel(
+            NotificationChannel(UNVERIFIED_CHANNEL_ID, "نتیجه نامشخص", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                description = "مواردی که به علت محدودیت دسترسی، اندازه یا پوشش موتور کامل بررسی نشده‌اند"
+            }
+        )
     }
 
     private fun registerPackageMonitor() {
@@ -463,7 +468,7 @@ class ProtectionService : Service() {
 
     private fun postUnverifiedAlert(name: String, reason: String) {
         val manager = getSystemService(NotificationManager::class.java)
-        val notification = NotificationCompat.Builder(this, ALERT_CHANNEL_ID)
+        val notification = NotificationCompat.Builder(this, UNVERIFIED_CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_sys_warning)
             .setContentTitle("ANTIVIRUS AL AI · نتیجه نامشخص")
             .setContentText(name)
@@ -473,10 +478,13 @@ class ProtectionService : Service() {
                 )
             )
             .setAutoCancel(true)
+            .setOnlyAlertOnce(true)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .build()
+        // Unverified results share one low-priority notification to avoid
+        // generating dozens of alerts when a folder contains unsupported files.
         runCatching {
-            manager.notify(((name.hashCode() xor 0x13579BDF) and 0x7fffffff).coerceAtLeast(1), notification)
+            manager.notify(UNVERIFIED_NOTIFICATION_ID, notification)
         }
     }
 
@@ -486,7 +494,9 @@ class ProtectionService : Service() {
         const val ACTION_STOP = "com.antivirusalai.action.STOP_PROTECTION"
         private const val CHANNEL_ID = "alai-protection-service"
         private const val ALERT_CHANNEL_ID = "alai-protection-alerts"
+        private const val UNVERIFIED_CHANNEL_ID = "alai-protection-unverified"
         private const val NOTIFICATION_ID = 4108
+        private const val UNVERIFIED_NOTIFICATION_ID = 4110
         private const val MAX_WATCH_DEPTH = 2
         private const val MAX_WATCHERS = 96
         private const val MAX_PENDING_SCANS = 64
