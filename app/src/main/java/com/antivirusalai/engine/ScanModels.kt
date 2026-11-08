@@ -3,6 +3,30 @@ package com.antivirusalai.engine
 enum class ScanVerdict { KNOWN_MALWARE, POTENTIALLY_UNWANTED, TEST_MARKER_MATCH, SUSPICIOUS, NO_KNOWN_INDICATOR, UNKNOWN_APK, UNSUPPORTED_FILE, INCOMPLETE_THREAT_INTELLIGENCE }
 enum class EvidenceSeverity { INFO, LOW, MEDIUM, HIGH }
 enum class ContentEngineState { UNAVAILABLE, INCOMPLETE, COMPLETE }
+enum class MlModelState { NOT_CONFIGURED, READY, ERROR }
+
+data class ContentSignatureRule(
+    val id: String,
+    val familyId: String,
+    val classification: com.antivirusalai.intel.ThreatClassification,
+    val confidence: Int,
+    val pattern: ByteArray,
+    val description: String
+)
+
+data class StaticAnalysisSummary(
+    val format: String?,
+    val supported: Boolean,
+    val complete: Boolean,
+    val entryCount: Int,
+    val expandedBytes: Long,
+    val signalCategories: Set<String>
+)
+
+data class MlFeatureVector(
+    val featureCount: Int,
+    val values: Map<String, Float>
+)
 
 data class ScanEvidence(
     val code: String,
@@ -40,5 +64,9 @@ data class ScanResult(
     val contentEngineState: ContentEngineState = ContentEngineState.UNAVAILABLE,
     val contentRuleSetId: String? = null,
     val contentRuleMatches: List<String> = emptyList(),
-    val contentEngineErrorCode: String? = null
+    val contentEngineErrorCode: String? = null,
+    val contentRuleBundleVersion: Long? = null,
+    val staticAnalysis: StaticAnalysisSummary? = null,
+    val mlModelState: MlModelState = MlModelState.NOT_CONFIGURED,
+    val mlFeatureCount: Int = 0
 )
