@@ -47,15 +47,28 @@ def normalize_labels(series: pd.Series) -> np.ndarray:
     return normalized.map(mapping).to_numpy(dtype=np.int8)
 
 
-def group_holdout(y: np.ndarray, groups: np.ndarray, test_size: float, seed: int):
-    for attempt in range(40):
-        splitter = GroupShuffleSplit(n_splits=1, test_size=test_size, random_state=seed + attempt)
-        train_idx, valid_idx = next(splitter.split(np.zeros(len(y)), y, groups))
-        if len(np.unique(y[train_idx])) == 2 and len(np.unique(y[valid_idx])) == 2:
-            if min(np.bincount(y[valid_idx], minlength=2)) >= 10:
-                return train_idx, valid_idx
-    raise ValueError("No group-disjoint holdout has at least 10 validation samples per class")
-
+def group_train_calibration_test(y: np.ndarray, groups: np.ndarray, seed: int):
+    """Create disjoint package/family-group train, calibration and test partitions."""
+    for attempt in range(60):
+        outer = GroupShuffleSplit(n_splits=1, test_size=0.20, random_state=seed + attempt)
+        train_cal_idx, test_idx = next(outer.split(np.zeros(len(y)), y, groups))
+        inner = GroupShuffleSplit(n_splits=1, test_size=0.25, random_state=seed + 1000 + attempt)
+        train_rel, calibration_rel = next(
+            inner.split(np.zeros(len(train_cal_idx)), y[train_cal_idx], groups[train_cal_idx])
+        )
+        train_idx = train_cal_idx[train_rel]
+        calibration_idx = train_cal_idx[calibration_rel]
+        partitions = (train_idx, calibration_idx, test_idx)
+        if all(len(np.unique(y[index])) == 2 for index in partitions):
+            if all(min(np.bincount(y[index], minlength=2)) >= 10 for index in partitions):
+                group_sets = [set(groups[index]) for index in partitions]
+                if not (group_sets[0] & group_sets[1] or group_sets[0] & group_sets[2]
+                        or group_sets[1] & group_sets[2]):
+                    return train_idx, calibration_idx, test_idx
+    raise ValueError(
+        "Could not create group-disjoint train/calibration/test partitions "
+        "with at least 10 examples per class in each partition"
+    )
 
 def export_tree(estimator, positive_class_index: int):
     tree = estimator.tree_
@@ -100,21 +113,23 @@ def train_dataset(
         raise ValueError("Label/group metadata must not be model features")
 
     y = normalize_labels(frame[label_column])
-    groups = frame[group_column].astype(str).fillna("").to_numpy()
+    groups = frame[group_column].fillna("").astype(str).to_numpy()
     if np.any(groups == ""):
         raise ValueError("Group identifiers cannot be empty")
-    if len(frame) < 200 or len(np.unique(groups)) < 20:
-        raise ValueError("At least 200 rows and 20 independent groups are required")
+    if len(frame) < 300 or len(np.unique(groups)) < 30:
+        raise ValueError("At least 300 rows and 30 independent groups are required")
     if min(np.bincount(y, minlength=2)) < 50:
         raise ValueError("At least 50 benign and 50 malware examples are required")
 
     numeric = frame[FEATURES].apply(pd.to_numeric, errors="coerce")
     numeric = numeric.replace([np.inf, -np.inf], np.nan).fillna(0.0)
     x = numeric.clip(-1_000_000, 1_000_000).to_numpy(dtype=np.float32)
-    train_idx, valid_idx = group_holdout(y, groups, 0.25, random_state)
-    train_groups, valid_groups = set(groups[train_idx]), set(groups[valid_idx])
-    if train_groups & valid_groups:
-        raise RuntimeError("Group leakage detected")
+    train_idx, calibration_idx, test_idx = group_train_calibration_test(y, groups, random_state)
+    train_groups = set(groups[train_idx])
+    calibration_groups = set(groups[calibration_idx])
+    test_groups = set(groups[test_idx])
+    if (train_groups & calibration_groups) or (train_groups & test_groups) or (calibration_groups & test_groups):
+        raise RuntimeError("Package/family leakage detected across partitions")
 
     model = RandomForestClassifier(
         n_estimators=estimators, max_depth=10, min_samples_leaf=3,
@@ -122,24 +137,31 @@ def train_dataset(
         bootstrap=True, n_jobs=-1, random_state=random_state,
     )
     model.fit(x[train_idx], y[train_idx])
-    probabilities = model.predict_proba(x[valid_idx])[:, list(model.classes_).index(1)]
-    fpr_values, tpr_values, thresholds = roc_curve(y[valid_idx], probabilities)
+    calibration_probabilities = model.predict_proba(x[calibration_idx])[:, list(model.classes_).index(1)]
+    fpr_values, tpr_values, thresholds = roc_curve(y[calibration_idx], calibration_probabilities)
     eligible = [i for i, fpr in enumerate(fpr_values)
                 if fpr <= target_fpr and math.isfinite(float(thresholds[i]))]
     if not eligible:
         raise ValueError("No finite threshold meets the requested FPR ceiling")
     best = max(eligible, key=lambda i: (tpr_values[i], thresholds[i]))
     threshold = float(thresholds[best])
+    calibration_predicted = (calibration_probabilities >= threshold).astype(np.int8)
+    calibration_fpr = float(np.mean(calibration_predicted[y[calibration_idx] == 0]))
+    calibration_recall = float(recall_score(y[calibration_idx], calibration_predicted, zero_division=0))
+    if calibration_fpr > target_fpr + 1e-9:
+        raise RuntimeError("Calibration FPR exceeded the configured ceiling")
+    if calibration_recall < minimum_recall:
+        raise ValueError(f"Calibration recall {calibration_recall:.4f} is below the required {minimum_recall:.4f}")
+
+    # The final test set is untouched during model fitting and threshold selection.
+    probabilities = model.predict_proba(x[test_idx])[:, list(model.classes_).index(1)]
     predicted = (probabilities >= threshold).astype(np.int8)
-    measured_fpr = float(np.mean(predicted[y[valid_idx] == 0]))
-    measured_recall = float(recall_score(y[valid_idx], predicted, zero_division=0))
+    measured_fpr = float(np.mean(predicted[y[test_idx] == 0]))
+    measured_recall = float(recall_score(y[test_idx], predicted, zero_division=0))
     if measured_fpr > target_fpr + 1e-9:
-        raise RuntimeError("Validation FPR exceeded the configured ceiling")
+        raise ValueError(f"Untouched test FPR {measured_fpr:.4f} exceeded target {target_fpr:.4f}")
     if measured_recall < minimum_recall:
-        raise ValueError(
-            f"Model rejected: recall {measured_recall:.4f} is below "
-            f"{minimum_recall:.4f} at FPR {measured_fpr:.4f}"
-        )
+        raise ValueError(f"Untouched test recall {measured_recall:.4f} is below the required {minimum_recall:.4f}")
 
     dataset_sha = hashlib.sha256(input_csv.read_bytes()).hexdigest()
     model_id = hashlib.sha256((dataset_sha + "|" + "|".join(FEATURES)).encode()).hexdigest()[:20]
@@ -167,19 +189,27 @@ def train_dataset(
             "independent_groups": int(len(train_groups)),
             "random_state": int(random_state),
         },
+        "calibration": {
+            "samples": int(len(calibration_idx)),
+            "independent_groups": int(len(calibration_groups)),
+            "fpr_at_threshold": calibration_fpr,
+            "recall_at_threshold": calibration_recall,
+            "threshold_selection_only": True,
+        },
         "validation": {
-            "samples": int(len(valid_idx)),
-            "benign": int(np.sum(y[valid_idx] == 0)),
-            "malware": int(np.sum(y[valid_idx] == 1)),
-            "independent_groups": int(len(valid_groups)),
-            "roc_auc": float(roc_auc_score(y[valid_idx], probabilities)),
-            "pr_auc": float(average_precision_score(y[valid_idx], probabilities)),
+            "samples": int(len(test_idx)),
+            "benign": int(np.sum(y[test_idx] == 0)),
+            "malware": int(np.sum(y[test_idx] == 1)),
+            "independent_groups": int(len(test_groups)),
+            "roc_auc": float(roc_auc_score(y[test_idx], probabilities)),
+            "pr_auc": float(average_precision_score(y[test_idx], probabilities)),
             "fpr_at_threshold": measured_fpr,
             "recall_at_threshold": measured_recall,
-            "precision_at_threshold": float(precision_score(y[valid_idx], predicted, zero_division=0)),
-            "f1_at_threshold": float(f1_score(y[valid_idx], predicted, zero_division=0)),
+            "precision_at_threshold": float(precision_score(y[test_idx], predicted, zero_division=0)),
+            "f1_at_threshold": float(f1_score(y[test_idx], predicted, zero_division=0)),
             "target_fpr": target_fpr,
             "minimum_recall_gate": minimum_recall,
+            "threshold_chosen_before_test": True,
         },
         "trees": trees,
     }
