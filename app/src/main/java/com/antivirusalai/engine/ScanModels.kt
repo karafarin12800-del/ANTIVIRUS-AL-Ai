@@ -12,7 +12,9 @@ data class ContentSignatureRule(
     val classification: com.antivirusalai.intel.ThreatClassification,
     val confidence: Int,
     val pattern: ByteArray,
-    val description: String
+    val description: String,
+    val sourceId: String = "INTERNAL",
+    val licenseId: String = "UNSPECIFIED"
 )
 
 data class StaticAnalysisSummary(
