@@ -219,6 +219,7 @@ class ProtectionService : Service() {
         var observer: FileObserver? = null
         if (!reserveWatcherSlot()) {
             synchronized(watchedPaths) { watchedPaths.remove(canonical.path) }
+            visited.remove(canonical.path)
             return
         }
         try {
@@ -226,6 +227,7 @@ class ProtectionService : Service() {
                 override fun onEvent(event: Int, path: String?) {
                     if ((event and (FileObserver.DELETE_SELF or FileObserver.MOVE_SELF)) != 0) {
                         synchronized(watchedPaths) { watchedPaths.remove(canonical.path) }
+                        visited.remove(canonical.path)
                         if (observers.remove(this)) releaseWatcherSlot()
                         runCatching { stopWatching() }
                         return
@@ -252,6 +254,7 @@ class ProtectionService : Service() {
                 if (observers.remove(it)) releaseWatcherSlot()
             } ?: releaseWatcherSlot()
             synchronized(watchedPaths) { watchedPaths.remove(canonical.path) }
+            visited.remove(canonical.path)
             // One inaccessible directory must not stop the remaining watchers.
         }
 
