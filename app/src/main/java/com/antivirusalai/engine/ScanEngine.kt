@@ -163,6 +163,22 @@ object ScanEngine {
             val currentThreatFeed = ThreatFeedRuntime.currentFeed(context.applicationContext)
             val threatFeedStatus = ThreatFeedRuntime.status(context.applicationContext)
             val threatMatch = currentThreatFeed?.indicators?.get(hash.lowercase())
+            if (threatMatch != null) {
+                val label = when (threatMatch.classification) {
+                    ThreatClassification.MALWARE -> "Known malware"
+                    ThreatClassification.PUA -> "Potentially unwanted file"
+                    ThreatClassification.SUSPICIOUS -> "Suspicious file"
+                }
+                evidence += ScanEvidence(
+                    "SIGNED_FEED_${threatMatch.classification.name}",
+                    label,
+                    "Exact SHA-256 match in the authenticated feed. Family: ${threatMatch.familyId}. Sources: ${threatMatch.sources.sorted().joinToString()}.",
+                    when (threatMatch.classification) {
+                        ThreatClassification.MALWARE -> EvidenceSeverity.HIGH
+                        ThreatClassification.PUA, ThreatClassification.SUSPICIOUS -> EvidenceSeverity.MEDIUM
+                    }
+                )
+            }
             if (currentThreatFeed?.truncated == true) {
                 evidence += ScanEvidence(
                     "THREAT_FEED_TRUNCATED",
