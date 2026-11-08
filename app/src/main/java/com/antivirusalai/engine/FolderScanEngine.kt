@@ -41,11 +41,11 @@ data class FolderScanReport(
  * It never walks arbitrary device storage and never installs or executes files.
  */
 object FolderScanEngine {
-    const val MAX_FILES = 300
-    const val MAX_DEPTH = 20
-    const val MAX_TOTAL_BYTES = 1024L * 1024L * 1024L
-    private const val MAX_DIRECTORY_VISITS = 2_000
-    private const val MAX_PENDING_DIRECTORIES = 3_000
+    const val MAX_FILES = ScanLimits.FOLDER_FILE_LIMIT
+    const val MAX_DEPTH = 64
+    const val MAX_TOTAL_BYTES = ScanLimits.FOLDER_TOTAL_BYTES
+    private const val MAX_DIRECTORY_VISITS = ScanLimits.MAX_FOLDER_DIRECTORY_VISITS
+    private const val MAX_PENDING_DIRECTORIES = ScanLimits.MAX_PENDING_DIRECTORIES
 
     private data class Candidate(
         val uri: Uri,
@@ -119,7 +119,7 @@ object FolderScanEngine {
                             } else {
                                 failures += FolderScanFailure(
                                     name.ifBlank { documentId },
-                                    "Directory queue reached the 3,000-entry safety limit."
+                                    "Directory queue reached the 30,000-entry safety limit."
                                 )
                                 truncated = true
                             }
@@ -150,9 +150,15 @@ object FolderScanEngine {
             if (truncated) break
         }
 
-        val items = mutableListOf<FolderScanItem>()
+        // Count every result but keep only a bounded preview; retain detections first.
+        val findingItems = mutableListOf<FolderScanItem>()
+        val previewItems = mutableListOf<FolderScanItem>()
         var skipped = 0
         var totalBytes = 0L
+        var scannedCount = 0
+        var suspiciousCount = 0
+        var unknownCount = 0
+        var matchedCount = 0
         for ((index, candidate) in candidates.withIndex()) {
             currentCoroutineContext().ensureActive()
             if (candidate.declaredSize > ScanEngine.MAX_FILE_SIZE_BYTES) {
@@ -164,7 +170,7 @@ object FolderScanEngine {
                 totalBytes + candidate.declaredSize > MAX_TOTAL_BYTES
             ) {
                 skipped++
-                failures += FolderScanFailure(candidate.name, "Folder scan reached the 1 GB total data limit.")
+                failures += FolderScanFailure(candidate.name, "Folder scan reached the 25 GB total data limit.")
                 truncated = true
                 continue
             }
@@ -175,14 +181,35 @@ object FolderScanEngine {
             try {
                 val result = ScanEngine.scan(context.applicationContext, candidate.uri)
                 totalBytes += result.sizeBytes
-                items += FolderScanItem(candidate.uri, result)
+                scannedCount++
+                when (result.verdict) {
+                    ScanVerdict.KNOWN_MALWARE,
+                    ScanVerdict.POTENTIALLY_UNWANTED,
+                    ScanVerdict.SUSPICIOUS -> suspiciousCount++
+                    ScanVerdict.UNKNOWN_APK,
+                    ScanVerdict.UNSUPPORTED_FILE,
+                    ScanVerdict.INCOMPLETE_THREAT_INTELLIGENCE -> unknownCount++
+                    ScanVerdict.TEST_MARKER_MATCH -> matchedCount++
+                    ScanVerdict.NO_KNOWN_INDICATOR -> Unit
+                }
+                val reportItem = FolderScanItem(candidate.uri, result)
+                val isPriorityFinding = result.verdict in setOf(
+                    ScanVerdict.KNOWN_MALWARE,
+                    ScanVerdict.POTENTIALLY_UNWANTED,
+                    ScanVerdict.SUSPICIOUS
+                )
+                if (isPriorityFinding) {
+                    if (findingItems.size < ScanLimits.MAX_RESULT_DETAILS) findingItems += reportItem
+                } else if (previewItems.size < ScanLimits.MAX_RESULT_DETAILS) {
+                    previewItems += reportItem
+                }
                 if (totalBytes >= MAX_TOTAL_BYTES) {
                     truncated = index < candidates.lastIndex
                     if (truncated) {
                         skipped += candidates.size - index - 1
                         failures += FolderScanFailure(
                             "Remaining files",
-                            "Stopped after reaching the 1 GB total data limit."
+                            "Stopped after reaching the 25 GB total data limit."
                         )
                     }
                     break
@@ -196,11 +223,15 @@ object FolderScanEngine {
         }
 
         FolderScanReport(
-            items = items,
+            items = if (findingItems.isNotEmpty()) findingItems else previewItems,
             failures = failures,
             discoveredFiles = candidates.size,
             skippedFiles = skipped,
-            truncated = truncated || skipped > 0
+            truncated = truncated || skipped > 0,
+            scannedCountOverride = scannedCount,
+            suspiciousCountOverride = suspiciousCount,
+            unknownCountOverride = unknownCount,
+            matchedCountOverride = matchedCount
         )
     }
 }
