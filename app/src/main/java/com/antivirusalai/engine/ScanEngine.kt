@@ -231,8 +231,20 @@ object ScanEngine {
                 )
             }
 
-            val mlFeatures = OnDeviceMlScorer.extractFeatures(apk, staticReport, combinedRisk)
-            val mlState = OnDeviceMlScorer.score(mlFeatures)
+            val mlFeatures = OnDeviceMlScorer.extractFeatures(
+                apk = apk,
+                static = staticReport,
+                combined = combinedRisk,
+                fileSizeBytes = totalBytes,
+                contentEngineState = contentEngineState
+            )
+            // The trained model is currently scoped to structurally parsed APK files.
+            // ZIP/ELF/unknown inputs are not silently interpreted as APKs.
+            val mlResult = if (apk != null && staticReport.format == "APK") {
+                OnDeviceMlScorer.score(context.applicationContext, mlFeatures)
+            } else {
+                MlScoringResult(MlModelState.NOT_APPLICABLE)
+            }
             val behavioralState = if (staticReport.supported) {
                 BehavioralAnalysisState.STATIC_INDICATORS_ONLY
             } else {
@@ -245,12 +257,31 @@ object ScanEngine {
                     "This report contains static DEX/API and ELF symbol indicators only. The selected application was not executed, and other apps' private processes were not instrumented.",
                     EvidenceSeverity.INFO
                 )
-                evidence += ScanEvidence(
-                    "ON_DEVICE_ML_NOT_CONFIGURED",
-                    "On-device ML inference is not configured",
-                    "A deterministic feature vector was extracted, but no trained model is loaded or used in the verdict.",
-                    EvidenceSeverity.INFO
+            }
+            when (mlResult.state) {
+                MlModelState.READY -> {
+                    evidence += ScanEvidence(
+                        "ON_DEVICE_AI_RISK_SCORE",
+                        "AI multi-view risk score: ${mlResult.riskScore}/100",
+                        "Model ${mlResult.modelVersion} produced a review-level risk index. Top contributing features: ${mlResult.topFeatures.joinToString()}. Threshold: ${((mlResult.threshold ?: 1f) * 100f).toInt()}/100. This score is not proof of malware.",
+                        if (mlResult.highRisk) EvidenceSeverity.MEDIUM else EvidenceSeverity.INFO
+                    )
+                }
+                MlModelState.NOT_CONFIGURED -> if (apk != null) {
+                    evidence += ScanEvidence(
+                        "ON_DEVICE_ML_MODEL_NOT_INSTALLED",
+                        "Validated on-device AI model is not packaged",
+                        "The feature pipeline is active, but no trained and independently evaluated model artifact is installed. AI does not affect this file's verdict.",
+                        EvidenceSeverity.INFO
+                    )
+                }
+                MlModelState.ERROR -> evidence += ScanEvidence(
+                    "ON_DEVICE_ML_MODEL_INVALID",
+                    "On-device AI model could not be loaded",
+                    "The model artifact failed integrity or schema validation and was not used in the verdict. Code: ${mlResult.errorCode ?: "MODEL_ERROR"}.",
+                    EvidenceSeverity.MEDIUM
                 )
+                MlModelState.NOT_APPLICABLE -> Unit
             }
             val topContentRule = matchedContentRules.maxByOrNull {
                 when {
@@ -301,6 +332,7 @@ object ScanEngine {
                     )
                     ScanVerdict.UNKNOWN_APK
                 }
+                mlResult.highRisk -> ScanVerdict.SUSPICIOUS
                 combinedRisk.suspicious -> ScanVerdict.SUSPICIOUS
                 staticReport.supported || apk != null -> ScanVerdict.INCOMPLETE_THREAT_INTELLIGENCE
                 else -> ScanVerdict.UNSUPPORTED_FILE
@@ -329,8 +361,11 @@ object ScanEngine {
                     staticReport.expandedBytes,
                     staticReport.signalCategories
                 ),
-                mlModelState = mlState,
+                mlModelState = mlResult.state,
                 mlFeatureCount = mlFeatures.featureCount,
+                mlRiskScore = mlResult.riskScore,
+                mlModelVersion = mlResult.modelVersion,
+                mlTopFeatures = mlResult.topFeatures,
                 behavioralAnalysisState = behavioralState
             )
         } finally {
