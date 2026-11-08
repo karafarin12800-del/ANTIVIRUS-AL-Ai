@@ -23,27 +23,39 @@ class ThreatFeedRefreshWorker(
 ) : CoroutineWorker(appContext, parameters) {
     override suspend fun doWork(): Result =
         try {
-            val feedResult = runCatching { ThreatFeedRuntime.refresh(applicationContext) }
+            val feed = try {
+                ThreatFeedRuntime.refresh(applicationContext)
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                null
+            }
             // The two signed channels are independent: a missing hash feed must
             // not prevent an available content-rule bundle from being refreshed.
-            val rulesResult = runCatching { ContentRuleBundleRuntime.refresh(applicationContext) }
+            val contentRules = try {
+                ContentRuleBundleRuntime.refresh(applicationContext)
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                null
+            }
             val preferences = applicationContext.getSharedPreferences("threat-feed-status", Context.MODE_PRIVATE)
             val editor = preferences.edit()
                 .putString("content_rules_state", ContentRuleBundleRuntime.state(applicationContext).name)
-                .putLong("content_rules_version", rulesResult.getOrNull()?.version ?: 0L)
-            feedResult.getOrNull()?.let { feed ->
-                editor.putLong("version", feed.version)
-                    .putInt("indicator_count", feed.indicators.size)
-                    .putLong("expires_at", feed.expiresAtEpochSeconds)
+                .putLong("content_rules_version", contentRules?.version ?: 0L)
+            feed?.let {
+                editor.putLong("version", it.version)
+                    .putInt("indicator_count", it.indicators.size)
+                    .putLong("expires_at", it.expiresAtEpochSeconds)
                     .putLong("updated_at", System.currentTimeMillis())
-                    .putBoolean("truncated", feed.truncated)
+                    .putBoolean("truncated", it.truncated)
                     .putString(
                         "source_counts",
-                        feed.sourceCounts.toSortedMap().entries.joinToString(",") { it.key + ":" + it.value }
+                        it.sourceCounts.toSortedMap().entries.joinToString(",") { entry -> entry.key + ":" + entry.value }
                     )
             }
             editor.apply()
-            if (feedResult.isSuccess || rulesResult.isSuccess) Result.success() else Result.retry()
+            if (feed != null || contentRules != null) Result.success() else Result.retry()
         } catch (cancelled: kotlinx.coroutines.CancellationException) {
             throw cancelled
         } catch (_: Exception) {
