@@ -84,7 +84,9 @@ object ScanEngine {
             val threatFeedStatus = ThreatFeedRuntime.status(context.applicationContext)
             val threatCoverageComplete =
                 threatFeedStatus.freshness == ThreatFeedFreshness.UP_TO_DATE &&
-                    currentThreatFeed?.truncated != true
+                    currentThreatFeed != null &&
+                    !currentThreatFeed.truncated &&
+                    currentThreatFeed.indicators.isNotEmpty()
             val threatMatch = currentThreatFeed?.indicators?.get(hash.lowercase())
             if (currentThreatFeed?.truncated == true) {
                 evidence += ScanEvidence(
