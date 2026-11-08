@@ -4,6 +4,19 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+// Release signing is enabled only in a protected CI job that supplies all
+// four keystore values. Pull-request builds remain unsigned preflight builds.
+val releaseStoreFilePath = providers.environmentVariable("ALAI_RELEASE_STORE_FILE").orNull
+val releaseStorePassword = providers.environmentVariable("ALAI_RELEASE_STORE_PASSWORD").orNull
+val releaseKeyAlias = providers.environmentVariable("ALAI_RELEASE_KEY_ALIAS").orNull
+val releaseKeyPassword = providers.environmentVariable("ALAI_RELEASE_KEY_PASSWORD").orNull
+val releaseSigningConfigured = listOf(
+    releaseStoreFilePath,
+    releaseStorePassword,
+    releaseKeyAlias,
+    releaseKeyPassword
+).all { !it.isNullOrBlank() }
+
 android {
     namespace = "com.antivirusalai"
     compileSdk = 36
@@ -42,6 +55,23 @@ android {
     lint {
         abortOnError = true
         checkReleaseBuilds = true
+    }
+    signingConfigs {
+        if (releaseSigningConfigured) {
+            create("publisherRelease") {
+                storeFile = file(requireNotNull(releaseStoreFilePath))
+                storePassword = requireNotNull(releaseStorePassword)
+                keyAlias = requireNotNull(releaseKeyAlias)
+                keyPassword = requireNotNull(releaseKeyPassword)
+            }
+        }
+    }
+    buildTypes {
+        getByName("release") {
+            if (releaseSigningConfigured) {
+                signingConfig = signingConfigs.getByName("publisherRelease")
+            }
+        }
     }
 }
 
