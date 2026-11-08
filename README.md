@@ -1,5 +1,9 @@
 # ANTIVIRUS AL AI
 
+## Support
+
+For support requests, bug reports, and product feedback, contact **Zojajiali4@gmail.com**. The Android Settings → Support screen opens the device's email app when available.
+
 Privacy-first Android security scanner. Current Android milestone: **0.3.0 (versionCode 3)**. The app includes a bilingual Persian/English dashboard, automatic quick/deep shared-storage scanning, a bounded local scan pipeline, an authenticated threat-feed client, and an encrypted quarantine vault.
 
 ## Implemented security layers
