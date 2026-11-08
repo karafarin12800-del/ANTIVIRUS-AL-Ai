@@ -32,7 +32,7 @@ enum class ContentRuleBundleState { CURRENT, MISSING, EXPIRED, INVALID }
 object ContentRuleBundleParser {
     const val HEADER = "ALAI-CONTENT-RULES/1"
     const val MAX_BUNDLE_BYTES = 1024 * 1024
-    const val MAX_RULES = 512
+    const val MAX_RULES = 511
     const val MAX_PATTERN_BYTES = 256
     const val MAX_TOTAL_PATTERN_BYTES = 64 * 1024
     const val MAX_VALIDITY_SECONDS = 14L * 24L * 60L * 60L
