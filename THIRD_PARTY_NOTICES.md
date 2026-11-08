@@ -10,7 +10,7 @@ Adapted metadata and literal indicator strings from:
 - Author: WithSecure
 - Source rule ID: 8d0823be-3a64-5e2d-995c-0b2fccf77a98
 
-Copyright (c) 2022, WithSecure Oyj
+Copyright (c) [2022], [WithSecure Oyj]
 
 BSD 2-Clause License
 
