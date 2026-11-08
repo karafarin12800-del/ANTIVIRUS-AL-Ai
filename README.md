@@ -17,7 +17,7 @@ Privacy-first Android security scanner. Current Android milestone: **0.3.0 (vers
 - Hash-reputation and content-signature verdicts are separate evidence sources. ML feature extraction is implemented, but model inference is NOT_CONFIGURED until a licensed labelled dataset and independent validation exist.
 - WorkManager refresh scheduling for both signed hash intelligence and the optional signed content-rule bundle. Network/battery constraints and Android Doze may delay work; this is not continuous device monitoring.
 - AES-GCM private quarantine vault with verified-copy creation, listing, restore, and removal APIs. Source-removal action is restricted to malware/PUA/suspicious verdicts, requires explicit user confirmation and a verified copy, and can still be refused by Android or the document provider. A full quarantine-management screen remains outstanding.
-- File contents and file hashes are not uploaded by the scanning path. The app downloads only the public signed feed.
+- File contents and file hashes are not uploaded by the scanning path. The app downloads only public signed hash-intelligence and content-rule metadata bundles.
 
 ## Live threat-feed activation
 
