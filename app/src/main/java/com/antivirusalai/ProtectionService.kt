@@ -27,8 +27,10 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * User-enabled, visible protection monitor.
@@ -56,6 +58,7 @@ private data class PendingFileScan(val file: File, val canonicalPath: String)
 class ProtectionService : Service() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val observers = CopyOnWriteArrayList<FileObserver>()
+    private val activeWatcherCount = AtomicInteger(0)
     private val watchedPaths = mutableSetOf<String>()
     private val pendingScans = PendingScanRegistry(MAX_PENDING_SCANS)
     private val scanQueue = Channel<PendingFileScan>(capacity = MAX_PENDING_SCANS)
@@ -102,7 +105,10 @@ class ProtectionService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
-        observers.forEach { runCatching { it.stopWatching() } }
+        observers.toList().forEach { observer ->
+            runCatching { observer.stopWatching() }
+            if (observers.remove(observer)) releaseWatcherSlot()
+        }
         observers.clear()
         if (packageReceiverRegistered) {
             runCatching { unregisterReceiver(packageReceiver) }
@@ -191,14 +197,14 @@ class ProtectionService : Service() {
             File(storage, "Movies"),
             File(storage, "Android/media")
         )
-        val visited = mutableSetOf<String>()
+        val visited = ConcurrentHashMap.newKeySet<String>()
         targets.forEach { directory ->
             if (directory.isDirectory) watchTree(directory, depth = 0, visited = visited)
         }
     }
 
     private fun watchTree(directory: File, depth: Int, visited: MutableSet<String>) {
-        if (depth > MAX_WATCH_DEPTH || observers.size >= MAX_WATCHERS) return
+        if (depth > MAX_WATCH_DEPTH || activeWatcherCount.get() >= MAX_WATCHERS) return
         val canonical = runCatching { directory.canonicalFile }.getOrNull() ?: return
         if (!canonical.isDirectory || !synchronized(visited) { visited.add(canonical.path) }) return
         synchronized(watchedPaths) {
@@ -210,12 +216,17 @@ class ProtectionService : Service() {
             FileObserver.CREATE or
             FileObserver.DELETE_SELF or
             FileObserver.MOVE_SELF
+        var observer: FileObserver? = null
+        if (!reserveWatcherSlot()) {
+            synchronized(watchedPaths) { watchedPaths.remove(canonical.path) }
+            return
+        }
         try {
-            val observer = object : FileObserver(canonical.absolutePath, mask) {
+            observer = object : FileObserver(canonical.absolutePath, mask) {
                 override fun onEvent(event: Int, path: String?) {
                     if ((event and (FileObserver.DELETE_SELF or FileObserver.MOVE_SELF)) != 0) {
                         synchronized(watchedPaths) { watchedPaths.remove(canonical.path) }
-                        observers.remove(this)
+                        if (observers.remove(this)) releaseWatcherSlot()
                         runCatching { stopWatching() }
                         return
                     }
@@ -234,9 +245,12 @@ class ProtectionService : Service() {
                     }
                 }
             }
-            observer.startWatching()
             observers += observer
+            observer.startWatching()
         } catch (_: Exception) {
+            observer?.let {
+                if (observers.remove(it)) releaseWatcherSlot()
+            } ?: releaseWatcherSlot()
             synchronized(watchedPaths) { watchedPaths.remove(canonical.path) }
             // One inaccessible directory must not stop the remaining watchers.
         }
@@ -252,6 +266,18 @@ class ProtectionService : Service() {
      * FileObserver callbacks must stay cheap. A bounded channel and one consumer
      * keep bursts of file events from creating an unbounded number of scan jobs.
      */
+    private fun reserveWatcherSlot(): Boolean {
+        while (true) {
+            val current = activeWatcherCount.get()
+            if (current >= MAX_WATCHERS) return false
+            if (activeWatcherCount.compareAndSet(current, current + 1)) return true
+        }
+    }
+
+    private fun releaseWatcherSlot() {
+        activeWatcherCount.updateAndGet { current -> (current - 1).coerceAtLeast(0) }
+    }
+
     private fun startFileScanWorker() {
         if (scanWorkerStarted) return
         scanWorkerStarted = true
