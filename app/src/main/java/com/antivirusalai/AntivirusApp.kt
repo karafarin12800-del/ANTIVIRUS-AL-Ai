@@ -1,7 +1,5 @@
 package com.antivirusalai
 
-private const val SUPPORT_EMAIL = "Zojajiali4@gmail.com"
-
 import android.Manifest
 import android.content.Intent
 import android.net.Uri
@@ -112,6 +110,8 @@ import com.antivirusalai.remediation.VaultEntry
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+
+private const val SUPPORT_EMAIL = "Zojajiali4@gmail.com"
 
 private val AppBackground = Color(0xFF0B0618)
 private val SurfaceBase = Color(0xFF171027)
