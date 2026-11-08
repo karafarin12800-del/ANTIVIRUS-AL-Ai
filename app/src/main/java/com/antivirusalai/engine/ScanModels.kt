@@ -77,5 +77,6 @@ data class ScanResult(
     val mlRiskScore: Int? = null,
     val mlModelVersion: String? = null,
     val mlTopFeatures: List<String> = emptyList(),
-    val behavioralAnalysisState: BehavioralAnalysisState = BehavioralAnalysisState.NOT_APPLICABLE
+    val behavioralAnalysisState: BehavioralAnalysisState = BehavioralAnalysisState.NOT_APPLICABLE,
+    val unknownFileCase: UnknownFileCase? = null
 )
