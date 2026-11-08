@@ -30,6 +30,11 @@ class ThreatFeedRefreshWorker(
                 .putInt("indicator_count", feed.indicators.size)
                 .putLong("expires_at", feed.expiresAtEpochSeconds)
                 .putLong("updated_at", System.currentTimeMillis())
+                .putBoolean("truncated", feed.truncated)
+                .putString(
+                    "source_counts",
+                    feed.sourceCounts.toSortedMap().entries.joinToString(",") { it.key + ":" + it.value }
+                )
                 .apply()
             Result.success()
         } catch (cancelled: kotlinx.coroutines.CancellationException) {

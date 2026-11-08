@@ -13,6 +13,10 @@ import javax.net.ssl.HttpsURLConnection
  * Loads only feeds authenticated by the app-pinned release public key.
  * No file contents, samples, or private data are sent to the feed publisher.
  */
+enum class ThreatFeedFreshness { UP_TO_DATE, STALE, UNAVAILABLE }
+
+data class ThreatFeedStatus(val freshness: ThreatFeedFreshness, val detailCode: String? = null)
+
 object ThreatFeedRuntime {
     const val RELEASE_KEY_ID = "alai-release-2026"
     const val FEED_URL =
@@ -34,6 +38,9 @@ object ThreatFeedRuntime {
     @Volatile
     private var cachedFileModified: Long = -1L
 
+    @Volatile
+    private var cachedFeedStatus: ThreatFeedStatus? = null
+
     private fun verifier(): FeedSignatureVerifier {
         val key: PublicKey =
             EcdsaP256KeyringVerifier.decodeX509PublicKey(RELEASE_PUBLIC_KEY_X509_B64)
@@ -46,7 +53,55 @@ object ThreatFeedRuntime {
             verifier()
         )
 
-    /** Null means no valid, current signed feed is available; it never means clean. */
+    /**
+     * Freshness of the intelligence snapshot is separate from a scan verdict.
+     * An absent, invalid or expired feed must never be interpreted as clean.
+     */
+    fun status(context: Context): ThreatFeedStatus {
+        val file = File(context.applicationContext.filesDir, "threat-intelligence/current.alfeed")
+        if (!file.isFile) {
+            synchronized(cacheLock) {
+                cachedFeed = null
+                cachedFileLength = -1L
+                cachedFileModified = -1L
+                cachedFeedStatus = ThreatFeedStatus(ThreatFeedFreshness.UNAVAILABLE, "NO_CACHED_FEED")
+            }
+            return ThreatFeedStatus(ThreatFeedFreshness.UNAVAILABLE, "NO_CACHED_FEED")
+        }
+        synchronized(cacheLock) {
+            val length = file.length()
+            val modified = file.lastModified()
+            val now = System.currentTimeMillis() / 1000L
+            val cachedStatus = cachedFeedStatus
+            val sameFile = cachedFileLength == length && cachedFileModified == modified
+            if (sameFile && cachedStatus != null) {
+                if (cachedStatus.freshness != ThreatFeedFreshness.UP_TO_DATE) return cachedStatus
+                if (cachedFeed?.expiresAtEpochSeconds?.let { it > now } == true) return cachedStatus
+            }
+
+            val result = runCatching { store(context).loadCurrent() }
+            cachedFeed = result.getOrNull()
+            cachedFileLength = length
+            cachedFileModified = modified
+            val status = statusFrom(result)
+            cachedFeedStatus = status
+            return status
+        }
+    }
+
+    private fun statusFrom(result: Result<SignedThreatFeed?>): ThreatFeedStatus {
+        if (result.getOrNull() != null) return ThreatFeedStatus(ThreatFeedFreshness.UP_TO_DATE)
+        val validation = result.exceptionOrNull() as? FeedValidationException
+        return if (validation?.code == FeedValidationCode.FEED_EXPIRED) {
+            ThreatFeedStatus(ThreatFeedFreshness.STALE, validation.code.name)
+        } else {
+            ThreatFeedStatus(
+                ThreatFeedFreshness.UNAVAILABLE,
+                validation?.code?.name ?: "FEED_VALIDATION_FAILED"
+            )
+        }
+    }
+
     fun lookup(context: Context, sha256: String): ThreatIndicator? {
         if (!hashPattern.matches(sha256)) return null
         return currentFeed(context)?.indicators?.get(sha256.lowercase())
@@ -54,22 +109,33 @@ object ThreatFeedRuntime {
 
     fun currentFeed(context: Context): SignedThreatFeed? {
         val file = File(context.applicationContext.filesDir, "threat-intelligence/current.alfeed")
-        if (!file.isFile) return null
+        if (!file.isFile) {
+            synchronized(cacheLock) {
+                cachedFeed = null
+                cachedFileLength = -1L
+                cachedFileModified = -1L
+                cachedFeedStatus = ThreatFeedStatus(ThreatFeedFreshness.UNAVAILABLE, "NO_CACHED_FEED")
+            }
+            return null
+        }
         synchronized(cacheLock) {
             val length = file.length()
             val modified = file.lastModified()
-            val cached = cachedFeed
             val now = System.currentTimeMillis() / 1000L
-            if (cached != null &&
-                cachedFileLength == length &&
-                cachedFileModified == modified &&
-                cached.expiresAtEpochSeconds > now
-            ) return cached
+            val sameFile = cachedFileLength == length && cachedFileModified == modified
+            val cached = cachedFeed
+            if (sameFile && cached != null && cached.expiresAtEpochSeconds > now) return cached
+            if (sameFile && cached == null &&
+                cachedFeedStatus?.freshness != null &&
+                cachedFeedStatus?.freshness != ThreatFeedFreshness.UP_TO_DATE
+            ) return null
 
-            val loaded = runCatching { store(context).loadCurrent() }.getOrNull()
+            val result = runCatching { store(context).loadCurrent() }
+            val loaded = result.getOrNull()
             cachedFeed = loaded
             cachedFileLength = length
             cachedFileModified = modified
+            cachedFeedStatus = statusFrom(result)
             return loaded
         }
     }
@@ -103,7 +169,7 @@ object ThreatFeedRuntime {
                     if (count < 0) break
                     total += count
                     require(total <= SignedThreatFeedParser.MAX_FEED_BYTES) {
-                        "Threat feed exceeds the 2 MiB safety limit."
+                        "Threat feed exceeds the 4 MiB safety limit."
                     }
                     output.write(buffer, 0, count)
                 }
@@ -118,6 +184,7 @@ object ThreatFeedRuntime {
                 cachedFeed = installed
                 cachedFileLength = file.length()
                 cachedFileModified = file.lastModified()
+                cachedFeedStatus = ThreatFeedStatus(ThreatFeedFreshness.UP_TO_DATE)
             }
             installed
         } finally {

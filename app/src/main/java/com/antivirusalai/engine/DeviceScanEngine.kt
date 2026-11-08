@@ -19,13 +19,13 @@ import java.io.File
  * MANAGE_EXTERNAL_STORAGE in system settings.
  */
 object DeviceScanEngine {
-    private const val QUICK_FILE_LIMIT = 350
-    private const val QUICK_TOTAL_BYTES = 1024L * 1024L * 1024L
-    private const val DEEP_FILE_LIMIT = 10_000
-    private const val DEEP_TOTAL_BYTES = 5L * 1024L * 1024L * 1024L
-    private const val MAX_DEPTH = 64
-    private const val MAX_DIRECTORY_VISITS = 20_000
-    private const val MAX_QUICK_DIRECTORY_VISITS = 3_000
+    private const val QUICK_FILE_LIMIT = ScanLimits.QUICK_FILE_LIMIT
+    private const val QUICK_TOTAL_BYTES = ScanLimits.QUICK_TOTAL_BYTES
+    private const val DEEP_FILE_LIMIT = ScanLimits.DEEP_FILE_LIMIT
+    private const val DEEP_TOTAL_BYTES = ScanLimits.DEEP_TOTAL_BYTES
+    private const val MAX_DEPTH = ScanLimits.MAX_FILE_DEPTH
+    private const val MAX_DIRECTORY_VISITS = ScanLimits.MAX_DIRECTORY_VISITS
+    private const val MAX_QUICK_DIRECTORY_VISITS = ScanLimits.MAX_QUICK_DIRECTORY_VISITS
     private val QUICK_DIRECTORIES = listOf(
         "Download", "Downloads", "Documents", "Bluetooth", "DCIM",
         "Pictures", "Movies", "Music", "Podcasts", "Notifications",
@@ -192,7 +192,9 @@ object DeviceScanEngine {
 
         }
 
-        val items = mutableListOf<FolderScanItem>()
+        // Keep a bounded result preview, but prefer actual detections over early clean/unknown files.
+        val findingItems = mutableListOf<FolderScanItem>()
+        val previewItems = mutableListOf<FolderScanItem>()
         var skipped = discoverySkipped
         var totalBytes = 0L
         var scannedCount = 0
@@ -214,7 +216,7 @@ object DeviceScanEngine {
                 skipped++
                 failures += FolderScanFailure(
                     file.name,
-                    if (deep) "The 5 GB deep-scan data limit was reached."
+                    if (deep) "The 25 GB deep-scan data limit was reached."
                     else "The 1 GB quick-scan data limit was reached."
                 )
                 if (totalBytes >= totalByteLimit) {
@@ -234,16 +236,26 @@ object DeviceScanEngine {
                 scannedCount++
                 when (result.verdict) {
                     ScanVerdict.KNOWN_MALWARE, ScanVerdict.POTENTIALLY_UNWANTED, ScanVerdict.SUSPICIOUS -> suspiciousCount++
-                    ScanVerdict.UNKNOWN_APK, ScanVerdict.UNSUPPORTED_FILE -> unknownCount++
+                    ScanVerdict.UNKNOWN_APK, ScanVerdict.UNSUPPORTED_FILE, ScanVerdict.INCOMPLETE_THREAT_INTELLIGENCE -> unknownCount++
                     ScanVerdict.TEST_MARKER_MATCH -> matchedCount++
                     ScanVerdict.NO_KNOWN_INDICATOR -> Unit
                 }
-                if (items.size < 60) items += FolderScanItem(Uri.fromFile(file), result)
+                val reportItem = FolderScanItem(Uri.fromFile(file), result)
+                val isPriorityFinding = result.verdict in setOf(
+                    ScanVerdict.KNOWN_MALWARE,
+                    ScanVerdict.POTENTIALLY_UNWANTED,
+                    ScanVerdict.SUSPICIOUS
+                )
+                if (isPriorityFinding) {
+                    if (findingItems.size < ScanLimits.MAX_RESULT_DETAILS) findingItems += reportItem
+                } else if (previewItems.size < ScanLimits.MAX_RESULT_DETAILS) {
+                    previewItems += reportItem
+                }
                 if (totalBytes >= totalByteLimit && index < list.lastIndex) {
                     skipped += list.size - index - 1
                     failures += FolderScanFailure(
                         "Remaining files",
-                        if (deep) "Stopped at the 5 GB deep-scan data limit."
+                        if (deep) "Stopped at the 25 GB deep-scan data limit."
                         else "Stopped at the 1 GB quick-scan data limit."
                     )
                     break
@@ -260,12 +272,12 @@ object DeviceScanEngine {
         if (candidates.size >= maxFiles) {
             failures += FolderScanFailure(
                 "Scan limit",
-                if (deep) "The 10,000-file deep-scan limit was reached."
+                if (deep) "The 100,000-file deep-scan limit was reached."
                 else "The 350-file quick-scan limit was reached."
             )
         }
         FolderScanReport(
-            items = items,
+            items = if (findingItems.isNotEmpty()) findingItems else previewItems,
             failures = failures,
             discoveredFiles = list.size,
             skippedFiles = skipped,

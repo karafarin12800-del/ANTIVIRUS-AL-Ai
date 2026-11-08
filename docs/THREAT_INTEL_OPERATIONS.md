@@ -1,65 +1,87 @@
 # Threat intelligence operations
 
-## Data source and scope
+## Sources and current ingestion behavior
 
-The publisher uses two complementary abuse.ch sources through authenticated HTTPS metadata APIs:
+The publisher builds a bounded metadata-only feed from four sources:
 
-- **MalwareBazaar**: `recent_detections` returns files for which the source assigned a malware-family label. Their SHA-256 values and family labels are imported as exact-file indicators.
-- **ThreatFox (optional)**: `get_iocs` over the last seven days returns recent IOCs. When its API credential is configured, the publisher imports SHA-256 values only from each IOC's documented `malware_samples` metadata and retains the associated family label.
+- **MalwareBazaar**: authenticated `recent_detections` query over the previous 168 hours. Imports family-labelled SHA-256 file indicators as `MALWARE` with confidence 100.
+- **ThreatFox** (optional credential): authenticated `get_iocs` query over the previous seven days. Imports supported IOC types (`sha256_hash`, `url`, `domain`, `ip`, `ipv4`, and `ip:port`) and linked malware-sample SHA-256 metadata. Non-hash IOCs are classified `SUSPICIOUS`; sample/file hashes are classified `MALWARE`. Provider confidence is retained with a bounded 0–100 value.
+- **URLhaus** (optional credential and separate approval): imports only active/online distribution URLs from its recent file export. These URL indicators receive a one-day per-indicator expiry. A URL reputation indicator is not proof that every later response from that URL is malicious.
+- **Feodo Tracker** (enabled by publisher configuration): imports only online IPv4 command-and-control indicators from its recommended blocklist, with a one-day per-indicator expiry and `SUSPICIOUS` classification.
 
-No malware sample bytes are retrieved or executed. The Android scanner compares a local SHA-256 value with the signed hash list. A match is a reputation signal for the exact byte-identical file; a modified or previously unseen sample can evade hash matching. MalwareBazaar's family label takes precedence when the same hash appears in both sources.
+No malware samples or payload bytes are downloaded, executed, or bundled. Only threat metadata is queried. Duplicate indicators are merged by type and normalized value, provenance sources are retained, and the highest classification/confidence is preserved according to publisher rules.
 
-The feed currently contains only entries for which the source returned a family label. Missing or malformed hashes and missing family labels are discarded. Duplicate hashes are collapsed, entries are sorted, and the feed is capped at 20,000 indicators / 2 MiB.
+## What Android currently uses
+
+Android applies exact SHA-256 reputation matches to local file scans. It verifies the signed feed, key ID, expiry, indicator ordering, provenance counts, truncation marker, and monotonic version before accepting it.
+
+The client also parses URL, domain, IPv4, and IP:port indicators into a separate network-metadata collection. The current app does **not** yet connect those network indicators to a VPN, DNS resolver, browser protection, socket monitor, or traffic-blocking path. Do not describe those indicators as active network protection until such a separately reviewed feature exists and is tested.
+
+A fresh-feed non-match is not proof that a file is safe. An expired, unavailable, invalid, or truncated feed must not produce a green clean verdict.
+
+## Bounds and expiry
+
+- Total maximum: 20,000 retained indicators.
+- Feed maximum: 4 MiB.
+- Per-type limits: 16,000 SHA-256, 2,000 URLs, 1,000 domains, 500 IPv4, 500 IPv4:port.
+- Feed validity: seven days.
+- Current URLhaus and Feodo Tracker per-indicator validity: one day.
+- Every v2 entry includes type, normalized value, family identifier, classification, provenance, confidence, first-seen time, and expiry.
+- The signed header records source counts and whether any configured per-type/total cap truncated the candidate.
+
+A truncated feed is useful intelligence but has incomplete coverage. The app must expose that state and abstain from a definitive no-match result.
 
 ## Commercial-use and provider credentials
 
-MalwareBazaar states that its community API is free under fair-use principles, while companies or for-profit use may require a paid enhanced commercial API. Before activating this publisher for a commercial antivirus product, the repository owner must confirm the applicable plan and terms with the provider. The workflow's boolean commercial-use secret is an operator attestation only; it does not grant provider permission.
+Availability of an API endpoint does not itself grant permission for commercial use, caching, redistribution, or inclusion in a paid antivirus product. The repository owner must independently confirm the current terms and required plan/authorization for **each** source before activating it in a commercial release. The workflow approval variables are operator attestations only; they are not provider approval or legal advice.
+
+MalwareBazaar/ThreatFox and URLhaus have separate approval gates in the publisher. Feodo Tracker terms must also be checked before commercial redistribution. Keep a source disabled if the required permission is uncertain.
 
 ## GitHub Actions secrets
 
-Configure these secrets in the repository settings after reviewing the current provider terms:
-
 | Secret | Purpose |
 |---|---|
-| \`MALWAREBAZAAR_AUTH_KEY\` | Required API Auth-Key for MalwareBazaar metadata queries |
-| \`THREATFOX_AUTH_KEY\` | Optional ThreatFox API Auth-Key; when configured, a failed query stops feed publication |
-| \`ALAI_FEED_SIGNING_KEY_PEM\` | Unencrypted PEM for the matching ECDSA P-256 private key |
-| \`ALAI_ABUSECH_COMMERCIAL_USE_APPROVED\` | Literal \`true\` only after commercial-use entitlement/terms are confirmed |
+| `MALWAREBAZAAR_AUTH_KEY` | Required MalwareBazaar API credential |
+| `THREATFOX_AUTH_KEY` | Optional ThreatFox API credential |
+| `URLHAUS_AUTH_KEY` | Optional URLhaus export credential |
+| `ALAI_FEED_SIGNING_KEY_PEM` | ECDSA P-256 private signing key matching the Android-pinned public key |
+| `ALAI_ABUSECH_COMMERCIAL_USE_APPROVED` | Operator attestation only after MalwareBazaar/ThreatFox terms are confirmed |
+| `ALAI_URLHAUS_COMMERCIAL_USE_APPROVED` | Separate operator attestation only after URLhaus terms are confirmed |
+| `ALAI_ENABLE_FEODO_TRACKER` | Enables/disables Feodo Tracker ingestion; do not enable for commercial redistribution until terms are confirmed |
 
-Never put the private key or API key in a workflow file, commit, APK, log, or issue. The matching public key is pinned in the Android application as key ID \`alai-release-2026\`.
+Never put a private signing key or provider credential in source code, the APK, an issue, a log, or a chat message.
 
 ## Publisher workflow
 
-\`.github/workflows/publish-threat-feed.yml\` can be started manually and is scheduled every 12 hours after the workflow is available on the default branch. It:
+`.github/workflows/publish-threat-feed.yml` supports a manual key-only check and a separate publish operation, and it is scheduled every 12 hours once available on the default branch.
 
-1. Fails closed if any credential or the explicit commercial-use attestation is missing.
-2. Queries up to 168 hours of recent family-labelled MalwareBazaar detections.
-3. When \\`THREATFOX_AUTH_KEY\\` is configured, queries up to seven days of recent ThreatFox IOCs and imports only their associated sample SHA-256 metadata.
-4. Canonicalizes, sorts, and deduplicates SHA-256 entries.
-5. Generates a monotonic version and a seven-day expiry.
-6. Signs the exact UTF-8 payload with ECDSA P-256 / SHA-256.
-7. Publishes only \\`threat-feed/latest.alfeed\\` and its version marker to the \\`security-feed\\` branch.
+The key-only operation verifies the configured private key matches the public key pinned in Android. It must not contact any provider, generate a feed, or publish a file.
 
-The Android app downloads this public file over HTTPS. It rejects an unknown key ID, invalid signature, malformed/unsorted/duplicate entries, expired/future feeds, oversized input, excessive validity windows, and rollback.
+The publish operation:
+1. Fails closed when required credentials or approvals are missing.
+2. Queries only configured provider metadata endpoints.
+3. Normalizes and validates each indicator type.
+4. Deduplicates by type/value and preserves provenance.
+5. Applies per-type and total caps and reports truncation/source coverage.
+6. Creates a monotonically increasing version with seven-day feed expiry and shorter URLhaus/Feodo indicator expiries.
+7. Signs exact canonical UTF-8 bytes using ECDSA P-256 / SHA-256.
+8. Publishes only the signed feed and version marker to the `security-feed` branch.
 
-## Incident handling and key rotation
+The live feed is not active until a successful approved publish exists and the Android client has downloaded and accepted it.
 
-If a signing key is compromised, stop the publisher workflow, rotate the key in a controlled environment, release an app update containing the new public key, and follow the keyring migration procedure in \`THREAT_FEED_FORMAT.md\`. Do not publish a feed under a key the released app does not trust. Record every key change and feed-version transition.
+## Incident response and key rotation
 
-## Operational checks
+If a signing key is compromised, stop publishing, rotate under controlled conditions, release an app update containing the new public key, and follow the keyring migration procedure in `THREAT_FEED_FORMAT.md`. Never publish with a key that released clients do not trust. Record each key change and feed-version transition.
 
-Before calling the feed live, confirm all of the following:
+## Operational release checklist
 
-- Provider terms and commercial entitlement are confirmed by the repository owner.
-- All required Actions secrets are configured and protected.
-- A manual workflow run succeeds and publishes a non-empty feed.
-- The feed URL returns HTTP 200 and the Android client accepts the signature.
-- The accepted feed has a current expiry and increasing version.
-- A known hash in the feed is reported as a known malware match, while an unknown hash remains unmatched.
-- No file content or scanned hash is sent to the provider by the Android client.
-
-## URL and network indicators
-
-URLhaus is a separate source for malicious distribution URLs, host/domain indicators, and collected payload hashes. Its documentation warns that a collected payload hash is not automatically malicious because a URL may later serve clean content. The current Android scanner is a local file-hash/APK scanner and does not inspect browser navigation or all device network connections, so URLhaus URL/domain indicators are not mixed into the file-malware hash feed or advertised as active protection. A future URL-reputation component must evaluate URLs/hosts in an actual browsing or network workflow and implement freshness/revocation handling.
-
-For commercial or for-profit deployment, confirm the applicable abuse.ch enhanced commercial API terms for each selected source before setting the operator approval secret. Community API availability does not itself authorize commercial use.
+- Provider terms and commercial entitlement confirmed separately for every source enabled.
+- Required Actions secrets configured and protected.
+- Key-only workflow succeeds without contacting providers.
+- Publish workflow succeeds and creates a non-empty signed candidate.
+- Feed URL returns HTTP 200 and the Android client accepts the signature.
+- Source counts, truncation state, feed expiry, per-indicator expiry, and monotonic version are sensible.
+- A known hash match is reported as a reputation match; an unknown hash remains a no-match only when coverage is current and not truncated.
+- A stale/unavailable/truncated feed never appears as a clean scan.
+- No file contents or scanned file hashes are uploaded by the Android scanning path.
+- Network indicators are not advertised as active protection until a separate network enforcement feature is implemented and validated.

@@ -23,7 +23,7 @@
 ## Required Android device tests before public release
 
 - Verify automatic quick/deep scans, accessible shared-storage coverage, provider-backed files, empty/small/large files, changed-after-scan handling, and cancellation.
-- Verify that reported scope limits are visible and honest: quick scan 350 files/1 GiB, deep scan 10,000 files/5 GiB, 200 MiB per file; Android-protected locations remain excluded.
+- Verify that reported scope limits are visible and honest: quick device scan 350 files/1 GiB; deep device scan and user-selected SAF folder scans up to 100,000 files/25 GiB; 200 MiB per file; Android-protected locations remain excluded. Reaching any ceiling must mark the report incomplete.
 - Test API 26 through current Android versions, including protected storage boundaries, app inventory visibility, split APKs, and malformed archives.
 - Validate Android Keystore AES-GCM encryption, tag-tamper detection, key invalidation, vault list/restore/delete, and restore through multiple document providers.
 - Confirm source deletion is never attempted before explicit confirmation and a verified encrypted copy; validate the "source not removed" failure state.
