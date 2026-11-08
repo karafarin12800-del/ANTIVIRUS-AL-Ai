@@ -30,7 +30,7 @@ data class SignedContentRuleBundle(
 enum class ContentRuleBundleState { CURRENT, MISSING, EXPIRED, INVALID }
 
 object ContentRuleBundleParser {
-    const val HEADER = "ALAI-CONTENT-RULES/1"
+    const val HEADER = "ALAI-CONTENT-RULES/2"
     const val MAX_BUNDLE_BYTES = 1024 * 1024
     const val MAX_RULES = 511
     const val MAX_PATTERN_BYTES = 256
@@ -94,41 +94,74 @@ object ContentRuleBundleParser {
         for (line in lines.subList(5, lines.lastIndex)) {
             require(line.startsWith("rule=")) { "Unexpected rule-bundle field." }
             val fields = line.removePrefix("rule=").split('|')
-            require(fields.size == 8) { "Invalid rule entry." }
+            require(fields.size == 10) { "Invalid rule entry." }
             val id = fields[0]
             val family = fields[1]
-            val classification = ThreatClassification.entries.firstOrNull { it.name == fields[2] }
+            val groupId = fields[2]
+            val minimumGroupMatches = fields[3].toIntOrNull()
+                ?: throw IllegalArgumentException("Invalid rule-group threshold.")
+            val classification = ThreatClassification.entries.firstOrNull { it.name == fields[4] }
                 ?: throw IllegalArgumentException("Invalid rule classification.")
-            val confidence = fields[3].toIntOrNull()
+            val confidence = fields[5].toIntOrNull()
                 ?: throw IllegalArgumentException("Invalid rule confidence.")
-            val sourceId = fields[4]
-            val licenseId = fields[5]
-            require(idPattern.matches(id) && id != "ALAI-NATIVE-ENGINE-SELFTEST" &&
-                (previousId == null || id > previousId)
+            val sourceId = fields[6]
+            val licenseId = fields[7]
+            require(
+                idPattern.matches(id) && id != "ALAI-NATIVE-ENGINE-SELFTEST" &&
+                    (previousId == null || id > previousId)
             ) {
                 "Rule IDs must be valid, sorted, unique, and not reserved."
             }
-            require(familyPattern.matches(family) && sourcePattern.matches(sourceId) &&
-                licensePattern.matches(licenseId) && confidence in 1..100
-            ) { "Invalid rule metadata or missing provenance/license." }
-            val pattern = Base64.getUrlDecoder().decode(fields[6])
-            require(Base64.getUrlEncoder().withoutPadding().encodeToString(pattern) == fields[6]) {
+            require(
+                familyPattern.matches(family) && familyPattern.matches(groupId) &&
+                    sourcePattern.matches(sourceId) && licensePattern.matches(licenseId) &&
+                    confidence in 1..100 && minimumGroupMatches in 1..MAX_RULES
+            ) { "Invalid rule metadata, group threshold, or missing provenance/license." }
+            val pattern = Base64.getUrlDecoder().decode(fields[8])
+            require(Base64.getUrlEncoder().withoutPadding().encodeToString(pattern) == fields[8]) {
                 "Non-canonical rule pattern encoding."
             }
             require(pattern.size in 4..MAX_PATTERN_BYTES) { "Rule pattern length is outside policy." }
             totalPatternBytes += pattern.size
             require(totalPatternBytes <= MAX_TOTAL_PATTERN_BYTES) { "Rule patterns exceed the total size limit." }
-            val descriptionBytes = Base64.getUrlDecoder().decode(fields[7])
+            val descriptionBytes = Base64.getUrlDecoder().decode(fields[9])
             val description = StandardCharsets.UTF_8.newDecoder()
                 .onMalformedInput(CodingErrorAction.REPORT)
                 .onUnmappableCharacter(CodingErrorAction.REPORT)
                 .decode(ByteBuffer.wrap(descriptionBytes)).toString()
             require(description.isNotBlank() && description.length <= 240) { "Invalid rule description." }
-            rules += ContentSignatureRule(id, family, classification, confidence, pattern, description, sourceId, licenseId)
+            rules += ContentSignatureRule(
+                id = id,
+                familyId = family,
+                classification = classification,
+                confidence = confidence,
+                pattern = pattern,
+                description = description,
+                sourceId = sourceId,
+                licenseId = licenseId,
+                groupId = groupId,
+                minimumGroupMatches = minimumGroupMatches
+            )
             previousId = id
             require(rules.size <= MAX_RULES) { "Too many content rules." }
         }
         require(rules.isNotEmpty()) { "Refusing an empty content-rule bundle." }
+
+        val groups = rules.groupBy { it.groupId }
+        groups.forEach { (groupId, members) ->
+            val first = members.first()
+            require(members.size >= first.minimumGroupMatches) {
+                "Rule group $groupId has fewer entries than its required match threshold."
+            }
+            require(members.all { member ->
+                member.familyId == first.familyId &&
+                    member.minimumGroupMatches == first.minimumGroupMatches &&
+                    member.classification == first.classification &&
+                    member.confidence == first.confidence &&
+                    member.sourceId == first.sourceId &&
+                    member.licenseId == first.licenseId
+            }) { "Rule group $groupId has inconsistent metadata." }
+        }
         return SignedContentRuleBundle(keyId, version, issued, expires, rules)
     }
 
