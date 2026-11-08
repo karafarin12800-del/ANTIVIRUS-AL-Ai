@@ -234,7 +234,6 @@ object ScanEngine {
             val mlFeatures = OnDeviceMlScorer.extractFeatures(
                 apk = apk,
                 static = staticReport,
-                combined = combinedRisk,
                 fileSizeBytes = totalBytes,
                 contentEngineState = contentEngineState
             )
