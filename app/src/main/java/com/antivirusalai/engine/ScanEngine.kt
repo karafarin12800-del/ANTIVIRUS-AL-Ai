@@ -141,7 +141,7 @@ object ScanEngine {
                 evidence += ScanEvidence(
                     "CONTENT_SIGNATURE_${rule.id}",
                     "Content signature matched: ${rule.familyId}",
-                    rule.description + " Confidence metadata: ${rule.confidence}%.",
+                    rule.description + " Confidence: ${rule.confidence}%. Source: ${rule.sourceId}. License: ${rule.licenseId}.",
                     when {
                         rule.classification == ThreatClassification.MALWARE && rule.confidence >= 90 -> EvidenceSeverity.HIGH
                         else -> EvidenceSeverity.MEDIUM
@@ -251,24 +251,18 @@ object ScanEngine {
                     else -> 1
                 }
             }
-            val contentRuleVerdict = when (topContentRule?.classification) {
-                ThreatClassification.MALWARE ->
-                    if (topContentRule.confidence >= 90) ScanVerdict.KNOWN_MALWARE else ScanVerdict.SUSPICIOUS
-                ThreatClassification.PUA ->
-                    if (topContentRule.confidence >= 70) ScanVerdict.POTENTIALLY_UNWANTED else ScanVerdict.SUSPICIOUS
-                ThreatClassification.SUSPICIOUS -> ScanVerdict.SUSPICIOUS
-                null -> null
+            val contentRuleVerdict = topContentRule?.let { rule ->
+                when (rule.classification) {
+                    ThreatClassification.MALWARE ->
+                        if (rule.confidence >= 90) ScanVerdict.KNOWN_MALWARE else ScanVerdict.SUSPICIOUS
+                    ThreatClassification.PUA ->
+                        if (rule.confidence >= 70) ScanVerdict.POTENTIALLY_UNWANTED else ScanVerdict.SUSPICIOUS
+                    ThreatClassification.SUSPICIOUS -> ScanVerdict.SUSPICIOUS
+                }
             }
 
             val verdict = when {
-                threatMatch?.classification == ThreatClassification.MALWARE -> {
-                    evidence += ScanEvidence(
-                        "SIGNED_FEED_KNOWN_MALWARE", "Known malware hash match",
-                        "Exact SHA-256 match in the current authenticated threat feed. Family: ${threatMatch.familyId}. This is a reputation match.",
-                        EvidenceSeverity.HIGH
-                    )
-                    ScanVerdict.KNOWN_MALWARE
-                }
+                threatMatch?.classification == ThreatClassification.MALWARE -> ScanVerdict.KNOWN_MALWARE
                 contentRuleVerdict == ScanVerdict.KNOWN_MALWARE -> ScanVerdict.KNOWN_MALWARE
                 threatMatch?.classification == ThreatClassification.PUA ||
                     contentRuleVerdict == ScanVerdict.POTENTIALLY_UNWANTED -> ScanVerdict.POTENTIALLY_UNWANTED
