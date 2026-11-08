@@ -134,6 +134,10 @@ object ContentRuleBundleRuntime {
     private const val DIRECTORY = "content-rules"
     private const val FILE_NAME = "current.alrules"
     private const val VERSION_NAME = "highest-version.txt"
+    private val cacheLock = Any()
+    @Volatile private var cachedBundle: SignedContentRuleBundle? = null
+    @Volatile private var cachedLength: Long = -1L
+    @Volatile private var cachedModified: Long = -1L
 
     fun state(context: Context): ContentRuleBundleState {
         val file = File(context.applicationContext.filesDir, "$DIRECTORY/$FILE_NAME")
@@ -156,12 +160,24 @@ object ContentRuleBundleRuntime {
     fun current(context: Context): SignedContentRuleBundle? {
         val file = File(context.applicationContext.filesDir, "$DIRECTORY/$FILE_NAME")
         if (!file.isFile || file.length() !in 1L..ContentRuleBundleParser.MAX_BUNDLE_BYTES.toLong()) return null
-        return runCatching {
-            ContentRuleBundleParser.parse(
-                file.readBytes(),
-                minimumVersionExclusive = (readVersion(context) - 1L).coerceAtLeast(0L)
-            )
-        }.getOrNull()
+        synchronized(cacheLock) {
+            val length = file.length()
+            val modified = file.lastModified()
+            val cached = cachedBundle
+            if (cachedLength == length && cachedModified == modified &&
+                cached?.expiresAtEpochSeconds?.let { it > System.currentTimeMillis() / 1000L } == true
+            ) return cached
+            val loaded = runCatching {
+                ContentRuleBundleParser.parse(
+                    file.readBytes(),
+                    minimumVersionExclusive = (readVersion(context) - 1L).coerceAtLeast(0L)
+                )
+            }.getOrNull()
+            cachedBundle = loaded
+            cachedLength = length
+            cachedModified = modified
+            return loaded
+        }
     }
 
     suspend fun refresh(context: Context): SignedContentRuleBundle = withContext(Dispatchers.IO) {
@@ -212,6 +228,11 @@ object ContentRuleBundleRuntime {
         val versionFile = File(directory, VERSION_NAME)
         writeAtomically(directory, target, bytes)
         writeAtomically(directory, versionFile, (parsed.version.toString() + "\n").toByteArray(StandardCharsets.US_ASCII))
+        synchronized(cacheLock) {
+            cachedBundle = parsed
+            cachedLength = target.length()
+            cachedModified = target.lastModified()
+        }
         parsed
     }
 
