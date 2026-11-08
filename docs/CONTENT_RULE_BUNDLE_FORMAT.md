@@ -14,7 +14,7 @@ key_id=alai-release-2026
 version=UNIX_VERSION
 issued_at=UNIX_SECONDS
 expires_at=UNIX_SECONDS
-rule=RULE_ID|FAMILY_ID|CLASSIFICATION|CONFIDENCE|PATTERN_BASE64URL|DESCRIPTION_BASE64URL
+rule=RULE_ID|FAMILY_ID|CLASSIFICATION|CONFIDENCE|SOURCE_ID|LICENSE_ID|PATTERN_BASE64URL|DESCRIPTION_BASE64URL
 signature=BASE64_ECDSA_DER
 ```
 
@@ -24,7 +24,7 @@ The signature covers every byte from the format header through the final rule li
 - Rule IDs must be sorted, unique, and match `[A-Za-z0-9._-]{1,64}`.
 - Family IDs must be uppercase stable identifiers.
 - Pattern bytes: 4–256 bytes each; maximum 511 rules and 64 KiB total pattern bytes.
-- Description: UTF-8, 1–240 characters.
+- Every rule includes a stable source ID and SPDX-style license ID; both are retained in the scan evidence for provenance review.\n- Description: UTF-8, 1–240 characters.
 - Bundle: maximum 1 MiB and maximum 14-day validity.
 - Version must strictly increase; expired, invalidly signed, malformed, oversized, or rolled-back bundles are rejected.
 - Accepted bundles are written atomically to app-private storage. Only the public verification key is embedded in Android.
@@ -33,7 +33,7 @@ The signature covers every byte from the format header through the final rule li
 
 `tools/publish_content_rules.py` accepts a reviewed CSV with exactly these columns:
 
-`id,family,classification,confidence,pattern_base64url,description`
+`id,family,classification,confidence,source_id,license_id,pattern_base64url,description`
 
 The publisher requires the GitHub secret `ALAI_FEED_SIGNING_KEY_PEM` and two explicit release attestations:
 
