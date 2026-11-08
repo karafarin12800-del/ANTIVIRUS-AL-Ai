@@ -1,5 +1,6 @@
 import base64
 import unittest
+from pathlib import Path
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ec
 
@@ -53,6 +54,16 @@ class PublishContentRulesTests(unittest.TestCase):
         }] * 3
         with self.assertRaises(SystemExit):
             publisher.validate_group_metadata(rules)
+
+    def test_reviewed_fallspy_rule_source_has_valid_group_threshold(self):
+        source = Path(__file__).resolve().parents[1] / "threat-intel" / "content-rules-reviewed.csv"
+        rules = publisher.read_rules(source)
+        self.assertEqual(len(rules), 10)
+        self.assertEqual({rule["group_id"] for rule in rules}, {"WITHSECURE_FALLSPY"})
+        self.assertTrue(all(rule["min_group_matches"] == 4 for rule in rules))
+        self.assertTrue(all(rule["classification"] == "SUSPICIOUS" for rule in rules))
+        self.assertTrue(all(rule["source_id"] == "WITHSECURELABS_IOCS" for rule in rules))
+        self.assertTrue(all(rule["license_id"] == "BSD-2-Clause" for rule in rules))
 
     def test_group_metadata_must_be_consistent(self):
         rules = [{
