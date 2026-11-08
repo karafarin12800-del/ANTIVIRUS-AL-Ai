@@ -3,7 +3,7 @@ package com.antivirusalai.engine
 enum class ScanVerdict { KNOWN_MALWARE, POTENTIALLY_UNWANTED, TEST_MARKER_MATCH, SUSPICIOUS, NO_KNOWN_INDICATOR, UNKNOWN_APK, UNSUPPORTED_FILE, INCOMPLETE_THREAT_INTELLIGENCE }
 enum class EvidenceSeverity { INFO, LOW, MEDIUM, HIGH }
 enum class ContentEngineState { UNAVAILABLE, INCOMPLETE, COMPLETE }
-enum class MlModelState { NOT_CONFIGURED, READY, ERROR }
+enum class MlModelState { NOT_APPLICABLE, NOT_CONFIGURED, READY, ERROR }
 enum class BehavioralAnalysisState { NOT_APPLICABLE, STATIC_INDICATORS_ONLY, SANDBOX_NOT_CONFIGURED }
 
 data class ContentSignatureRule(
@@ -74,5 +74,8 @@ data class ScanResult(
     val staticAnalysis: StaticAnalysisSummary? = null,
     val mlModelState: MlModelState = MlModelState.NOT_CONFIGURED,
     val mlFeatureCount: Int = 0,
+    val mlRiskScore: Int? = null,
+    val mlModelVersion: String? = null,
+    val mlTopFeatures: List<String> = emptyList(),
     val behavioralAnalysisState: BehavioralAnalysisState = BehavioralAnalysisState.NOT_APPLICABLE
 )
