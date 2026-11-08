@@ -33,7 +33,16 @@ The private signing key corresponding to the app-pinned public key is a separate
 
 ## Threat-intelligence source roles
 
-The signed file-hash feed combines family-labelled MalwareBazaar detections with optional SHA-256 hashes in ThreatFox-linked sample metadata. These sources update reputation for exact file bytes; they do not provide behavioral analysis or guarantee detection of modified/unknown malware. URLhaus is documented as a separate future URL/domain reputation layer and is not represented as active protection in this file-only scanner.
+The publisher can combine four metadata sources into the signed v2 feed:
+
+- MalwareBazaar: recent family-labelled SHA-256 file hashes.
+- ThreatFox: typed SHA-256, URL, domain, IPv4, and IPv4:port IOCs, plus linked sample hashes when present.
+- URLhaus: active/online malware-distribution URLs when its credential and separate commercial-use approval are configured.
+- Feodo Tracker: online botnet command-and-control IPv4 indicators.
+
+Entries retain source provenance, confidence, first-seen and expiry timestamps. Duplicate indicators are merged; the feed is capped at 20,000 entries / 4 MiB and marks truncated coverage. No malware sample bytes are downloaded.
+
+Android uses SHA-256 entries for local file reputation. It parses network IOCs separately, but browser, DNS, VPN, socket, and traffic-blocking protection are not yet connected. Network IOCs are therefore not advertised as active network protection. Commercial-use permission must be confirmed for each enabled provider before a commercial feed is published.
 
 ## Important Android and detection boundaries
 
