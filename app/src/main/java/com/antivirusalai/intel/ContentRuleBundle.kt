@@ -41,6 +41,8 @@ object ContentRuleBundleParser {
         "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEM1szM5WLCBP0KDTXsrVfBdPxErB4sVo4mhY+duhjfDP5MwASTx0pLor3mSL7dLRwX/gZpi6odLquz/BfIGSafg=="
     private val idPattern = Regex("[A-Za-z0-9._-]{1,64}")
     private val familyPattern = Regex("[A-Z0-9][A-Z0-9._-]{0,79}")
+    private val sourcePattern = Regex("[A-Z0-9][A-Z0-9._-]{0,79}")
+    private val licensePattern = Regex("[A-Za-z0-9.+-]{1,64}")
     private val longPattern = Regex("[1-9][0-9]{0,18}")
 
     fun parse(
@@ -79,7 +81,12 @@ object ContentRuleBundleParser {
         val verifier = Signature.getInstance("SHA256withECDSA")
         verifier.initVerify(publicKey)
         verifier.update(payload)
-        require(verifier.verify(signatureBytes)) { "Rule bundle signature is invalid." }
+        val valid = try {
+            verifier.verify(signatureBytes)
+        } catch (error: Exception) {
+            throw IllegalArgumentException("Rule bundle signature encoding is invalid.", error)
+        }
+        require(valid) { "Rule bundle signature is invalid." }
 
         val rules = mutableListOf<ContentSignatureRule>()
         var previousId: String? = null
@@ -87,33 +94,37 @@ object ContentRuleBundleParser {
         for (line in lines.subList(5, lines.lastIndex)) {
             require(line.startsWith("rule=")) { "Unexpected rule-bundle field." }
             val fields = line.removePrefix("rule=").split('|')
-            require(fields.size == 6) { "Invalid rule entry." }
+            require(fields.size == 8) { "Invalid rule entry." }
             val id = fields[0]
             val family = fields[1]
             val classification = ThreatClassification.entries.firstOrNull { it.name == fields[2] }
                 ?: throw IllegalArgumentException("Invalid rule classification.")
             val confidence = fields[3].toIntOrNull()
                 ?: throw IllegalArgumentException("Invalid rule confidence.")
+            val sourceId = fields[4]
+            val licenseId = fields[5]
             require(idPattern.matches(id) && id != "ALAI-NATIVE-ENGINE-SELFTEST" &&
                 (previousId == null || id > previousId)
             ) {
                 "Rule IDs must be valid, sorted, unique, and not reserved."
             }
-            require(familyPattern.matches(family) && confidence in 1..100) { "Invalid rule metadata." }
-            val pattern = Base64.getUrlDecoder().decode(fields[4])
-            require(Base64.getUrlEncoder().withoutPadding().encodeToString(pattern) == fields[4]) {
+            require(familyPattern.matches(family) && sourcePattern.matches(sourceId) &&
+                licensePattern.matches(licenseId) && confidence in 1..100
+            ) { "Invalid rule metadata or missing provenance/license." }
+            val pattern = Base64.getUrlDecoder().decode(fields[6])
+            require(Base64.getUrlEncoder().withoutPadding().encodeToString(pattern) == fields[6]) {
                 "Non-canonical rule pattern encoding."
             }
             require(pattern.size in 4..MAX_PATTERN_BYTES) { "Rule pattern length is outside policy." }
             totalPatternBytes += pattern.size
             require(totalPatternBytes <= MAX_TOTAL_PATTERN_BYTES) { "Rule patterns exceed the total size limit." }
-            val descriptionBytes = Base64.getUrlDecoder().decode(fields[5])
+            val descriptionBytes = Base64.getUrlDecoder().decode(fields[7])
             val description = StandardCharsets.UTF_8.newDecoder()
                 .onMalformedInput(CodingErrorAction.REPORT)
                 .onUnmappableCharacter(CodingErrorAction.REPORT)
                 .decode(ByteBuffer.wrap(descriptionBytes)).toString()
             require(description.isNotBlank() && description.length <= 240) { "Invalid rule description." }
-            rules += ContentSignatureRule(id, family, classification, confidence, pattern, description)
+            rules += ContentSignatureRule(id, family, classification, confidence, pattern, description, sourceId, licenseId)
             previousId = id
             require(rules.size <= MAX_RULES) { "Too many content rules." }
         }
