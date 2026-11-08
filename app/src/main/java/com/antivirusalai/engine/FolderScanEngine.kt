@@ -33,6 +33,23 @@ data class FolderScanReport(
             it.result.verdict == ScanVerdict.INCOMPLETE_THREAT_INTELLIGENCE
     }
     val matchedCount: Int get() = matchedCountOverride ?: items.count { it.result.verdict == ScanVerdict.TEST_MARKER_MATCH }
+
+    /** Percentage of known file candidates that actually completed the scanner. */
+    val scanCoveragePercent: Int get() =
+        if (discoveredFiles == 0) {
+            if (!truncated && failures.isEmpty()) 100 else 0
+        } else ((scannedCount * 100L) / discoveredFiles).toInt().coerceIn(0, 100)
+
+    /** Files with no scanned result and no explicit skip/failure disposition. */
+    val unaccountedFiles: Int get() =
+        (discoveredFiles - scannedCount - skippedFiles).coerceAtLeast(0)
+
+    /** True only when every known candidate has a terminal scanned-or-skipped disposition. */
+    val allDiscoveredFilesAccounted: Boolean get() = unaccountedFiles == 0
+
+    /** True only when all known files were scanned and traversal did not report gaps. */
+    val fullScanCoverage: Boolean get() =
+        allDiscoveredFilesAccounted && skippedFiles == 0 && !truncated && failures.isEmpty()
 }
 
 /**
@@ -65,6 +82,7 @@ object FolderScanEngine {
         val queue = ArrayDeque<Pair<String, Int>>()
         queue.add(DocumentsContract.getTreeDocumentId(treeUri) to 0)
         var truncated = false
+        var discoverySkipped = 0
         var directoryVisits = 0
 
         while (queue.isNotEmpty()) {
@@ -106,10 +124,30 @@ object FolderScanEngine {
                     val sizeColumn = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_SIZE)
 
                     while (cursor.moveToNext()) {
-                        if (idColumn < 0) continue
-                        val documentId = cursor.getString(idColumn) ?: continue
-                        val name = if (nameColumn >= 0) cursor.getString(nameColumn).orEmpty() else documentId
                         val mime = if (mimeColumn >= 0) cursor.getString(mimeColumn) else null
+                        val fallbackName = if (nameColumn >= 0) cursor.getString(nameColumn).orEmpty() else "Unnamed file"
+                        if (idColumn < 0) {
+                            if (mime == DocumentsContract.Document.MIME_TYPE_DIR) {
+                                failures += FolderScanFailure(fallbackName, "Directory identifier was unavailable; its contents could not be enumerated.")
+                                truncated = true
+                            } else {
+                                discoverySkipped++
+                                failures += FolderScanFailure(fallbackName, "Document identifier was unavailable; this file could not be opened for scanning.")
+                            }
+                            continue
+                        }
+                        val documentId = cursor.getString(idColumn)
+                        if (documentId.isNullOrBlank()) {
+                            if (mime == DocumentsContract.Document.MIME_TYPE_DIR) {
+                                failures += FolderScanFailure(fallbackName, "Directory identifier was empty; its contents could not be enumerated.")
+                                truncated = true
+                            } else {
+                                discoverySkipped++
+                                failures += FolderScanFailure(fallbackName, "Document identifier was empty; this file could not be opened for scanning.")
+                            }
+                            continue
+                        }
+                        val name = if (fallbackName.isNotBlank()) fallbackName else documentId
                         val size = if (sizeColumn >= 0 && !cursor.isNull(sizeColumn)) cursor.getLong(sizeColumn) else -1L
 
                         if (mime == DocumentsContract.Document.MIME_TYPE_DIR) {
@@ -138,7 +176,10 @@ object FolderScanEngine {
                             }
                         }
                     }
-                } ?: failures.add(FolderScanFailure(directoryId, "Folder contents could not be listed."))
+                } ?: run {
+                    failures.add(FolderScanFailure(directoryId, "Folder contents could not be listed."))
+                    truncated = true
+                }
             } catch (error: SecurityException) {
                 failures += FolderScanFailure(directoryId, "Access denied by the document provider.")
                 truncated = true
@@ -152,7 +193,7 @@ object FolderScanEngine {
         // Count every result but keep only a bounded preview; retain detections first.
         val findingItems = mutableListOf<FolderScanItem>()
         val previewItems = mutableListOf<FolderScanItem>()
-        var skipped = 0
+        var skipped = discoverySkipped
         var totalBytes = 0L
         var scannedCount = 0
         var suspiciousCount = 0
@@ -224,7 +265,7 @@ object FolderScanEngine {
         FolderScanReport(
             items = if (findingItems.isNotEmpty()) findingItems else previewItems,
             failures = failures,
-            discoveredFiles = candidates.size,
+            discoveredFiles = candidates.size + discoverySkipped,
             skippedFiles = skipped,
             truncated = truncated || skipped > 0,
             scannedCountOverride = scannedCount,
