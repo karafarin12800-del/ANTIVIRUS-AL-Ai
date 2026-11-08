@@ -90,12 +90,22 @@ object FormatStaticAnalyzer {
             header[2] == 'L'.code.toByte() && header[3] == 'F'.code.toByte()
         ) {
             analyzeElfBytes(file, evidence, categories).also { riskPoints += it }
-            return StaticAnalysisReport("ELF", true, true, 0, file.length(), evidence, categories, riskPoints)
+            val complete = file.length() <= 8L * 1024L * 1024L
+            if (!complete) {
+                evidence += ScanEvidence(
+                    "ELF_PREFIX_LIMIT", "ELF analysis used a bounded prefix",
+                    "Only the first 8 MiB of this native file were inspected; later sections were not covered.",
+                    EvidenceSeverity.INFO
+                )
+            }
+            return StaticAnalysisReport("ELF", true, complete, 0, minOf(file.length(), 8L * 1024L * 1024L), evidence, categories, riskPoints)
         }
         if (headerSize >= 4 && header[0] == 'P'.code.toByte() && header[1] == 'K'.code.toByte()) {
             try {
-                ZipFile(file).use { zip ->
+                val isApk = ZipFile(file).use { zip ->
+                    val apkContainer = zip.getEntry("AndroidManifest.xml") != null
                     scanZipFile(zip, budget, evidence, categories)
+                    apkContainer
                 }
             } catch (error: Exception) {
                 budget.complete = false
@@ -107,7 +117,7 @@ object FormatStaticAnalyzer {
             }
             riskPoints += scoreCategories(categories)
             return StaticAnalysisReport(
-                if (file.name.endsWith(".apk", true)) "APK/ZIP" else "ZIP",
+                if (isApk) "APK" else "ZIP",
                 true, budget.complete, budget.entries, budget.expanded, evidence, categories, riskPoints
             )
         }
