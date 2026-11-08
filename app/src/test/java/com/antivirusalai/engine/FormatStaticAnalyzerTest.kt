@@ -73,7 +73,13 @@ class FormatStaticAnalyzerTest {
         val file = temporary.newFile(name)
         ZipOutputStream(file.outputStream()).use { output ->
             entries.forEach { (entryName, bytes) ->
-                output.putNextEntry(ZipEntry(entryName))
+                val entry = ZipEntry(entryName).apply {
+                    method = ZipEntry.STORED
+                    size = bytes.size.toLong()
+                    compressedSize = bytes.size.toLong()
+                    crc = java.util.zip.CRC32().apply { update(bytes) }.value
+                }
+                output.putNextEntry(entry)
                 output.write(bytes)
                 output.closeEntry()
             }
