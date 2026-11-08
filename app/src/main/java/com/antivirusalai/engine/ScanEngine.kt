@@ -51,6 +51,15 @@ object ScanEngine {
         val digest = MessageDigest.getInstance("SHA-256")
         var totalBytes = 0L
         val startedAt = System.nanoTime()
+        var nativeSession = NativeContentEngine.openSession()
+        var contentEngineState = if (nativeSession == null) {
+            ContentEngineState.UNAVAILABLE
+        } else {
+            ContentEngineState.INCOMPLETE
+        }
+        var contentEngineErrorCode: String? =
+            if (nativeSession == null) "NATIVE_LIBRARY_UNAVAILABLE" else null
+        var nativeSelfTestMatch = false
 
         try {
             val input = resolver.openInputStream(uri)
@@ -68,9 +77,41 @@ object ScanEngine {
                             throw ScanTooLargeException("File exceeds the 200 MB MVP scan limit.")
                         }
                         digest.update(buffer, 0, count)
+                        if (nativeSession != null && contentEngineErrorCode == null) {
+                            try {
+                                nativeSession?.update(buffer, count)
+                            } catch (_: Exception) {
+                                runCatching { nativeSession?.close() }
+                                nativeSession = null
+                                contentEngineState = ContentEngineState.INCOMPLETE
+                                contentEngineErrorCode = "NATIVE_UPDATE_FAILED"
+                            } catch (_: LinkageError) {
+                                runCatching { nativeSession?.close() }
+                                nativeSession = null
+                                contentEngineState = ContentEngineState.INCOMPLETE
+                                contentEngineErrorCode = "NATIVE_LINKAGE_FAILED"
+                            }
+                        }
                         sink.write(buffer, 0, count)
                     }
                     sink.fd.sync()
+                }
+            }
+
+            if (nativeSession != null && contentEngineErrorCode == null) {
+                try {
+                    when (nativeSession!!.finish()) {
+                        NativeContentEngine.RESULT_NO_MATCH -> Unit
+                        NativeContentEngine.RESULT_SELF_TEST_MATCH -> nativeSelfTestMatch = true
+                        else -> error("Native engine returned an unknown result code.")
+                    }
+                    contentEngineState = ContentEngineState.COMPLETE
+                } catch (_: Exception) {
+                    contentEngineState = ContentEngineState.INCOMPLETE
+                    contentEngineErrorCode = "NATIVE_FINISH_FAILED"
+                } catch (_: LinkageError) {
+                    contentEngineState = ContentEngineState.INCOMPLETE
+                    contentEngineErrorCode = "NATIVE_LINKAGE_FAILED"
                 }
             }
 
@@ -78,15 +119,26 @@ object ScanEngine {
                 "%02x".format(it.toInt() and 0xff)
             }
             val evidence = mutableListOf<ScanEvidence>()
+            if (contentEngineState != ContentEngineState.COMPLETE) {
+                evidence += ScanEvidence(
+                    "NATIVE_CONTENT_ENGINE_INCOMPLETE",
+                    "Native content analysis is unavailable or incomplete",
+                    "The local C++ stream matcher did not complete. Its result is not used as evidence of a clean file.",
+                    EvidenceSeverity.INFO
+                )
+            }
+            if (nativeSelfTestMatch) {
+                evidence += ScanEvidence(
+                    "NATIVE_ENGINE_SELF_TEST_MARKER",
+                    "Harmless native-engine self-test marker matched",
+                    "The C++ stream matcher recognized its dedicated harmless test fixture. This is an engine self-test, not a malware detection.",
+                    EvidenceSeverity.INFO
+                )
+            }
             val localMatch = LocalIndicatorDatabase.lookup(hash)
             val eicarMatch = EicarTestDetector.contains(temp)
             val currentThreatFeed = ThreatFeedRuntime.currentFeed(context.applicationContext)
             val threatFeedStatus = ThreatFeedRuntime.status(context.applicationContext)
-            val threatCoverageComplete =
-                threatFeedStatus.freshness == ThreatFeedFreshness.UP_TO_DATE &&
-                    currentThreatFeed != null &&
-                    !currentThreatFeed.truncated &&
-                    currentThreatFeed.indicators.isNotEmpty()
             val threatMatch = currentThreatFeed?.indicators?.get(hash.lowercase())
             if (currentThreatFeed?.truncated == true) {
                 evidence += ScanEvidence(
@@ -154,6 +206,7 @@ object ScanEngine {
                     )
                     ScanVerdict.TEST_MARKER_MATCH
                 }
+                nativeSelfTestMatch -> ScanVerdict.TEST_MARKER_MATCH
                 localMatch != null -> {
                     evidence += ScanEvidence(
                         "BENIGN_PROJECT_TEST_MARKER",
@@ -177,8 +230,15 @@ object ScanEngine {
                     evidence += assessment.evidence
                     when {
                         assessment.suspicious -> ScanVerdict.SUSPICIOUS
-                        !threatCoverageComplete -> ScanVerdict.INCOMPLETE_THREAT_INTELLIGENCE
-                        else -> ScanVerdict.NO_KNOWN_INDICATOR
+                        else -> {
+                            evidence += ScanEvidence(
+                                "APK_CONTENT_COVERAGE_NOT_ESTABLISHED",
+                                "APK content coverage is not established",
+                                "A non-empty hash feed only checks exact file reputation. The production APK/DEX content-rule set is not active, so a hash non-match cannot establish complete APK coverage.",
+                                EvidenceSeverity.INFO
+                            )
+                            ScanVerdict.INCOMPLETE_THREAT_INTELLIGENCE
+                        }
                     }
                 }
                 else -> {
@@ -200,9 +260,22 @@ object ScanEngine {
                 verdict = verdict,
                 evidence = evidence,
                 apkMetadata = apk,
-                durationMillis = (System.nanoTime() - startedAt) / 1_000_000L
+                durationMillis = (System.nanoTime() - startedAt) / 1_000_000L,
+                contentEngineState = contentEngineState,
+                contentRuleSetId = if (contentEngineState == ContentEngineState.UNAVAILABLE) {
+                    null
+                } else {
+                    NativeContentEngine.RULE_SET_ID
+                },
+                contentRuleMatches = if (nativeSelfTestMatch) {
+                    listOf(NativeContentEngine.SELF_TEST_RULE_ID)
+                } else {
+                    emptyList()
+                },
+                contentEngineErrorCode = contentEngineErrorCode
             )
         } finally {
+            runCatching { nativeSession?.close() }
             temp.delete()
         }
     }
