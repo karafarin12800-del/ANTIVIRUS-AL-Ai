@@ -45,3 +45,19 @@ The feed publisher must not be activated for commercial distribution until the e
 5. Keep the app's wording aligned with the actual formats and detection layers implemented.
 
 Until the production threat source or an embedded licensed signature engine is active and independently evaluated, the project must be described as an early scanning MVP, not a competitive full antivirus.
+
+## Per-file accounting and engine failover
+
+The current scan pipeline isolates optional engines. Failure in one stage (such as native JNI, APK metadata parsing, structured format parsing, heuristic fusion, ML inference, or a local intelligence read) is recorded as a stage-specific evidence item; it does not automatically abort the other independent stages. Coroutine cancellation is still propagated, and fatal VM errors are not swallowed.
+
+For device and user-selected-folder reports:
+
+- `scanCoveragePercent` is the percentage of known file candidates for which the main scanner completed. It is not a malware-detection rate.
+- `skippedFiles` records candidates that could not be scanned because of access, per-file, aggregate-size, or other scan errors.
+- `unaccountedFiles` is the number of known candidates with neither a completed scan nor an explicit skip disposition.
+- `allDiscoveredFilesAccounted` is true only when every known candidate has a scanned-or-skipped disposition.
+- `fullScanCoverage` is true only when every known candidate was actually scanned, no candidate was skipped, and traversal reported no gaps.
+
+The result preview remains bounded to 60 entries for memory safety; aggregate counters cover the full candidate batch. If traversal is truncated, permission is denied, a provider fails, or a safety cap is reached, the report remains incomplete even if all candidates already enumerated have been processed. Items outside the user-authorized Android scope cannot be enumerated or scanned.
+
+This change improves fault isolation and accounting; it does not create new malware signatures, activate a missing production rule bundle, create a trained ML model, or prove unknown files benign.

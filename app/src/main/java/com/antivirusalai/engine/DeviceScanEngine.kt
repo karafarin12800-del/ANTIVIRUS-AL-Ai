@@ -279,7 +279,7 @@ object DeviceScanEngine {
         FolderScanReport(
             items = if (findingItems.isNotEmpty()) findingItems else previewItems,
             failures = failures,
-            discoveredFiles = list.size,
+            discoveredFiles = list.size + discoverySkipped,
             skippedFiles = skipped,
             truncated = truncated,
             scannedCountOverride = scannedCount,

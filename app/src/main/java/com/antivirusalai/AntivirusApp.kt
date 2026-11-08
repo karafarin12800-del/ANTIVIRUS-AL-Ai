@@ -2316,8 +2316,9 @@ private fun BatchScanSummaryCard(
         item.result.verdict in setOf(ScanVerdict.KNOWN_MALWARE, ScanVerdict.POTENTIALLY_UNWANTED, ScanVerdict.SUSPICIOUS)
     }
     val visibleItems = importantItems.take(if (showAllResults) 60 else 8)
-    val incompleteCoverage = report.unknownCount > 0 ||
-        report.skippedFiles > 0 || report.truncated || report.failures.isNotEmpty()
+    val incompleteCoverage = !report.fullScanCoverage ||
+        report.unaccountedFiles > 0 ||
+        report.unknownCount > 0
     Card(shape = RoundedCornerShape(21.dp), colors = CardDefaults.cardColors(containerColor = SurfaceBase)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
             Text(if (deep) tr(fa, "نتیجه اسکن عمیق", "Deep scan results") else tr(fa, "نتیجه اسکن سریع", "Quick scan results"), color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp)
@@ -2326,6 +2327,27 @@ private fun BatchScanSummaryCard(
                 MetricMini(Modifier.weight(1f), tr(fa, "تهدید مهم", "Priority threats"), report.suspiciousCount.toString())
             }
             Text(tr(fa, "از " + report.discoveredFiles + " مورد قابل بررسی، " + report.scannedCount + " مورد اسکن شدند.", report.scannedCount.toString() + " of " + report.discoveredFiles + " discovered items were scanned."), color = TextSecondary, fontSize = 11.sp)
+            Text(
+                tr(
+                    fa,
+                    "پوشش اسکن فایل‌های فهرست‌شده: ${report.scanCoveragePercent}% • ردشده: ${report.skippedFiles} • بدون وضعیت نهایی: ${report.unaccountedFiles}",
+                    "Scan coverage of enumerated files: ${report.scanCoveragePercent}% • skipped: ${report.skippedFiles} • without final disposition: ${report.unaccountedFiles}"
+                ),
+                color = if (report.fullScanCoverage) ColorSuccess else ColorWarning,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+            if (!report.fullScanCoverage) {
+                Text(
+                    tr(
+                        fa,
+                        "این اسکن پوشش کامل محدوده قابل‌دسترسی را تأیید نمی‌کند. موارد مسدود، ردشده یا پوشه‌های پیمایش‌نشده باید جداگانه بررسی شوند.",
+                        "This scan cannot confirm full coverage of the accessible scope. Blocked, skipped, or untraversed items need separate review."
+                    ),
+                    color = ColorWarning,
+                    fontSize = 10.sp
+                )
+            }
             if (report.suspiciousCount == 0) {
                 val coverageMessage = if (incompleteCoverage) {
                     tr(
