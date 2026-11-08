@@ -184,26 +184,34 @@ object FormatStaticAnalyzer {
             while (true) {
                 val entry = input.nextEntry ?: break
                 if (!registerEntry(entry.name, entry.size, entry.compressedSize, budget, evidence, categories)) {
-                    if (!budget.complete) break
-                    continue
+                    // Do not advance ZipInputStream after a rejected entry: nextEntry/closeEntry
+                    // may drain and decompress the rejected entry without our byte counter.
+                    break
                 }
                 val lower = entry.name.lowercase()
                 val isDex = Regex("(^|/)classes[0-9]*\\.dex$").containsMatchIn(lower)
                 val isNative = lower.endsWith(".so")
                 val nested = lower.endsWith(".zip") || lower.endsWith(".jar") || lower.endsWith(".apk")
+                val limit = when {
+                    nested -> MAX_NESTED_ARCHIVE_BYTES
+                    isDex -> MAX_ENTRY_BYTES
+                    else -> 8L * 1024L * 1024L
+                }
+                val extracted = try {
+                    // Read every nested entry through the same bounded counter, including
+                    // entries that are not structurally interesting to this scanner.
+                    readBounded(input, limit, budget)
+                } catch (_: LimitExceeded) {
+                    budget.complete = false
+                    evidence += ScanEvidence(
+                        "NESTED_ENTRY_LIMIT", "Nested archive entry exceeded limits",
+                        "A nested entry was not fully inspected because of its configured size ceiling. The nested archive scan stopped safely.",
+                        EvidenceSeverity.MEDIUM
+                    )
+                    break
+                }
                 if (isDex || isNative || nested) {
-                    val limit = if (nested) MAX_NESTED_ARCHIVE_BYTES else MAX_ENTRY_BYTES
-                    try {
-                        val extracted = readBounded(input, limit, budget)
-                        inspectEntryBytes(entry.name, extracted, depth, budget, evidence, categories)
-                    } catch (_: LimitExceeded) {
-                        budget.complete = false
-                        evidence += ScanEvidence(
-                            "NESTED_ENTRY_LIMIT", "Nested archive entry exceeded limits",
-                            "A nested entry was not fully inspected because of its configured size ceiling.",
-                            EvidenceSeverity.MEDIUM
-                        )
-                    }
+                    inspectEntryBytes(entry.name, extracted, depth, budget, evidence, categories)
                 }
                 input.closeEntry()
             }
@@ -243,6 +251,7 @@ object FormatStaticAnalyzer {
         }
         if (size > 0L && compressedSize > 0L && size / compressedSize.coerceAtLeast(1L) > MAX_COMPRESSION_RATIO) {
             categories += "ARCHIVE_ANOMALY"
+            budget.complete = false
             evidence += ScanEvidence(
                 "ARCHIVE_HIGH_COMPRESSION_RATIO", "High archive compression ratio",
                 "An entry has an unusually high declared compression ratio. It is skipped rather than fully expanded.",
