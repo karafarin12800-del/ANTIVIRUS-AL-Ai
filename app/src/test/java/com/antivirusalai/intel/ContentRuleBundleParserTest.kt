@@ -27,7 +27,7 @@ class ContentRuleBundleParserTest {
             "version=1",
             "issued_at=1800000000",
             "expires_at=1800003600",
-            "rule=TEST|TEST|SUSPICIOUS|50|VEVTVF9QQVRURVJO|SGFybWxlc3MgdGVzdC4"
+            "rule=TEST|TEST|SUSPICIOUS|50|INTERNAL_TEST|MIT|VEVTVF9QQVRURVJO|SGFybWxlc3MgdGVzdC4"
         ).joinToString("\n", postfix = "\n")
         val unsigned = (payload + "signature=AA==\n").toByteArray()
         assertThrows(IllegalArgumentException::class.java) {
