@@ -238,7 +238,7 @@ object ContentRuleBundleRuntime {
             cachedLength = target.length()
             cachedModified = target.lastModified()
         }
-        parsed
+        return parsed
     }
 
     private fun readVersion(context: Context): Long {
