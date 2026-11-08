@@ -135,8 +135,16 @@ object ScanEngine {
             }
 
             val selfTestMatch = NativeContentEngine.SELF_TEST_RULE_ID in nativeMatches
-            val ruleById = contentBundle?.rules?.associateBy { it.id }.orEmpty()
-            val matchedContentRules = nativeMatches.mapNotNull { ruleById[it] }
+            val allContentRules = contentBundle?.rules.orEmpty()
+            val matchedContentRules = ContentRuleGroupEvaluator.qualifiedMatches(allContentRules, nativeMatches)
+            ContentRuleGroupEvaluator.partialMatches(allContentRules, nativeMatches).forEach { partial ->
+                evidence += ScanEvidence(
+                    "CONTENT_RULE_GROUP_PARTIAL_${partial.groupId}",
+                    "Partial match for ${partial.familyId}",
+                    "${partial.matchedCount} of ${partial.requiredCount} indicators matched. The group threshold was not reached, so this is informational only and does not affect the verdict.",
+                    EvidenceSeverity.LOW
+                )
+            }
             matchedContentRules.forEach { rule ->
                 evidence += ScanEvidence(
                     "CONTENT_SIGNATURE_${rule.id}",
