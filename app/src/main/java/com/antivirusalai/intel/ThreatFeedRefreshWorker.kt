@@ -42,7 +42,7 @@ class ThreatFeedRefreshWorker(
             val preferences = applicationContext.getSharedPreferences("threat-feed-status", Context.MODE_PRIVATE)
             val editor = preferences.edit()
                 .putString("content_rules_state", ContentRuleBundleRuntime.state(applicationContext).name)
-                .putLong("content_rules_version", contentRules?.version ?: 0L)
+                .putLong("content_rules_version", contentRules?.version ?: ContentRuleBundleRuntime.current(applicationContext)?.version ?: 0L)
             feed?.let {
                 editor.putLong("version", it.version)
                     .putInt("indicator_count", it.indicators.size)
