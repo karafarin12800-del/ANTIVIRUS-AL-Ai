@@ -10,7 +10,8 @@ Privacy-first Android security scanner. Current Android milestone: **0.3.0 (vers
 
 - Bounded device scanning: quick scan up to 350 files/1 GiB; deep scan up to 10,000 files/5 GiB; 200 MiB per file. Results disclose skipped files and incomplete coverage.
 - EICAR harmless antivirus test-string detection for scanner regression checks. EICAR is not live malware and is never described as malware.
-- APK package metadata inspection without installation or execution.
+- A native C++ streaming matcher is now wired into the file-read pass through JNI. Its initial bundled rule set recognizes only a harmless self-test marker; it is an integration/streaming proof, not a production malware-signature database.
+- APK package metadata inspection without installation or execution. APK/DEX bytecode-level threat analysis is not yet active; a hash non-match is kept as incomplete coverage.
 - Conservative permission/component evidence. Static metadata patterns are leads for review, not proof of malware.
 - ECDSA P-256 signed-feed verification with a pinned public key, strict format, expiry, monotonic version checks, and atomic private-storage replacement.
 - Hash-reputation verdicts for feed entries classified as MALWARE, PUA, or SUSPICIOUS. These are exact SHA-256 matches, not behavioral or machine-learning detection.
@@ -50,7 +51,7 @@ Android uses SHA-256 entries for local file reputation. It parses network IOCs s
 - Deep device scan and user-selected folder scan: up to 100,000 files / 25 GiB.
 - Maximum individual file size: 200 MiB.
 - Android-protected private app locations remain inaccessible and excluded.
-- The local hash database currently contains only a benign development fixture, not production malware signatures. General content-aware detection for non-APK formats is not implemented.
+- The local hash database currently contains only a benign development fixture, not production malware signatures. The C++ matcher currently has only a harmless self-test rule; production content signatures, APK/DEX structural scanning, and general ZIP/archive recursion are not yet active.
 - As of 2026-11-08, the `security-feed` branch and published `threat-feed/latest.alfeed` do not exist yet. Until a signed feed is published and installed, the app must show threat intelligence as unavailable.
 
 See [Scanning coverage and known limitations](docs/SCANNING_COVERAGE.md) for the exact boundaries and release gates. These limits do not make the app a full or independently validated antivirus product.
