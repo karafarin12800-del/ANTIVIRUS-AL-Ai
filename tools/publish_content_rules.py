@@ -59,7 +59,7 @@ def read_rules(path: Path) -> list[dict]:
     try:
         with path.open("r", encoding="utf-8", newline="") as handle:
             reader = csv.DictReader(handle)
-            required = {"id", "family", "classification", "confidence", "pattern_base64url", "description"}
+            required = {"id", "family", "classification", "confidence", "source_id", "license_id", "pattern_base64url", "description"}
             if set(reader.fieldnames or []) != required:
                 fail("CSV must contain exactly: " + ", ".join(sorted(required)))
             for row in reader:
@@ -67,6 +67,8 @@ def read_rules(path: Path) -> list[dict]:
                 family = (row.get("family") or "").strip()
                 classification = (row.get("classification") or "").strip().upper()
                 confidence_raw = (row.get("confidence") or "").strip()
+                source_id = (row.get("source_id") or "").strip()
+                license_id = (row.get("license_id") or "").strip()
                 encoded = (row.get("pattern_base64url") or "").strip()
                 description = (row.get("description") or "").strip()
                 if (not ID_RE.fullmatch(rule_id) or rule_id == "ALAI-NATIVE-ENGINE-SELFTEST"
@@ -83,6 +85,8 @@ def read_rules(path: Path) -> list[dict]:
                     fail("Rule confidence or pattern length is outside policy: " + rule_id)
                 if encode_url(pattern) != encoded:
                     fail("Rule pattern must use canonical unpadded Base64URL: " + rule_id)
+                if not FAMILY_RE.fullmatch(source_id) or not re.fullmatch(r"[A-Za-z0-9.+-]{1,64}", license_id):
+                    fail("Every rule requires a valid source_id and license_id: " + rule_id)
                 if not description or len(description) > 240:
                     fail("Rule description must be 1..240 characters: " + rule_id)
                 total_pattern += len(pattern)
@@ -90,7 +94,8 @@ def read_rules(path: Path) -> list[dict]:
                     fail("Total rule pattern bytes exceed 64 KiB.")
                 rules.append({
                     "id": rule_id, "family": family, "classification": classification,
-                    "confidence": confidence, "pattern": pattern, "description": description,
+                    "confidence": confidence, "source_id": source_id, "license_id": license_id,
+                    "pattern": pattern, "description": description,
                 })
     except OSError as exc:
         fail("Could not read reviewed rule CSV: " + str(exc))
@@ -112,7 +117,7 @@ def serialize_bundle(rules: list[dict], key, version: int, now: int) -> bytes:
         description = rule["description"].encode("utf-8")
         lines.append("rule=" + "|".join((
             rule["id"], rule["family"], rule["classification"], str(rule["confidence"]),
-            encode_url(rule["pattern"]), encode_url(description),
+            rule["source_id"], rule["license_id"], encode_url(rule["pattern"]), encode_url(description),
         )))
     payload = ("\n".join(lines) + "\n").encode("utf-8")
     signature = key.sign(payload, ec.ECDSA(hashes.SHA256()))
