@@ -23,10 +23,12 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.File
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * User-enabled, visible protection monitor.
@@ -49,10 +51,16 @@ object ProtectionRuntime {
     }
 }
 
+private data class PendingFileScan(val file: File, val canonicalPath: String)
+
 class ProtectionService : Service() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val observers = CopyOnWriteArrayList<FileObserver>()
     private val watchedPaths = mutableSetOf<String>()
+    private val pendingScans = PendingScanRegistry(MAX_PENDING_SCANS)
+    private val scanQueue = Channel<PendingFileScan>(capacity = MAX_PENDING_SCANS)
+    private val overflowAlertPosted = AtomicBoolean(false)
+    private var scanWorkerStarted = false
     private var packageReceiverRegistered = false
 
     private val packageReceiver = object : BroadcastReceiver() {
@@ -70,6 +78,7 @@ class ProtectionService : Service() {
         super.onCreate()
         createNotificationChannels()
         startAsForeground()
+        startFileScanWorker()
         registerPackageMonitor()
         startFileMonitoring()
     }
@@ -196,28 +205,39 @@ class ProtectionService : Service() {
             if (!watchedPaths.add(canonical.path)) return
         }
 
-        val mask = FileObserver.CLOSE_WRITE or FileObserver.MOVED_TO or FileObserver.CREATE
+        val mask = FileObserver.CLOSE_WRITE or
+            FileObserver.MOVED_TO or
+            FileObserver.CREATE or
+            FileObserver.DELETE_SELF or
+            FileObserver.MOVE_SELF
         try {
             val observer = object : FileObserver(canonical.absolutePath, mask) {
                 override fun onEvent(event: Int, path: String?) {
+                    if ((event and (FileObserver.DELETE_SELF or FileObserver.MOVE_SELF)) != 0) {
+                        synchronized(watchedPaths) { watchedPaths.remove(canonical.path) }
+                        observers.remove(this)
+                        runCatching { stopWatching() }
+                        return
+                    }
+
                     val relative = path ?: return
                     val target = File(canonical, relative)
                     val isDirectory = target.isDirectory
-                    if (isDirectory && (event and FileObserver.CREATE) != 0) {
+                    if (isDirectory &&
+                        ((event and FileObserver.CREATE) != 0 || (event and FileObserver.MOVED_TO) != 0)
+                    ) {
                         serviceScope.launch { watchTree(target, depth + 1, visited) }
                     } else if (!isDirectory &&
                         ((event and FileObserver.CLOSE_WRITE) != 0 || (event and FileObserver.MOVED_TO) != 0)
                     ) {
-                        serviceScope.launch {
-                            delay(1_000L)
-                            scanFile(target)
-                        }
+                        enqueueFileScan(target)
                     }
                 }
             }
             observer.startWatching()
             observers += observer
         } catch (_: Exception) {
+            synchronized(watchedPaths) { watchedPaths.remove(canonical.path) }
             // One inaccessible directory must not stop the remaining watchers.
         }
 
@@ -225,6 +245,58 @@ class ProtectionService : Service() {
             runCatching { canonical.listFiles() }.getOrNull()
                 ?.filter { it.isDirectory && !it.name.startsWith(".") }
                 ?.forEach { watchTree(it, depth + 1, visited) }
+        }
+    }
+
+    /**
+     * FileObserver callbacks must stay cheap. A bounded channel and one consumer
+     * keep bursts of file events from creating an unbounded number of scan jobs.
+     */
+    private fun startFileScanWorker() {
+        if (scanWorkerStarted) return
+        scanWorkerStarted = true
+        serviceScope.launch {
+            for (request in scanQueue) {
+                try {
+                    // Coalesce close/move notifications long enough for writers to settle.
+                    delay(SCAN_EVENT_SETTLE_MS)
+                    scanFile(request.file)
+                } finally {
+                    pendingScans.release(request.canonicalPath)
+                    if (pendingScans.size() == 0) {
+                        overflowAlertPosted.set(false)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun enqueueFileScan(file: File) {
+        val canonical = runCatching { file.canonicalFile }.getOrNull() ?: return
+        if (!canonical.isFile) return
+
+        val path = canonical.path
+        when (pendingScans.reserve(path)) {
+            PendingScanReservation.DUPLICATE -> return
+            PendingScanReservation.FULL -> {
+                reportScanQueueOverflow()
+                return
+            }
+            PendingScanReservation.RESERVED -> {
+                if (scanQueue.trySend(PendingFileScan(canonical, path)).isFailure) {
+                    pendingScans.release(path)
+                    reportScanQueueOverflow()
+                }
+            }
+        }
+    }
+
+    private fun reportScanQueueOverflow() {
+        if (overflowAlertPosted.compareAndSet(false, true)) {
+            postUnverifiedAlert(
+                "پایش فایل‌ها",
+                "صف محدود بررسی پر شد. دست‌کم یک رویداد فایل برای جلوگیری از مصرف بیش از حد منابع وارد صف نشد؛ آن فایل بررسی‌شده محسوب نمی‌شود."
+            )
         }
     }
 
@@ -357,5 +429,7 @@ class ProtectionService : Service() {
         private const val NOTIFICATION_ID = 4108
         private const val MAX_WATCH_DEPTH = 2
         private const val MAX_WATCHERS = 96
+        private const val MAX_PENDING_SCANS = 64
+        private const val SCAN_EVENT_SETTLE_MS = 350L
     }
 }
