@@ -34,7 +34,7 @@ object ContentRuleBundleParser {
     const val MAX_BUNDLE_BYTES = 1024 * 1024
     const val MAX_RULES = 511
     const val MAX_PATTERN_BYTES = 256
-    const val MAX_TOTAL_PATTERN_BYTES = 64 * 1024
+    const val MAX_TOTAL_PATTERN_BYTES = 64 * 1024 - 30 // reserve space for the built-in self-test pattern
     const val MAX_VALIDITY_SECONDS = 14L * 24L * 60L * 60L
     private const val KEY_ID = "alai-release-2026"
     private const val PUBLIC_KEY_B64 =
