@@ -8,7 +8,7 @@ Privacy-first Android security scanner. Current Android milestone: **0.3.0 (vers
 
 ## Implemented security layers
 
-- Bounded device scanning: quick scan up to 350 files/1 GiB; deep scan up to 10,000 files/5 GiB; 200 MiB per file. Results disclose skipped files and incomplete coverage.
+- Bounded device scanning: quick scan up to 350 files/1 GiB; deep and user-selected folder scans up to 100,000 files/25 GiB; 200 MiB per file. These are traversal limits, not detection-coverage guarantees. Results disclose skipped files and incomplete coverage.
 - EICAR harmless antivirus test-string detection for scanner regression checks. EICAR is not live malware and is never described as malware.
 - A native C++ streaming matcher is now wired into the file-read pass through JNI. Its initial bundled rule set recognizes only a harmless self-test marker; it is an integration/streaming proof, not a production malware-signature database.
 - APK package metadata inspection without installation or execution. APK/DEX bytecode-level threat analysis is not yet active; a hash non-match is kept as incomplete coverage.
