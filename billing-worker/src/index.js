@@ -113,12 +113,17 @@ async function createOrder(request, env) {
 }
 async function activateOrder(env, orderId, providerReference) {
   const order = await env.DB.prepare("SELECT * FROM orders WHERE id=?").bind(orderId).first();
-  if (!order || order.status === "paid" || order.expires_at < nowIso()) return false;
+  if (!order || order.status !== "pending" || order.expires_at < nowIso()) return false;
+  const paidAt = nowIso();
+  const subscriptionId = crypto.randomUUID();
+  const endsAt = order.plan_code === "LIFETIME_OFFLINE" ? null : addInterval(order.plan_code === "PLUS_MONTHLY" ? "month" : "year");
+  // D1 batch is transactional. The insert is conditional on this exact transition,
+  // so concurrent/duplicate provider callbacks cannot create duplicate subscriptions.
   await env.DB.batch([
-    env.DB.prepare("UPDATE orders SET status='paid',paid_at=? WHERE id=? AND status='pending'").bind(nowIso(), orderId),
-    env.DB.prepare("INSERT INTO subscriptions(id,customer_id,plan_code,order_id,status,starts_at,ends_at) VALUES(?,?,?,?,'active',?,?)")
-      .bind(crypto.randomUUID(), order.customer_id, order.plan_code, order.id, nowIso(),
-        order.plan_code === "LIFETIME_OFFLINE" ? null : addInterval(order.plan_code === "PLUS_MONTHLY" ? "month" : "year"))
+    env.DB.prepare("UPDATE orders SET status='paid',paid_at=? WHERE id=? AND status='pending' AND expires_at>=?")
+      .bind(paidAt, orderId, paidAt),
+    env.DB.prepare("INSERT INTO subscriptions(id,customer_id,plan_code,order_id,status,starts_at,ends_at) SELECT ?,?,?,?,'active',?,? WHERE EXISTS (SELECT 1 FROM orders WHERE id=? AND status='paid' AND paid_at=?)")
+      .bind(subscriptionId, order.customer_id, order.plan_code, order.id, paidAt, endsAt, orderId, paidAt)
   ]);
   return true;
 }
