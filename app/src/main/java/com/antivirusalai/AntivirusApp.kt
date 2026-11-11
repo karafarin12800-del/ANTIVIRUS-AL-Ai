@@ -1,5 +1,6 @@
 package com.antivirusalai
 
+import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -300,7 +301,7 @@ fun AntivirusApp() {
         AlertDialog(
             onDismissRequest = { selectedPlan = null },
             containerColor = SurfaceRaised,
-            title = { Text(tr(fa, "فروشگاه ANTIVIRUS AL AI", "ANTIVIRUS AL AI Store"), color = TextPrimary) },
+            title = { Text(tr(fa, "پنل خرید ANTIVIRUS AL AI", "ANTIVIRUS AL AI Checkout"), color = TextPrimary) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
                     Text(
@@ -311,8 +312,8 @@ fun AntivirusApp() {
                     Text(
                         tr(
                             fa,
-                            "پرداخت Google Play و مدیریت اشتراک هنوز متصل نشده‌اند. هیچ مبلغی دریافت یا اشتراکی فعال نمی‌شود. این بخش فعلاً پیش‌نمایش طرح‌هاست.",
-                            "Google Play Billing and subscription management are not connected yet. No payment or subscription activation will occur. This is currently a plan preview."
+                            "برای ادامه، پنل مستقل خرید باز می‌شود. پرداخت فقط پس از تأیید درگاه در سرور ثبت خواهد شد.",
+                            "Continue in the independent checkout portal. A purchase is recorded only after server-side payment verification."
                         ),
                         color = TextSecondary
                     )
@@ -320,9 +321,19 @@ fun AntivirusApp() {
             },
             confirmButton = {
                 Button(
-                    onClick = { selectedPlan = null },
+                    onClick = {
+                        val planCode = plan.replace(" ", "_")
+                        val checkoutUri = Uri.parse("https://antivirus-billing-api.zojajiali4.workers.dev/?plan=" + Uri.encode(planCode))
+                        context.startActivity(Intent(Intent.ACTION_VIEW, checkoutUri))
+                        selectedPlan = null
+                    },
                     colors = ButtonDefaults.buttonColors(containerColor = BrandTeal)
-                ) { Text(tr(fa, "متوجه شدم", "Got it"), color = AppBackground) }
+                ) { Text(tr(fa, "ادامه به پنل خرید", "Continue to checkout"), color = AppBackground) }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { selectedPlan = null }) {
+                    Text(tr(fa, "انصراف", "Cancel"))
+                }
             }
         )
     }
