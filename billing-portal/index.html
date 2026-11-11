@@ -24,7 +24,7 @@ button,input,select{font:inherit}button{cursor:pointer;border:0;border-radius:13
 <footer class="foot"><p data-fa="پرداخت فقط پس از تأیید سمت سرور فعال می‌شود. اطلاعات کارت در این وب‌سایت ذخیره نمی‌شود. اسکنر آنتی‌ویروس فایل‌های شخصی را برای خرید یا فعال‌سازی آپلود نمی‌کند." data-en="A purchase is activated only after server-side payment verification. Card details are not stored on this website. The antivirus scanner never uploads personal files for checkout or activation.">پرداخت فقط پس از تأیید سمت سرور فعال می‌شود. اطلاعات کارت در این وب‌سایت ذخیره نمی‌شود. اسکنر آنتی‌ویروس فایل‌های شخصی را برای خرید یا فعال‌سازی آپلود نمی‌کند.</p><p>© ANTIVIRUS AL AI</p></footer>
 </main>
 <script>
-const API_BASE = window.ANTIVIRUS_BILLING_API || "";
+const API_BASE = window.ANTIVIRUS_BILLING_API || window.location.origin;
 let locale="fa", selectedPlan="", provider="zarinpal";
 const checkout=document.querySelector("#checkout"), notice=document.querySelector("#notice");
 function msg(text,type=""){notice.textContent=text;notice.className="notice "+type}
@@ -36,5 +36,6 @@ document.querySelector("#pay").addEventListener("click",async()=>{const email=do
 const button=document.querySelector("#pay");button.disabled=true;msg(locale==="fa"?"در حال ایجاد سفارش امن…":"Creating secure order…");
 try{const response=await fetch(API_BASE.replace(/\/$/,"")+"/api/checkout",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({email,plan:selectedPlan,provider,locale})});const data=await response.json();if(!response.ok)throw new Error(data.error||"Checkout failed");if(!data.checkoutUrl)throw new Error("No checkout URL returned");location.assign(data.checkoutUrl)}catch(error){msg(error.message||"Checkout failed","error");button.disabled=false}});
 const status=new URLSearchParams(location.search).get("payment");if(status==="success")msg(locale==="fa"?"پرداخت تأیید شد. وضعیت سفارش را از طریق پشتیبانی پیگیری کن.":"Payment verified. Keep your order reference for support.","good");else if(status==="failed"||status==="cancelled")msg(locale==="fa"?"پرداخت تکمیل نشد. مبلغی فعال نشده است.":"Payment was not completed. No plan was activated.","error");else if(status==="processing")msg(locale==="fa"?"در حال بررسی نتیجه پرداخت؛ چند لحظه دیگر وضعیت سفارش را بررسی کن.":"Payment is being confirmed. Check the order status shortly.");
+const requestedPlan=new URLSearchParams(location.search).get("plan");if(requestedPlan&&document.querySelector(`[data-plan="${requestedPlan}"]`))document.querySelector(`[data-plan="${requestedPlan}"]`).click();
 applyLanguage();
 </script></body></html>
