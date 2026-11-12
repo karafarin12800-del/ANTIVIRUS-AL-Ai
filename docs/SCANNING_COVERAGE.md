@@ -26,6 +26,10 @@ The UI keeps at most 60 result details in memory, prioritizes threat findings wh
 - The C++ Aho-Corasick multi-pattern matcher is invoked on the same bounded read pass as SHA-256. It retains rule automaton state, not file contents, and accepts rules only from a validated signed bundle. Until such a bundle is published, the only active built-in pattern is a harmless self-test marker reported as `TEST_MARKER_MATCH`.
 - The signed offline content-rule parser, anti-rollback storage, and HTTPS refresh client are implemented. The published bundle is not yet available, so no production content signatures are active. A native-engine no-match is not a clean verdict. ZIP/APK and ELF structure can be inspected, but no-format-match remains incomplete until a production ruleset and coverage benchmark exist.
 
+## Real-time monitoring boundary
+
+The visible protection service watches only selected common shared-storage directories (Download, Downloads, Documents, Bluetooth, DCIM, Pictures, Movies, and Android/media), with a maximum depth of 2 and 96 active FileObserver instances. It does not monitor every directory or every file on the device. File events enter a bounded 64-item queue with one scanner consumer; duplicate paths are coalesced. If the queue is full, the event is explicitly reported as unverified rather than being treated as scanned or clean. Newly installed package events are checked only while the user-enabled foreground service is running and only for APK components Android exposes as readable.
+
 ## Static and behavioral analysis boundary\n\nDEX API references and ELF symbol strings are static capability indicators only. They do not prove that code ran. This app does not execute selected APKs in a dynamic sandbox and cannot instrument other apps’ private processes. True behavioral sandboxing requires a separately isolated emulator service.\n\nML feature extraction is available, but inference remains `NOT_CONFIGURED`; no model score is used in verdicts.\n\n## Threat-feed activation state
 
 The Android client is pinned to:

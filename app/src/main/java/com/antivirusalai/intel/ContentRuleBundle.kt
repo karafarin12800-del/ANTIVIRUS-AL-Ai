@@ -212,20 +212,34 @@ object ContentRuleBundleRuntime {
         synchronized(cacheLock) {
             val length = file.length()
             val modified = file.lastModified()
+            val versionFloor = try {
+                readVersion(context)
+            } catch (_: Exception) {
+                cachedBundle = null
+                cachedLength = -1L
+                cachedModified = -1L
+                return null
+            }
             val cached = cachedBundle
             if (cachedLength == length && cachedModified == modified &&
-                cached?.expiresAtEpochSeconds?.let { it > System.currentTimeMillis() / 1000L } == true
+                cached != null &&
+                cached.version >= versionFloor &&
+                cached.expiresAtEpochSeconds > System.currentTimeMillis() / 1000L
             ) return cached
+
             val loaded = runCatching {
                 ContentRuleBundleParser.parse(
                     file.readBytes(),
-                    minimumVersionExclusive = (readVersion(context) - 1L).coerceAtLeast(0L)
+                    minimumVersionExclusive = (versionFloor - 1L).coerceAtLeast(0L)
                 )
             }.getOrNull()
-            cachedBundle = loaded
-            cachedLength = length
-            cachedModified = modified
-            return loaded
+            // A version floor that cannot be read, or a feed below that floor,
+            // must never fall back to an older in-memory snapshot.
+            val accepted = loaded?.takeIf { it.version >= versionFloor }
+            cachedBundle = accepted
+            cachedLength = if (accepted != null) length else -1L
+            cachedModified = if (accepted != null) modified else -1L
+            return accepted
         }
     }
 
@@ -275,8 +289,24 @@ object ContentRuleBundleRuntime {
         val parsed = ContentRuleBundleParser.parse(bytes, minimumVersionExclusive = currentVersion)
         val target = File(directory, FILE_NAME)
         val versionFile = File(directory, VERSION_NAME)
+
+        // Invalidate the in-memory snapshot before advancing the rollback floor.
+        // If the process stops after the floor is written but before the new feed
+        // is committed, the previous feed becomes unavailable rather than being
+        // accepted as a rollback.
+        synchronized(cacheLock) {
+            cachedBundle = null
+            cachedLength = -1L
+            cachedModified = -1L
+        }
+
+        writeAtomically(
+            directory,
+            versionFile,
+            (parsed.version.toString() + "\n").toByteArray(StandardCharsets.US_ASCII)
+        )
         writeAtomically(directory, target, bytes)
-        writeAtomically(directory, versionFile, (parsed.version.toString() + "\n").toByteArray(StandardCharsets.US_ASCII))
+
         synchronized(cacheLock) {
             cachedBundle = parsed
             cachedLength = target.length()

@@ -23,6 +23,10 @@ concurrency:
 
 jobs:
   publish:
+    # Never expose publisher secrets to a branch or fork workflow.
+    if: github.ref == 'refs/heads/main'
+    environment:
+      name: threat-feed-publisher
     name: Build and publish signed multi-source feed
     runs-on: ubuntu-latest
     timeout-minutes: 10

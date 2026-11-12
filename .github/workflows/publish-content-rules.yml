@@ -25,6 +25,8 @@ concurrency:
 jobs:
   publish:
     if: github.ref == 'refs/heads/main'
+    environment:
+      name: threat-feed-publisher
     name: Build and publish signed offline content rules
     runs-on: ubuntu-latest
     timeout-minutes: 10

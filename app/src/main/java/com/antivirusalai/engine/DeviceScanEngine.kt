@@ -86,7 +86,9 @@ object DeviceScanEngine {
 
         if (deep) {
             // Prioritize installed APKs before traversing large shared-storage trees.
-            addInstalledApplicationPackages(context, candidates, failures, maxFiles)
+            val packageDiscovery = addInstalledApplicationPackages(context, candidates, failures, maxFiles)
+            discoverySkipped += packageDiscovery.skippedComponents
+            if (packageDiscovery.incomplete) traversalLimitReached = true
             roots.forEach { root ->
                 val rootCanonical = runCatching { root.canonicalFile }.getOrNull() ?: return@forEach
                 val queue = ArrayDeque<Pair<File, Int>>()
@@ -156,7 +158,9 @@ object DeviceScanEngine {
         } else {
             // Installed APKs are a high-value quick-scan target, so place them before
             // loose files and common folders in the bounded quick-scan candidate list.
-            addInstalledApplicationPackages(context, candidates, failures, maxFiles)
+            val packageDiscovery = addInstalledApplicationPackages(context, candidates, failures, maxFiles)
+            discoverySkipped += packageDiscovery.skippedComponents
+            if (packageDiscovery.incomplete) traversalLimitReached = true
             // Include loose files placed directly in shared-storage roots. Some devices
             // and users do not keep downloads inside the standard named folders.
             for (root in roots) {
@@ -403,12 +407,17 @@ object DeviceScanEngine {
         return limitReached
     }
 
+    private data class PackageDiscoveryResult(
+        val skippedComponents: Int,
+        val incomplete: Boolean
+    )
+
     private fun addInstalledApplicationPackages(
         context: Context,
         output: LinkedHashMap<String, File>,
         failures: MutableList<FolderScanFailure>,
         maxFiles: Int
-    ) {
+    ): PackageDiscoveryResult {
         val pm = context.packageManager
         val apps = try {
             if (Build.VERSION.SDK_INT >= 33) {
@@ -419,35 +428,33 @@ object DeviceScanEngine {
             }
         } catch (error: Exception) {
             failures += FolderScanFailure("Installed apps", error.message ?: "App inventory unavailable.")
-            return
+            return PackageDiscoveryResult(skippedComponents = 1, incomplete = true)
         }
+
+        var skippedComponents = 0
         apps.forEach { app ->
             if (output.size >= maxFiles) return@forEach
-            val componentPaths = listOfNotNull(app.sourceDir) + app.splitSourceDirs.orEmpty()
-            // Process every readable split APK. Do not silently treat an app with
-            // no readable package bytes as clean.
-            val readableComponents = componentPaths.map { path ->
-                addPackageArchive(path, output, maxFiles)
-            }.any { it }
-            if (!readableComponents) {
+
+            // Keep null base paths visible as an unverified component rather than
+            // dropping them with listOfNotNull(). Each split must be accounted for.
+            val componentPaths: List<String?> =
+                listOf(app.sourceDir) + app.splitSourceDirs.orEmpty().map { it }
+            val collected = InstalledPackageArchiveCollector.collect(
+                componentPaths,
+                output,
+                maxFiles
+            )
+            skippedComponents += collected.skippedComponents
+            if (collected.skippedComponents > 0) {
                 failures += FolderScanFailure(
                     app.packageName,
-                    "Installed package is visible, but Android did not expose a readable base or split APK component; this app was not counted as clean."
+                    "${collected.skippedComponents} installed APK component(s) could not be read or resolved; the package is not fully verified."
                 )
             }
         }
-    }
-
-    private fun addPackageArchive(
-        path: String?,
-        output: LinkedHashMap<String, File>,
-        maxFiles: Int
-    ): Boolean {
-        if (output.size >= maxFiles || path.isNullOrBlank()) return false
-        val file = File(path)
-        if (!file.isFile || !file.canRead()) return false
-        val canonical = runCatching { file.canonicalFile }.getOrNull() ?: return false
-        output.putIfAbsent(canonical.path, canonical)
-        return true
+        return PackageDiscoveryResult(
+            skippedComponents = skippedComponents,
+            incomplete = skippedComponents > 0
+        )
     }
 }

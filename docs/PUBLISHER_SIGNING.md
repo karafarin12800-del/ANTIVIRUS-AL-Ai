@@ -7,7 +7,8 @@ AAB preflight. Neither artifact is a Play Store release.
 
 The manual workflow
 `.github/workflows/publisher-release-signing.yml` signs a release AAB only
-when all protected repository Actions secrets are present:
+on `main`, through the protected GitHub Actions environment
+`publisher-release`. The job requires all five environment-scoped secrets:
 
 - `ANDROID_RELEASE_KEYSTORE_BASE64`: base64-encoded Android upload/release keystore
 - `ANDROID_RELEASE_KEYSTORE_PASSWORD`: keystore password
@@ -16,13 +17,39 @@ when all protected repository Actions secrets are present:
 - `ANDROID_RELEASE_CERT_SHA256`: expected SHA-256 fingerprint of the publisher
   certificate, with or without colon separators
 
-Configure these secrets in the repository's Settings → Secrets and variables
-→ Actions. Prefer an environment-scoped secret set with required reviewers
-and restrict release workflow dispatch permissions to trusted maintainers.
+**Required repository configuration:** create a GitHub Actions environment named
+`publisher-release`; restrict its deployment branches to `main`; require
+approval from a trusted reviewer; and add the five values above as environment
+secrets, not repository-wide secrets. Remove any duplicate repository-level
+copies after migrating them. The code repository cannot configure or verify
+these environment protections.
+
+## Threat-feed publisher environment
+
+Both `.github/workflows/publish-threat-feed.yml` and
+`.github/workflows/publish-content-rules.yml` are restricted to `main` and
+use a separate GitHub Actions environment named `threat-feed-publisher`.
+
+Create that environment, restrict its deployment branches to `main`, and move
+the following values into its environment-scoped secrets:
+
+- `ALAI_FEED_SIGNING_KEY_PEM`
+- `MALWAREBAZAAR_AUTH_KEY`
+- `THREATFOX_AUTH_KEY`
+- `URLHAUS_AUTH_KEY`
+- `ALAI_URLHAUS_COMMERCIAL_USE_APPROVED`
+- `ALAI_ABUSECH_COMMERCIAL_USE_APPROVED`
+- `ALAI_CONTENT_RULES_REVIEWED`
+- `ALAI_CONTENT_RULES_COMMERCIAL_USE_APPROVED`
+
+Remove duplicate repository-level copies after migration. Do not put private
+publisher keys into source control, APK assets, issues, pull requests, or chat.
+Environment-scoped secrets ensure a pull request or non-main workflow cannot
+read signing material merely by modifying a workflow file on a branch.
 
 ## Verification gates
 
-The workflow:
+The release-signing workflow:
 
 1. refuses to proceed if any required secret is missing;
 2. decodes the keystore only into the ephemeral runner's temporary directory
@@ -36,16 +63,15 @@ The workflow:
 7. removes the temporary keystore file even when a later step fails.
 
 Passwords and keystore bytes are never written to repository files or build
-artifacts. Do not paste signing credentials into issues, pull requests, chat,
-or source code. Back up the keystore securely: losing the upload key can
-complicate future app updates. If Play App Signing is enabled, distinguish
-the upload certificate from the Google-managed app-signing certificate.
+artifacts. Back up the keystore securely: losing the upload key can complicate
+future app updates. If Play App Signing is enabled, distinguish the upload
+certificate from the Google-managed app-signing certificate.
 
 ## Current provisioning status
 
-This repository integration does not have permission to inspect or create
-GitHub Actions secrets. Therefore the presence and correctness of these five
-secrets cannot be confirmed from code review alone. The manual signing
-workflow will fail closed with a clear missing-secret error until they are
-configured. A successful workflow run and matching certificate fingerprint
-are required before describing an AAB as publisher-signed or Play-uploadable.
+The workflows now enforce branch-level guards and reference protected GitHub
+Actions environments. This code change does **not** create those environments,
+set their branch policies, configure required reviewers, or move existing
+secrets. Until the repository owner completes those settings and a real
+workflow run passes the certificate fingerprint check, no AAB should be
+described as publisher-signed or Play-uploadable.
