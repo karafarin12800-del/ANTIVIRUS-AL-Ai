@@ -18,17 +18,22 @@ object ScanEngine {
 
     suspend fun scan(context: Context, uri: Uri): ScanResult = withContext(Dispatchers.IO) {
         val resolver = context.contentResolver
-        val metadata = resolver.query(
-            uri,
-            arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE),
-            null, null, null
-        )?.use { cursor ->
-            if (!cursor.moveToFirst()) null else {
-                val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
-                val name = if (nameIndex >= 0) cursor.getString(nameIndex) else null
-                val size = if (sizeIndex >= 0 && !cursor.isNull(sizeIndex)) cursor.getLong(sizeIndex) else -1L
-                name to size
+        val localFile = if (uri.scheme == "file") uri.path?.let(::File) else null
+        val metadata = if (localFile != null) {
+            localFile.name to localFile.length()
+        } else {
+            resolver.query(
+                uri,
+                arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE),
+                null, null, null
+            )?.use { cursor ->
+                if (!cursor.moveToFirst()) null else {
+                    val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                    val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
+                    val name = if (nameIndex >= 0) cursor.getString(nameIndex) else null
+                    val size = if (sizeIndex >= 0 && !cursor.isNull(sizeIndex)) cursor.getLong(sizeIndex) else -1L
+                    name to size
+                }
             }
         }
 
