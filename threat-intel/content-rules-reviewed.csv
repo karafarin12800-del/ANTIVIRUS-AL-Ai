@@ -1,0 +1,11 @@
+id,family,group_id,min_group_matches,classification,confidence,source_id,license_id,pattern_base64url,description
+WITHSECURE-FALLSPY-01,FALLSPY_ANDROID,WITHSECURE_FALLSPY,4,SUSPICIOUS,75,WITHSECURELABS_IOCS,BSD-2-Clause,RGF0YUNvbGxlY3Rvcldvcms,"FallSpy source string $a; grouped threshold is 4 of 10. YARA fullword boundary is not enforced; candidate-only signal."
+WITHSECURE-FALLSPY-02,FALLSPY_ANDROID,WITHSECURE_FALLSPY,4,SUSPICIOUS,75,WITHSECURELABS_IOCS,BSD-2-Clause,VXBkYXRlQ2hlY2tlcg,"FallSpy source string $b; grouped threshold is 4 of 10. YARA fullword boundary is not enforced; candidate-only signal."
+WITHSECURE-FALLSPY-03,FALLSPY_ANDROID,WITHSECURE_FALLSPY,4,SUSPICIOUS,75,WITHSECURELABS_IOCS,BSD-2-Clause,L2NoZWNrX3VwZGF0ZT92ZXJzaW9uPQ,"FallSpy source string $c; grouped threshold is 4 of 10."
+WITHSECURE-FALLSPY-04,FALLSPY_ANDROID,WITHSECURE_FALLSPY,4,SUSPICIOUS,75,WITHSECURELABS_IOCS,BSD-2-Clause,JmNhbGxfbG9ncz0,"FallSpy source string $e; YARA fullword boundary is not enforced; candidate-only signal."
+WITHSECURE-FALLSPY-05,FALLSPY_ANDROID,WITHSECURE_FALLSPY,4,SUSPICIOUS,75,WITHSECURELABS_IOCS,BSD-2-Clause,JnNpbV9udW1iZXJzPQ,"FallSpy source string $f; YARA fullword boundary is not enforced; candidate-only signal."
+WITHSECURE-FALLSPY-06,FALLSPY_ANDROID,WITHSECURE_FALLSPY,4,SUSPICIOUS,75,WITHSECURELABS_IOCS,BSD-2-Clause,JndpZmlfc3NpZD0,"FallSpy source string $g; YARA fullword boundary is not enforced; candidate-only signal."
+WITHSECURE-FALLSPY-07,FALLSPY_ANDROID,WITHSECURE_FALLSPY,4,SUSPICIOUS,75,WITHSECURELABS_IOCS,BSD-2-Clause,UHVibGljIElQOiA,"FallSpy source string $h; YARA fullword boundary is not enforced; candidate-only signal."
+WITHSECURE-FALLSPY-08,FALLSPY_ANDROID,WITHSECURE_FALLSPY,4,SUSPICIOUS,75,WITHSECURELABS_IOCS,BSD-2-Clause,dXBsb2FkZWRfaGFzaGVz,"FallSpy source string $i; grouped threshold is 4 of 10. YARA fullword boundary is not enforced; candidate-only signal."
+WITHSECURE-FALLSPY-09,FALLSPY_ANDROID,WITHSECURE_FALLSPY,4,SUSPICIOUS,75,WITHSECURELABS_IOCS,BSD-2-Clause,QW5kcm9pZCBJRDog,"FallSpy source string $n; YARA fullword boundary is not enforced; candidate-only signal."
+WITHSECURE-FALLSPY-10,FALLSPY_ANDROID,WITHSECURE_FALLSPY,4,SUSPICIOUS,75,WITHSECURELABS_IOCS,BSD-2-Clause,Q2FsbCBMb2dzOiA,"FallSpy source string $o; YARA fullword boundary is not enforced; candidate-only signal."

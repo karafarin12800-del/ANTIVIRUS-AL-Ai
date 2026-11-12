@@ -1,0 +1,96 @@
+name: Publish signed threat intelligence
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: "Check the existing signing key without publishing, or publish a threat feed"
+        type: choice
+        options:
+          - check-key
+          - publish
+        default: check-key
+        required: true
+  schedule:
+    - cron: "17 */12 * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: alai-threat-feed-publisher
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    # Never expose publisher secrets to a branch or fork workflow.
+    if: github.ref == 'refs/heads/main'
+    environment:
+      name: threat-feed-publisher
+    name: Build and publish signed multi-source feed
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout publisher source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install feed publisher dependency
+        run: python -m pip install --disable-pip-version-check "cryptography>=43,<47"
+
+      - name: Verify configured signing key (no publishing)
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.operation == 'check-key'
+        env:
+          ALAI_FEED_SIGNING_KEY_PEM: ${{ secrets.ALAI_FEED_SIGNING_KEY_PEM }}
+        run: |
+          set -euo pipefail
+          python tools/publish_threat_feed.py --output "$RUNNER_TEMP/key-check-unused.alfeed" --check-key-only
+      - name: Generate and publish authenticated feed
+        if: github.event_name != 'workflow_dispatch' || github.event.inputs.operation != 'check-key'
+        env:
+          MALWAREBAZAAR_AUTH_KEY: ${{ secrets.MALWAREBAZAAR_AUTH_KEY }}
+          THREATFOX_AUTH_KEY: ${{ secrets.THREATFOX_AUTH_KEY }}
+          URLHAUS_AUTH_KEY: ${{ secrets.URLHAUS_AUTH_KEY }}
+          ALAI_URLHAUS_COMMERCIAL_USE_APPROVED: ${{ secrets.ALAI_URLHAUS_COMMERCIAL_USE_APPROVED }}
+          ALAI_ENABLE_FEODO_TRACKER: "true"
+          ALAI_FEED_SIGNING_KEY_PEM: ${{ secrets.ALAI_FEED_SIGNING_KEY_PEM }}
+          ALAI_ABUSECH_COMMERCIAL_USE_APPROVED: ${{ secrets.ALAI_ABUSECH_COMMERCIAL_USE_APPROVED }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git fetch origin security-feed --depth=1 || true
+          PREVIOUS_VERSION="$RUNNER_TEMP/previous-feed-version"
+          : > "$PREVIOUS_VERSION"
+          if git cat-file -e origin/security-feed:threat-feed/version 2>/dev/null; then
+            git show origin/security-feed:threat-feed/version > "$PREVIOUS_VERSION"
+          fi
+
+          python tools/publish_threat_feed.py \
+            --output "$RUNNER_TEMP/latest.alfeed" \
+            --previous-version "$PREVIOUS_VERSION"
+
+          if git ls-remote --exit-code origin refs/heads/security-feed >/dev/null 2>&1; then
+            git checkout -B security-feed origin/security-feed
+          else
+            git checkout --orphan security-feed
+            git rm -rf . >/dev/null 2>&1 || true
+            git clean -fdx
+          fi
+
+          mkdir -p threat-feed
+          cp "$RUNNER_TEMP/latest.alfeed" threat-feed/latest.alfeed
+          grep '^version=' threat-feed/latest.alfeed | cut -d= -f2 > threat-feed/version
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add threat-feed/latest.alfeed threat-feed/version
+          git commit -m "Publish signed threat feed v$(cat threat-feed/version)"
+          git push origin HEAD:security-feed

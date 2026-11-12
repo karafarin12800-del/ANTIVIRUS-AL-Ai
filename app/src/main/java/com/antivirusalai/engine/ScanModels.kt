@@ -1,7 +1,37 @@
 package com.antivirusalai.engine
 
-enum class ScanVerdict { TEST_MARKER_MATCH, SUSPICIOUS, NO_KNOWN_INDICATOR, UNKNOWN_APK, UNSUPPORTED_FILE }
+enum class ScanVerdict { KNOWN_MALWARE, POTENTIALLY_UNWANTED, TEST_MARKER_MATCH, SUSPICIOUS, NO_KNOWN_INDICATOR, UNKNOWN_APK, UNSUPPORTED_FILE, INCOMPLETE_THREAT_INTELLIGENCE }
 enum class EvidenceSeverity { INFO, LOW, MEDIUM, HIGH }
+enum class ContentEngineState { UNAVAILABLE, INCOMPLETE, COMPLETE }
+enum class MlModelState { NOT_APPLICABLE, NOT_CONFIGURED, READY, ERROR }
+enum class BehavioralAnalysisState { NOT_APPLICABLE, STATIC_INDICATORS_ONLY, SANDBOX_NOT_CONFIGURED }
+
+data class ContentSignatureRule(
+    val id: String,
+    val familyId: String,
+    val classification: com.antivirusalai.intel.ThreatClassification,
+    val confidence: Int,
+    val pattern: ByteArray,
+    val description: String,
+    val sourceId: String = "INTERNAL",
+    val licenseId: String = "UNSPECIFIED",
+    val groupId: String = id,
+    val minimumGroupMatches: Int = 1
+)
+
+data class StaticAnalysisSummary(
+    val format: String?,
+    val supported: Boolean,
+    val complete: Boolean,
+    val entryCount: Int,
+    val expandedBytes: Long,
+    val signalCategories: Set<String>
+)
+
+data class MlFeatureVector(
+    val featureCount: Int,
+    val values: Map<String, Float>
+)
 
 data class ScanEvidence(
     val code: String,
@@ -35,5 +65,18 @@ data class ScanResult(
     val verdict: ScanVerdict,
     val evidence: List<ScanEvidence>,
     val apkMetadata: ApkMetadata?,
-    val durationMillis: Long
+    val durationMillis: Long,
+    val contentEngineState: ContentEngineState = ContentEngineState.UNAVAILABLE,
+    val contentRuleSetId: String? = null,
+    val contentRuleMatches: List<String> = emptyList(),
+    val contentEngineErrorCode: String? = null,
+    val contentRuleBundleVersion: Long? = null,
+    val staticAnalysis: StaticAnalysisSummary? = null,
+    val mlModelState: MlModelState = MlModelState.NOT_CONFIGURED,
+    val mlFeatureCount: Int = 0,
+    val mlRiskScore: Int? = null,
+    val mlModelVersion: String? = null,
+    val mlTopFeatures: List<String> = emptyList(),
+    val behavioralAnalysisState: BehavioralAnalysisState = BehavioralAnalysisState.NOT_APPLICABLE,
+    val unknownFileCase: UnknownFileCase? = null
 )
