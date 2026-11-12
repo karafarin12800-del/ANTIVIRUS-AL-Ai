@@ -8,6 +8,10 @@ permissions:
 
 jobs:
   sign-and-verify-aab:
+    # Signing secrets are available only for protected main-branch deployments.
+    if: github.ref == 'refs/heads/main'
+    environment:
+      name: publisher-release
     name: Sign and verify publisher AAB
     runs-on: ubuntu-latest
     timeout-minutes: 30
